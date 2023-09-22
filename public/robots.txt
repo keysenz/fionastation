@@ -1,0 +1,14 @@
+User-agent: Twitterbot
+Disallow: *
+
+Allow: /*.png$
+
+User-agent: *
+Disallow: /api
+Disallow: /_vercel
+Disallow: /*.json$
+Disallow: /*_buildManifest.js$
+Disallow: /*_middlewareManifest.js$
+Disallow: /*_ssgManifest.js$
+Disallow: /*.js$
+Disallow: /*.png$
