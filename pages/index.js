@@ -12,7 +12,7 @@ export default function Home() {
       <div className="pointer-events-none fixed top-1 left-0 -z-10 h-border-screen w-screen bg-cover bg-center"/>
       <main className="container flex max-w-screen-md grow flex-col items-center justify-center"> 
       <div className="fixed top-0 left-0 z-50 flex h-screen w-screen flex-col items-center justify-center bg-gray-900/50 px-2" ref={promotion}>
-          <iframe src="https://www.youtube.com/embed/jmFyo0pYC08?playlist=jmFyo0pYC08&loop=1"
+          <iframe src="https://www.youtube.com/embed/jmFyo0pYC08?playlist=jmFyo0pYC08&loop=1&cc_load_policy=1"
             className="mb-4 aspect-video w-full rounded sm:w-3/4 md:w-2/3 lg:w-4/5"
             title="YouTube video player" frameBorder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; loop" allowFullScreen />
           <div className="flex gap-4">
