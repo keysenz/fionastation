@@ -29,11 +29,12 @@ export default async function  postKaraoke(req, res){
     } 
     let lists = karaoke.split(/\n/)
     for (const list of lists) {
-        const [time, title] = list.split(/;/);
+        const [time, title,end] = list.split(/;/);
         let insertRecord = {
             song_title: title,
             timestamp: time,
-            video_id: record.id
+            video_id: record.id,
+            timestamp_end: end != "" ? end : null,
         }
         
         let { data:song } = await supabase
