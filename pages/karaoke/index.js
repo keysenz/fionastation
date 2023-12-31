@@ -164,7 +164,7 @@ function Karaoke() {
                 }
               }}
             /> : <div className="flex flex-col w-full aspect-video justify-center items-center border-solid bg-black/50 text-white p-4 gap-2">
-              This video is membership only, You can click the Youtube Icon to redirect to the said video and be a member there.
+              This video is membership only, You can click the Youtube Icon to redirect to the said video and be a member there or click <a rel="noopener noreferrer" target="_blank" href="https://www.youtube.com/channel/UCb-cLXWVOGVJHfkIfHt8Dfg/join" className="">Here to join</a>.
               <br/>
             <a 
           rel="noopener noreferrer"
