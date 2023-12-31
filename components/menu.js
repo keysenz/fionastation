@@ -5,7 +5,7 @@ import useFio from "./useFio";
 export default function Menu({ href, src, children }) {
     const {play} = useFio()
     return (
-        <Link href={href} onClick={play}>
+        <Link href={href}>
             <div className="relative lg:my-[49px] lg:mx-[-2px] group">
                 <div className='group-hover:scale-125 absolute p-4 h-16 w-16 -left-4 -top-4 rounded-full z-30'>
                     <Image src={"/"+src} fill alt="" className="rounded-full"
