@@ -11,7 +11,7 @@ export default async function  postKaraoke(req, res){
     .from("karaoke_video")
     .select("video_url,id")
     .eq("video_url", url).limit(1).single();
-
+    let updateWebhook = false;
     if (record === null){
         let {publishedAt, title, thumbnails} = await getYouTubeVideoSnippet(url)
         const {data} = await supabase
@@ -26,6 +26,7 @@ export default async function  postKaraoke(req, res){
         .select()
         .single()
         record = data
+        updateWebhook = true;
     } 
     let lists = karaoke.split(/\n/)
     for (const list of lists) {
@@ -52,6 +53,11 @@ export default async function  postKaraoke(req, res){
             console.log(error)
             continue
         }
-        }
+    }
+    if(updateWebhook){
+        let {data:update} = await supabase
+        .from("webhook_table")
+        .insert({video_id: record.id})
+    }
     return res.json(record);
 }
