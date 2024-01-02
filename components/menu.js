@@ -9,8 +9,8 @@ export default function Menu({ href, src, children }) {
             <div className="relative lg:my-[49px] lg:mx-[-2px] group">
                 <div className='group-hover:scale-125 absolute p-4 h-16 w-16 -left-4 -top-4 rounded-full z-30'>
                     <Image src={"/"+src} fill alt="" className="rounded-full"
-                        sizes="(max-width: 768px) 100vw,
-                        (max-width: 1200px) 50vw,
+                        sizes="(max-width: 768px) 40vw,
+                        (max-width: 1200px) 20vw,
                         33vw"
                     />
                 </div>

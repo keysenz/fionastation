@@ -88,19 +88,40 @@
 
 }
 
-.animate-to-bottom-right {
-  animation: move-to-bottom-right 0.5s ease-in-out;
-  position: absolute;
-  bottom: 20px; /* Adjust for desired spacing */
-  right: 20px; /* Adjust for desired spacing */
-}
-
-@keyframes move-to-bottom-right {
-  from {
-    /* Current position */
-  }
-  to {
+@media (min-width: 768px) and (max-width: 991px) { /* Target medium screens */
+  .animate-to-bottom-right {
+    animation: move-to-bottom-right 0.5s ease-in-out;
+    position: absolute;
     bottom: 20px;
     right: 20px;
+  }
+
+  @keyframes move-to-bottom-right {
+    from {
+      /* Current position */
+    }
+    to {
+      bottom: 20px;
+      right: 20px;
+    }
+  }
+}
+
+@media (min-width: 992px) { /* Target large screens */
+  .animate-to-bottom-right {
+    animation: move-to-bottom-right 0.5s ease-in-out;
+    position: absolute;
+    bottom: 20px;
+    right: 20px;
+  }
+
+  @keyframes move-to-bottom-right {
+    from {
+      /* Current position */
+    }
+    to {
+      bottom: 20px;
+      right: 20px;
+    }
   }
 }
