@@ -87,3 +87,20 @@
   transition: opacity 0.1s 0.1s;
 
 }
+
+.animate-to-bottom-right {
+  animation: move-to-bottom-right 0.5s ease-in-out;
+  position: absolute;
+  bottom: 20px; /* Adjust for desired spacing */
+  right: 20px; /* Adjust for desired spacing */
+}
+
+@keyframes move-to-bottom-right {
+  from {
+    /* Current position */
+  }
+  to {
+    bottom: 20px;
+    right: 20px;
+  }
+}

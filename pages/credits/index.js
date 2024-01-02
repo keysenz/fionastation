@@ -106,7 +106,7 @@ function Credit() {
         </ul>
         <div className="grow" />
       </main>
-      <Link href="/" className="fixed top-4 left-4" onClick={play}>
+      <Link href="/" className="fixed top-4 left-4">
         <i className="fa-arrow-left fa-2x fa-solid text-shadow text-[#446e92]"></i>
       </Link>
     </>

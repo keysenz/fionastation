@@ -10,6 +10,11 @@ function About(){
         <div className="relative z-0 mt-14 mb-8">
           <h1 className="z-0 text-center text-4xl font-black uppercase md:text-6xl text-[#446e92]">Fiona Clearesta</h1>
         </div>
+        <div>
+        <div className="mb-2 flex flex-col items-end justify-end sm:flex-row">
+          <a href="https://twitter.com/FionaClearesta" className="md:text-[#446e92] text-shadow mr-2 hover:text-blue-900 sm:mr-4"><i className="fa-brands fa-twitter"></i> @FionaClearesta</a>
+          <a href="https://www.youtube.com/@FionaClearesta" className="md:text-red-600 text-shadow hover:text-red-800"><i className="fa-brands fa-youtube"></i> Fiona Clearesta Ch.</a>
+        </div>
         <div className="mt-4 mb-4 w-full max-w-screen-md border-4 bg-black/50 px-4 py-2 md:skew-x-12 md:border-x-6 md:px-10">
           <div className="flex h-full flex-col md:-skew-x-12">
             <p>Fiona Clearesta is Mystical White Rabbit from Underland who will bring happiness and joy to you! Fiona likes to sing in karaoke stream and sometimes humming in any other stream.
@@ -21,13 +26,11 @@ function About(){
             </p>
           </div>
         </div>
+        </div>
         <a href="https://virtualyoutuber.fandom.com/id/wiki/Fiona_Clearesta" target="_blank" rel="noreferrer" className="mb-6 rounded border-2 border-black px-2 text-lg font-black text-[#446e92] uppercase  hover:text-fiona">Read More</a>
       <div className="z-10 flex w-full flex-col sm:w-3/4 md:w-2/3 lg:w-4/5">
-        <div className="mb-2 flex flex-col items-end justify-end sm:flex-row">
-          <a href="https://twitter.com/FionaClearesta" className="md:text-[#446e92] text-shadow mr-2 hover:text-blue-900 sm:mr-4"><i className="fa-brands fa-twitter"></i> @FionaClearesta</a>
-          <a href="https://www.youtube.com/@FionaClearesta" className="md:text-red-600 text-shadow hover:text-red-800"><i className="fa-brands fa-youtube"></i> Fiona Clearesta Ch.</a>
-        </div>
-        <iframe className="aspect-video w-full rounded-md border-2 border-white" width="560" height="315" src="https://www.youtube.com/embed/l_nzwYCDkBI" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+        
+        {/* <iframe className="aspect-video w-full rounded-md border-2 border-white" width="560" height="315" src="https://www.youtube.com/embed/l_nzwYCDkBI" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe> */}
       </div>
         <div className="grow"/>     
         <p className="text-shadow my-8 text-center text-sm text-black">
@@ -39,7 +42,7 @@ function About(){
         </p>
         {/* <p className="display-hidden lg:display-block text-shadow my-8 text-center text-sm text-black backdrop-blur-lg">Fiona Clearesta artwork credit: (Left) <a href="https://twitter.com/MaroonR19" className="hover:text-fiona">@MaroonR19</a></p> */}
       </main>
-      <Link href="/" className="fixed top-4 left-4" onClick={play}>
+      <Link href="/" className="fixed top-4 left-4">
         <i className="fa-arrow-left fa-2x fa-solid text-shadow text-[#446e92]"></i>
       </Link>
       </>

@@ -159,8 +159,10 @@ function Karaoke() {
               onReady={(event) => {
                 setPlayer(event.target);
                 if(autoPlay){
-                  event.target.seekTo(timestamp)
-                  event.target.playVideo()
+                  if(event){
+                    event.target.seekTo(timestamp)
+                    event.target.playVideo()
+                  }
                 }
               }}
             /> : <div className="flex flex-col w-full aspect-video justify-center items-center border-solid bg-black/50 text-white p-4 gap-2">
@@ -190,7 +192,7 @@ function Karaoke() {
           className="hover:text-[#446e92]">Maroon</a>{" "}
 
         </p>
-        <Link href="/" className="fixed top-4 left-4" onClick={play}>
+        <Link href="/" className="fixed top-4 left-4">
           <i className="fa-arrow-left fa-2x fa-solid text-shadow text-[#446e92]"></i>
         </Link>
       </main>
