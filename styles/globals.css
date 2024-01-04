@@ -88,6 +88,26 @@
 
 }
 
+@media (min-width: 0px) and (max-width: 768px) { /* Target medium screens */
+  .animate-to-bottom-right {
+    /* animation: move-to-bottom-right 0.5s ease-in-out;
+    position: hidden;
+    bottom: 20px;
+    right: 20px; */
+    display: none;
+  }
+
+  @keyframes move-to-bottom-right {
+    from {
+      /* Current position */
+    }
+    to {
+      bottom: 20px;
+      right: 20px;
+    }
+  }
+}
+
 @media (min-width: 768px) and (max-width: 991px) { /* Target medium screens */
   .animate-to-bottom-right {
     animation: move-to-bottom-right 0.5s ease-in-out;

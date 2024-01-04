@@ -1,12 +1,13 @@
 import Head from "next/head";
 import Image from "next/image";
 import Background from "./background";
-import { useEffect, useRef } from "react";
-import { Carousel } from "react-responsive-carousel";
+import { useEffect, useRef, useState } from "react";
 import "react-responsive-carousel/lib/styles/carousel.min.css"; 
+import { Carousel } from "antd";
 
 export default function Layout({ children }) {
     const userTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const [bannerShow, setBannerShow] = useState(false);
 
     // Create a Date object for the deadline in UTC
     const utcDeadline = new Date(Date.UTC(2024, 1, 7, 16, 59, 59)); // December 30, 2023, 13:00 UTC
@@ -54,11 +55,9 @@ export default function Layout({ children }) {
 
     const handleButtonClick = () => {
         // const anchorClone = bannerRef.current.cloneNode(true);
-        bannerRef.current.classList.add('animate-to-bottom-right');
+        setBannerShow(true);
 
         // document.body.appendChild(anchorClone); // Add cloned anchor to body
-
-        bannerRef.current.remove();
         promotion.current.remove();
 
     };
@@ -90,8 +89,8 @@ export default function Layout({ children }) {
                 {
                 banner ? 
                 <>
-                <div ref={bannerRef} className="h-96 w-96">
-                    <Carousel showThumbs={false}>
+                <div className="h-96 w-96">
+                    <Carousel autoplay autoplaySpeed={2000}>
                         {carousel.map((v,i)=>      
                         <div className="flex justify-center items-center h-full" key={i}>
                             <div >
@@ -124,6 +123,23 @@ export default function Layout({ children }) {
                 </>
                 }
                 </div>
+                {bannerShow && <div className="h-96 w-96 animate-to-bottom-right" ref={bannerRef}>
+                    <Carousel autoplay autoplaySpeed={2000} >
+                            {carousel.map((v,i)=>      
+                            <div className="flex justify-center items-center h-full" key={i}>
+                                <div >
+                                <a href={v.url} target="_blank" rel="noreferrer" className="">
+                                    <Image src={v.image} loading="lazy"
+                                    width="0"
+                                    height="0"
+                                    sizes="100vw"
+                                    className="w-full h-auto"/>
+                                </a>
+                                </div>
+                            </div>        
+                            )}
+                    </Carousel>
+                </div>}
             {children}
             </div>
         </>
