@@ -1,9 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
-import useFio from "./useFio";
 
 export default function Menu({ href, src, children }) {
-    const {play} = useFio()
     return (
         <Link href={href}>
             <div className="relative lg:my-[49px] lg:mx-[-2px] group">

@@ -2,6 +2,8 @@ import Head from "next/head";
 import Image from "next/image";
 import Background from "./background";
 import { useEffect, useRef } from "react";
+import { Carousel } from "react-responsive-carousel";
+import "react-responsive-carousel/lib/styles/carousel.min.css"; 
 
 export default function Layout({ children }) {
     const userTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -20,17 +22,54 @@ export default function Layout({ children }) {
     const promotion = useRef();
     const bannerRef = useRef();
     
+    const carousel = [
+    {
+        image: '/banner.webp',
+        alt: 'banner',
+        url: 'https://www.tokopedia.com/paopoa'
+    },
+    {
+        image: '/01.webp',
+        alt: 'Paket A',
+        url: 'https://www.tokopedia.com/paopoa/paket-a-keychain-pin-bundle-fioyo-winter-merchandise?extParam=ivf%3Dfalse?extParam=whid%3D16760202'
+    },
+    {
+        image: '/02.webp',
+        alt: 'Paket B',
+        url: 'https://www.tokopedia.com/paopoa/paket-b-tumbler-pin-bundle-fioyo-winter-merchandise?extParam=whid%3D16760202'
+    },
+    {
+        image: '/03.webp',
+        alt: 'Paket C',
+        url: 'https://www.tokopedia.com/paopoa/paket-c-deskmat-pin-bundle-fioyo-winter-merchandise?extParam=whid%3D16760202'
+    },
+    {
+        image: '/04.webp',
+        alt: 'Paket Royal',
+        url: 'https://www.tokopedia.com/paopoa/paket-royal-edition-fioyo-winter-merchandise?extParam=whid%3D16760202'
+    },
+
+]
+    
 
     const handleButtonClick = () => {
-        const anchorClone = bannerRef.current.cloneNode(true);
-        anchorClone.classList.add('animate-to-bottom-right');
+        // const anchorClone = bannerRef.current.cloneNode(true);
+        bannerRef.current.classList.add('animate-to-bottom-right');
 
-        document.body.appendChild(anchorClone); // Add cloned anchor to body
+        // document.body.appendChild(anchorClone); // Add cloned anchor to body
 
         bannerRef.current.remove();
         promotion.current.remove();
 
     };
+    const contentStyle = {
+        margin: 0,
+        height: '160px',
+        color: '#fff',
+        lineHeight: '160px',
+        textAlign: 'center',
+        background: '#364d79',
+      };
     useEffect(() => {
   
     const pathname = window.location.pathname;
@@ -51,16 +90,24 @@ export default function Layout({ children }) {
                 {
                 banner ? 
                 <>
-                <a href='https://www.tokopedia.com/paopoa' target="_blank" rel="noreferrer" ref={bannerRef}>
-                    <Image src={"/banner.jpg"} 
-                    width={500}
-                    height={500}
-                    alt="banner"
-                    style={{objectFit: "contain"}}
-                    className="aspect-ratio"
-                    />
-                </a>
-                <div className="flex md:mt-8 gap-4">
+                <div ref={bannerRef} className="h-96 w-96">
+                    <Carousel showThumbs={false}>
+                        {carousel.map((v,i)=>      
+                        <div className="flex justify-center items-center h-full" key={i}>
+                            <div >
+                            <a href={v.url} target="_blank" rel="noreferrer" className="">
+                                <Image src={v.image} loading="lazy"
+                                width="0"
+                                height="0"
+                                sizes="100vw"
+                                className="w-full h-auto"/>
+                            </a>
+                            </div>
+                        </div>        
+                        )}
+                    </Carousel>
+                </div>
+                <div className="flex md:mt-4 gap-4">
                     <a href="https://www.tokopedia.com/paopoa" target="_blank" rel="noreferrer" className="blinking rounded bg-[#03AC0E] px-2 text-xl text-white">Go to Tokopedia</a>
                     <button className="rounded bg-gray-500 px-2 text-xl text-white hover:bg-amber-200/50" onClick={() =>handleButtonClick()}>Skip Fiona&apos;s Merch</button>
                     </div>
