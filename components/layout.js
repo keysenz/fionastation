@@ -10,8 +10,7 @@ export default function Layout({ children }) {
     const [bannerShow, setBannerShow] = useState(false);
 
     // Create a Date object for the deadline in UTC
-    const utcDeadline = new Date(Date.UTC(2024, 1, 7, 16, 59, 59)); // December 30, 2023, 13:00 UTC
-    
+    const utcDeadline = new Date(Date.UTC(2024, 0, 7, 16, 59, 59)); // December 30, 2023, 13:00 UTC
     // Convert the UTC deadline to the user's local time zone
     const userTimeZoneOffset = new Date().toLocaleString("en-US", { timeZone: userTimeZone });
     const localDeadline = new Date(utcDeadline.toLocaleString("en-US", { timeZone: userTimeZone }));
