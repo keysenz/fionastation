@@ -4,11 +4,11 @@ import { supabase } from "../../lib/initSupabase";
 export default async function UpdateCover(req, res){ 
   const fetchPlaylistVideos = async () => {
     try {
-      const playlistId = 'PL-65lNPQcx_CZ_JCxF3sODkAV2XiBH3ML';
+      const playlistId = 'PL-65lNPQcx_C638Ws0JO41F1d-PCY0_1i';
       const apiKey = process.env.GOOGLE_API_KEY;
 
       const response = await axios.get(
-        `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&playlistId=${playlistId}&key=${apiKey}`
+        `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&playlistId=${playlistId}&maxResults=50&key=${apiKey}`
       );
       const {data} = response
       for (const dat of data.items) {
@@ -28,6 +28,7 @@ export default async function UpdateCover(req, res){
     }
     catch(e){
         console.log(e);
+        res.json("ERROR");
     }
     }
     fetchPlaylistVideos()
