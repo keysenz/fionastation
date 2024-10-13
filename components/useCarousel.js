@@ -48,7 +48,7 @@ const CarouselComponent = ({ items }) => {
   if (!isPopupClosed) {
     return (
       <div className="fixed top-0 left-0 z-50 flex h-screen w-screen flex-col items-center justify-center bg-gray-900/50 px-2">
-        <div className="h-1/2 w-1/2" ref={carouselRef}>
+        <div className="h-1/2 w-full md:w-1/2" ref={carouselRef}>
           <Carousel autoplay autoplaySpeed={2000}>
             {items.map((v, i) => (
               <div className="flex h-full" key={i}>
