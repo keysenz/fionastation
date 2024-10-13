@@ -98,8 +98,8 @@
   border-radius: 10px;
   box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
   z-index: 1000;
-  max-width: 80%;
-  max-height: 80%;
+  max-width: 90%;
+  max-height: 90%;
   overflow: auto;
 }
 
@@ -156,11 +156,10 @@
 
 @media (min-width: 0px) and (max-width: 768px) { /* Target medium screens */
   .animate-to-bottom-right {
-    /* animation: move-to-bottom-right 0.5s ease-in-out;
-    position: hidden;
+    animation: move-to-bottom-right 0.5s ease-in-out;
+    position: absolute;
     bottom: 20px;
-    right: 20px; */
-    display: none;
+    right: 20px;
   }
 
   @keyframes move-to-bottom-right {

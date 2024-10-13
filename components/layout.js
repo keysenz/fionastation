@@ -3,7 +3,7 @@ import Image from "next/image";
 import Background from "./background";
 import { useEffect, useRef, useState } from "react";
 import "react-responsive-carousel/lib/styles/carousel.min.css"; 
-import Carousel from "./useCarousel";
+import CarouselComponent from "./useCarousel";
 // import { Carousel } from "antd";
 
 export default function Layout({ children }) {
@@ -17,39 +17,25 @@ export default function Layout({ children }) {
     
     // Get the current time in the user's time zone
     const now = new Date(userTimeZoneOffset);
-    const promotion = useRef();
-    const bannerRef = useRef();
     
     const carousel = [
         {
-            image: '/banner.webp',
-            alt: 'banner',
-            title: 'banner',
-            url: 'https://www.tokopedia.com/paopoa'
+            image: '/banner1.jpeg',
+            alt: 'Single',
+            title: 'Single',
+            url: 'https://docs.google.com/forms/d/e/1FAIpQLSd0H2LYO9YCQiBv3Z2f744aoKn_B4y1f6qHtB9SsU_XhEImlg/viewform'
         },
         {
-            image: '/01.webp',
-            alt: 'Paket A',
-            title: 'Paket A',
-            url: 'https://www.tokopedia.com/paopoa/paket-a-keychain-pin-bundle-fioyo-winter-merchandise?extParam=ivf%3Dfalse?extParam=whid%3D16760202'
+            image: '/banner2.jpeg',
+            alt: 'Bundle',
+            title: 'Bundle',
+            url: 'https://docs.google.com/forms/d/e/1FAIpQLSd0H2LYO9YCQiBv3Z2f744aoKn_B4y1f6qHtB9SsU_XhEImlg/viewform'
         },
         {
-            image: '/02.webp',
-            alt: 'Paket B',
-            title: 'Paket B',
-            url: 'https://www.tokopedia.com/paopoa/paket-b-tumbler-pin-bundle-fioyo-winter-merchandise?extParam=whid%3D16760202'
-        },
-        {
-            image: '/03.webp',
-            alt: 'Paket C',
-            title: 'Paket C',
-            url: 'https://www.tokopedia.com/paopoa/paket-c-deskmat-pin-bundle-fioyo-winter-merchandise?extParam=whid%3D16760202'
-        },
-        {
-            image: '/04.webp',
-            alt: 'Paket Royal',
-            title: 'Paket Royal',
-            url: 'https://www.tokopedia.com/paopoa/paket-royal-edition-fioyo-winter-merchandise?extParam=whid%3D16760202'
+            image: '/banner3.jpeg',
+            alt: 'Gacha PIP',
+            title: 'Gacha PIP',
+            url: 'https://docs.google.com/forms/d/e/1FAIpQLSd0H2LYO9YCQiBv3Z2f744aoKn_B4y1f6qHtB9SsU_XhEImlg/viewform'
         },
     ]
     return (
@@ -58,7 +44,9 @@ export default function Layout({ children }) {
                 <title>Fiona&#39; Station </title>
             </Head>
             <div className="relative flex min-h-screen flex-col overflow-x-hidden">
-            <Carousel items={carousel}/>
+            {now < localDeadline &&
+                <CarouselComponent items={carousel}/>
+            }
 
             <Background/>
             {children}
