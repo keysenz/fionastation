@@ -6,18 +6,16 @@ const pipUrl = [
     "https://cdn.discordapp.com/attachments/1145605846538125423/1153364414200815656/pipidol.png"
 ]
 
-export default async function  getRandomPip(req, res){ 
-    // get karaoke's title
-    // get video url
-    // make array
-    // show title on off
-    let {video_id} = req.query
-    let { data, error } = await supabase.from('karaoke_video_duplicate')
-    .select(`
-        id, video_title, video_url, membership,
-        karaoke_song_duplicate( id, song_title, timestamp, created_at )
-        `)
-    .eq('id',video_id).single()
-    if(error) console.log(error)
-    return res.json(data);
+export default async function getRandomPip(req, res) {
+    if (req.method !== 'GET') {
+        return res.status(405).json({ message: 'Method Not Allowed' });
+    }
+
+    try {
+        const randomUrl = pipUrl[Math.floor(Math.random() * pipUrl.length)];
+        return res.status(200).json({ url: randomUrl });
+    } catch (error) {
+        console.error('Error getting random pip:', error);
+        return res.status(500).json({ error: error.message });
+    }
 }
