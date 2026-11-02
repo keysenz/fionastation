@@ -1,0 +1,19 @@
+name: fionastation
+
+services:
+  web:
+    build: .
+    restart: unless-stopped
+    environment:
+      DATABASE_PATH: /data/karaoke.db
+    ports:
+      - "127.0.0.1:3100:3000"
+    volumes:
+      # Read-only so this container cannot change the bot's data. If it starts while the bot is
+      # down and no -wal file exists, the API returns 500 until the bot opens the database.
+      - botdata:/data:ro
+
+volumes:
+  botdata:
+    external: true
+    name: discord-bot_botdata

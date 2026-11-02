@@ -1,0 +1,6 @@
+.git
+dist
+.claude
+.audit
+node_modules
+.env*
