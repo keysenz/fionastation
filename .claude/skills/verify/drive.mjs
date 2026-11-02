@@ -37,12 +37,22 @@ const step = async (feature, name, action) => {
 
 const songRows = (videos) => videos.flatMap((v) => v.karaoke_song.map((song) => ({ ...song, video_url: v.video_url })));
 
-const firstVideoWithStatus = async (videos, status) => {
-  for (const video of videos) {
-    const res = await fetch(`https://www.youtube.com/oembed?format=json&url=https://www.youtube.com/watch?v=${video.video_url}`);
-    if (res.status === status) return video;
+const statusCache = new Map();
+const videoStatus = async (videoUrl) => {
+  if (!statusCache.has(videoUrl)) {
+    const res = await fetch(`https://www.youtube.com/oembed?format=json&url=https://www.youtube.com/watch?v=${videoUrl}`);
+    statusCache.set(videoUrl, res.status);
   }
-  throw new Error(`no karaoke video answers oEmbed with ${status}`);
+  return statusCache.get(videoUrl);
+};
+
+const isPublic = async (row) => (await videoStatus(row.video_url)) === 200;
+
+const findRowIndex = async (rows, matches, from = 0) => {
+  for (let i = from; i < rows.length; i++) {
+    if (await matches(rows[i], i)) return i;
+  }
+  throw new Error('no karaoke row matches');
 };
 
 // fetch normalizes paths, so this sends the request line exactly as written.
@@ -93,10 +103,11 @@ const journeys = {
     await songRow(page).first().waitFor();
     check('karaoke', 'list shows every song', (await songRow(page).count()) === total, `${await songRow(page).count()} rows`);
 
-    const rows = videos.flatMap((v) => v.karaoke_song.map((song) => ({ ...song, video_url: v.video_url })));
-    const bIndex = rows.findIndex((s) => s.song_title !== rows[0].song_title);
-    const cIndex = rows.findIndex((s) => s.song_title !== rows[0].song_title && s.song_title !== rows[bIndex].song_title);
-    const [a, b, c] = [rows[0], rows[bIndex], rows[cIndex]];
+    const rows = songRows(videos);
+    const aIndex = await findRowIndex(rows, isPublic);
+    const bIndex = await findRowIndex(rows, async (s) => (await isPublic(s)) && s.song_title !== rows[aIndex].song_title);
+    const cIndex = await findRowIndex(rows, async (s) => (await isPublic(s)) && s.song_title !== rows[aIndex].song_title && s.song_title !== rows[bIndex].song_title);
+    const [a, b, c] = [rows[aIndex], rows[bIndex], rows[cIndex]];
     const search = page.getByPlaceholder('Search songs...');
     await search.fill(a.song_title);
     await page.waitForFunction((n) => document.querySelectorAll('h4').length < n, total);
@@ -106,7 +117,7 @@ const journeys = {
     check('karaoke', 'search shows an empty state', true);
     await search.fill('');
 
-    await songRow(page).first().click();
+    await songRow(page).nth(aIndex).click();
     const bar = page.locator('.fixed.bottom-0');
     await bar.getByRole('heading', { name: a.song_title }).waitFor();
     const src = await playerSrc(page);
@@ -128,6 +139,14 @@ const journeys = {
     check('karaoke', 'queue drawer lists the queued song', true, c.song_title);
     await page.waitForTimeout(400);
     await page.screenshot({ path: join(out, 'karaoke-queue.png') });
+
+    await barButton(page, 'fa-step-backward').click();
+    await bar.getByRole('heading', { name: a.song_title }).waitFor();
+    await drawer.locator('div.group').first().getByText(b.song_title).waitFor();
+    check('karaoke', 'previous returns to the earlier song and the song it left is first under Up Next', true, `${a.song_title} then ${b.song_title}`);
+    await barButton(page, 'fa-step-forward').click();
+    await bar.getByRole('heading', { name: b.song_title }).waitFor();
+    check('karaoke', 'next plays the song previous kept', true, b.song_title);
 
     await page.reload();
     await songRow(page).first().waitFor();
@@ -169,8 +188,7 @@ const journeys = {
   async player(page) {
     const { body: videos } = await api('/api/get-karaoke');
     const rows = songRows(videos);
-    const publicVideo = await firstVideoWithStatus(videos, 200);
-    const start = rows.findIndex((s) => s.video_url === publicVideo.video_url);
+    const start = await findRowIndex(rows.slice(0, -1), async (s, i) => (await isPublic(s)) && (await isPublic(rows[i + 1])));
     const nextRow = rows[start + 1];
 
     await page.goto(BASE + '/karaoke');
@@ -216,14 +234,26 @@ const journeys = {
   async unavailable(page) {
     const { body: videos } = await api('/api/get-karaoke');
     const rows = songRows(videos);
-    const gone = await firstVideoWithStatus(videos, 403);
+    const goneIndex = await findRowIndex(rows, async (s, i) => (await videoStatus(s.video_url)) === 403
+      && rows.findIndex((r) => r.video_url === s.video_url) === i
+      && await findRowIndex(rows, isPublic, i + 1).then(() => true, () => false));
+    const gone = rows[goneIndex];
+    const targetIndex = await findRowIndex(rows, isPublic, goneIndex + 1);
+    const target = rows[targetIndex];
     await page.goto(BASE + '/karaoke');
     await songRow(page).first().waitFor();
-    await songRow(page).nth(rows.findIndex((s) => s.video_url === gone.video_url)).click();
-    await step('unavailable', 'a private video says so in the bar and pauses', async () => {
-      const bar = page.locator('.fixed.bottom-0');
-      await bar.getByText('This video is not available on YouTube').waitFor({ timeout: 30000 });
-      await bar.locator('i.fa-play').waitFor();
+    await songRow(page).nth(goneIndex).click();
+    const bar = page.locator('.fixed.bottom-0');
+    await step('unavailable', 'a private video skips on to the first later song of a public video', async () => {
+      await bar.getByRole('heading', { name: target.song_title }).waitFor({ timeout: 60000 });
+      await page.waitForFunction((url) => document.querySelector('iframe[src*="youtube"]')?.src.includes(url), target.video_url, { timeout: 60000 });
+      if ((await page.locator('iframe[src*="youtube"]').count()) !== 1) throw new Error('more than one player');
+      if (await bar.getByText('This video is not available on YouTube').count()) throw new Error('the bar still shows the error');
+    });
+    await step('unavailable', 'the private video is no longer loaded and playback is running', async () => {
+      const src = await playerSrc(page);
+      if (src.includes(gone.video_url)) throw new Error('the private video is still loaded');
+      await bar.locator('i.fa-pause').waitFor({ timeout: 30000 });
     });
   },
 
@@ -278,7 +308,9 @@ const journeys = {
     }
     await blockedTab.goto(BASE + '/karaoke');
     await step('storage', 'karaoke works with storage blocked', async () => {
-      await songRow(blockedTab).first().click();
+      const { body: blockedVideos } = await api('/api/get-karaoke');
+      const blockedRows = songRows(blockedVideos);
+      await songRow(blockedTab).nth(await findRowIndex(blockedRows, isPublic)).click();
       await blockedTab.locator('.fixed.bottom-0 h3').first().waitFor();
     });
     await blockedTab.close();

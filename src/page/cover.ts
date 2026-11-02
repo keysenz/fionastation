@@ -103,7 +103,9 @@ const playerEventToMessage =
       Playing: () => Result.failVoid,
       Paused: () => Result.failVoid,
       Ended: () => Result.succeed(Message.EndedVideo()),
-      Failed: ({ reason }) =>
+      VideoFailed: ({ reason }) =>
+        Result.succeed(Message.FailedLoadPlayer({ videoId, reason })),
+      PlayerFailed: ({ reason }) =>
         Result.succeed(Message.FailedLoadPlayer({ videoId, reason })),
     })
 

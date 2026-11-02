@@ -15,7 +15,7 @@ const RUNS = Number(process.env.RUNS ?? 1000);
 const S = await import(pathToFileURL(modulePath).href);
 
 const makeSong = (n) => ({
-  id: `song-${n}`, song_title: `Song ${n}`, timestamp: '00:00:01', created_at: 'x', video_url: `v${n}`, title_text: 'Stream', membership: false,
+  id: `song-${n}`, song_title: `Song ${n}`, timestamp: '00:00:01', created_at: 'x', video_url: `v${Math.ceil(n / 4)}`, title_text: 'Stream', membership: false,
 });
 const archive = Array.from({ length: 12 }, (_, i) => makeSong(i + 1));
 const song = fc.integer({ min: 1, max: 12 }).map(makeSong);
@@ -27,6 +27,7 @@ const action = fc.oneof(
   { weight: 2, arbitrary: fc.constant({ type: 'previous' }) },
   { weight: 2, arbitrary: fc.constant({ type: 'end' }) },
   { weight: 1, arbitrary: fc.constant({ type: 'toggle' }) },
+  { weight: 1, arbitrary: fc.constant({ type: 'fail' }) },
 );
 // The second shape plays enough songs in a row to reach the history cap, which mixed sequences rarely do.
 const actions = fc.oneof(
@@ -37,7 +38,7 @@ const actions = fc.oneof(
 const current = (setlist) => Option.getOrUndefined(setlist.maybeNowPlaying);
 
 // Only what the UI can do: the player bar's previous, toggle and next exist once a song is current,
-// and only a current song's video can end.
+// and only a current song's video can end or fail.
 function apply(setlist, a) {
   if (a.type === 'play') return S.play(setlist, a.song);
   if (a.type === 'enqueue') return S.enqueue(setlist, a.song);
@@ -45,6 +46,7 @@ function apply(setlist, a) {
   if (a.type === 'next') return S.playNext(setlist);
   if (a.type === 'previous') return S.playPrevious(setlist);
   if (a.type === 'end') return S.advanceAfterEnd(setlist, archive);
+  if (a.type === 'fail') return S.skipUnavailableVideo(setlist, archive, 'gone');
   return S.togglePlaying(setlist);
 }
 
@@ -72,6 +74,15 @@ const properties = {
       if ((a.type === 'next' || a.type === 'end') && current(before) && expectedQueue.length) {
         const expected = expectedQueue.shift();
         if (!same(current(after).song, expected)) fail(`${a.type} played ${current(after).song.id}, expected ${expected.id}`);
+      }
+      if (a.type === 'fail' && current(before)) {
+        const dead = current(before).song.video_url;
+        const alive = expectedQueue.filter((s) => s.video_url !== dead);
+        expectedQueue.splice(0, expectedQueue.length, ...alive);
+        if (expectedQueue.length) {
+          const expected = expectedQueue.shift();
+          if (!same(current(after).song, expected)) fail(`fail played ${current(after).song.id}, expected ${expected.id}`);
+        }
       }
       if (!same(after.queue, expectedQueue)) fail(`after ${a.type} queue is [${after.queue.map((s) => s.id)}], expected [${expectedQueue.map((s) => s.id)}]`);
     });
@@ -112,6 +123,29 @@ const properties = {
     });
   },
 
+  // A video that cannot play is skipped with every song that shares it, and Previous never returns to it.
+  'unavailable-video-is-skipped': (seq) => {
+    walk(seq, (a, before, after) => {
+      if (a.type !== 'fail' || !current(before)) return;
+      const dead = current(before).song.video_url;
+      const deadSongs = [...after.queue, ...after.history].filter((s) => s.video_url === dead);
+      if (deadSongs.length) fail(`fail left ${deadSongs.map((s) => s.id)} of the dead video in the queue or history`);
+      const index = archive.findIndex((s) => s.id === current(before).song.id);
+      const hasNext = before.queue.some((s) => s.video_url !== dead) || archive.slice(index + 1).some((s) => s.video_url !== dead);
+      const now = current(after);
+      if (hasNext) {
+        if (now.song.video_url === dead) fail(`fail stayed on ${now.song.id} of the dead video`);
+        if (now.status !== 'Playing') fail('fail did not keep playing');
+        if (now.playId <= current(before).playId) fail('fail kept the playId');
+        if (Option.isSome(now.maybeLoadError)) fail('fail left a load error on the next song');
+      } else {
+        if (now.song.id !== current(before).song.id) fail(`fail with nothing left moved to ${now.song.id}`);
+        if (now.status !== 'Paused') fail('fail with nothing left did not pause');
+        if (Option.isNone(now.maybeLoadError)) fail('fail with nothing left did not say why');
+      }
+    });
+  },
+
   // A page reload restores queue and history, and nothing starts playing on its own.
   'reload-restores-queue-and-history': (seq) => {
     const before = walk(seq, () => {});
@@ -142,6 +176,10 @@ const MUTANTS = [
   { property: 'end-of-video-continues-the-archive', from: 'Array.get(allSongs, index + 1)', to: 'Array.get(allSongs, index)' },
   { property: 'end-of-video-continues-the-archive', from: "onNone: () => setStatus(setlist, 'Paused'),\n    onSome: nextSong => play(setlist, nextSong),", to: 'onNone: () => setlist,\n    onSome: nextSong => play(setlist, nextSong),' },
   { property: 'queue-is-fifo-and-lossless', from: 'queue: queue => [\n            ...Option.match(setlist.maybeNowPlaying, {\n              onNone: () => [],\n              onSome: ({ song }) => [song],\n            }),\n            ...queue,\n          ],', to: 'queue: queue => queue,' },
+  { property: 'unavailable-video-is-skipped', from: 'queue: queue => Array.filter(queue, isOtherVideo),', to: 'queue: queue => queue,' },
+  { property: 'unavailable-video-is-skipped', from: 'history: history => Array.filter(history, isOtherVideo),', to: 'history: history => history,' },
+  { property: 'unavailable-video-is-skipped', from: 'startPlay(\n            modifyFields(cleaned,', to: 'play(\n            modifyFields(cleaned,' },
+  { property: 'unavailable-video-is-skipped', from: 'Array.findFirst(Array.drop(allSongs, index + 1), isOtherVideo)', to: 'Array.get(allSongs, index + 1)' },
   { property: 'reload-restores-queue-and-history', from: 'queue: () => state.queue,', to: 'queue: queue => queue,' },
   { property: 'reload-restores-queue-and-history', from: 'history: () => state.history,', to: 'history: history => history,' },
 ];

@@ -17,6 +17,7 @@ import {
   playPrevious,
   restoreSaved,
   setStatus,
+  skipUnavailableVideo,
   toPersistedJson,
   togglePlaying,
 } from './setlist.ts'
@@ -262,7 +263,18 @@ export const update = (model: Model, message: Message) =>
                   model,
                   advanceAfterEnd(model.setlist, allSongs(model)),
                 ),
-              Failed: ({ reason }) =>
+              VideoFailed: ({ reason }) => {
+                const setlist = skipUnavailableVideo(
+                  model.setlist,
+                  allSongs(model),
+                  reason,
+                )
+                return {
+                  model: modifyFields(model, { setlist: () => setlist }),
+                  commands: [SaveSetlist({ json: toPersistedJson(setlist) })],
+                }
+              },
+              PlayerFailed: ({ reason }) =>
                 recordFromPlayer(model, failLoad(model.setlist, reason)),
             }),
         },

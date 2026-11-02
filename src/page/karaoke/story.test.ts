@@ -17,16 +17,17 @@ import {
 } from './karaoke'
 import { emptySetlist, restoreSaved } from './setlist.ts'
 
-const makeSong = (id: string): PlayableSong => ({
+const makeSong = (id: string, video = `video-${id}`): PlayableSong => ({
   id,
   song_title: `Song ${id}`,
   timestamp: '00:01:00',
   created_at: 'x',
-  video_url: `video-${id}`,
+  video_url: video,
   title_text: 'Stream',
   membership: false,
 })
 const [a, b] = [makeSong('a'), makeSong('b')]
+const a2 = makeSong('a2', a.video_url)
 const saved = Command.resolve(SaveSetlist, Message.CompletedSaveSetlist())
 
 const statusOf = (current: Model) =>
@@ -93,36 +94,82 @@ test('a player that reports its own pause changes the bar and sends nothing back
   )
 })
 
-test('an unavailable video pauses and says why, and the next song clears it', () => {
+const loadErrorOf = (current: Model) =>
+  Option.flatMap(
+    current.setlist.maybeNowPlaying,
+    ({ maybeLoadError }) => maybeLoadError,
+  )
+
+const currentIdOf = (current: Model) =>
+  Option.map(current.setlist.maybeNowPlaying, ({ song }) => song.id)
+
+test('an unavailable video moves on to the next song of another video', () => {
   story(
     update,
     given(init()),
+    message(Message.SucceededFetchSongs({ songs: [a, a2, b] })),
     message(Message.ClickedSong({ song: a })),
     saved,
     message(
       Message.ReceivedPlayerEvent({
         playId: 1,
-        event: PlayerEvent.Failed({ reason: 'gone' }),
+        event: PlayerEvent.VideoFailed({ reason: 'gone' }),
+      }),
+    ),
+    saved,
+    model(current => {
+      expect(currentIdOf(current)).toEqual(Option.some('b'))
+      expect(statusOf(current)).toEqual(Option.some('Playing'))
+      expect(loadErrorOf(current)).toEqual(Option.none())
+      expect(current.setlist.history).toEqual([])
+    }),
+  )
+})
+
+test('the last video being unavailable pauses and says why', () => {
+  story(
+    update,
+    given(init()),
+    message(Message.SucceededFetchSongs({ songs: [a, b] })),
+    message(Message.ClickedSong({ song: b })),
+    saved,
+    message(
+      Message.ReceivedPlayerEvent({
+        playId: 1,
+        event: PlayerEvent.VideoFailed({ reason: 'gone' }),
+      }),
+    ),
+    saved,
+    model(current => {
+      expect(currentIdOf(current)).toEqual(Option.some('b'))
+      expect(statusOf(current)).toEqual(Option.some('Paused'))
+      expect(loadErrorOf(current)).toEqual(Option.some('gone'))
+    }),
+  )
+})
+
+test('a player that cannot load pauses and says why, and skips nothing', () => {
+  story(
+    update,
+    given(init()),
+    message(Message.SucceededFetchSongs({ songs: [a, b] })),
+    message(Message.ClickedSong({ song: a })),
+    saved,
+    message(
+      Message.ReceivedPlayerEvent({
+        playId: 1,
+        event: PlayerEvent.PlayerFailed({ reason: 'blocked' }),
       }),
     ),
     model(current => {
+      expect(currentIdOf(current)).toEqual(Option.some('a'))
       expect(statusOf(current)).toEqual(Option.some('Paused'))
-      expect(
-        Option.flatMap(
-          current.setlist.maybeNowPlaying,
-          ({ maybeLoadError }) => maybeLoadError,
-        ),
-      ).toEqual(Option.some('gone'))
+      expect(loadErrorOf(current)).toEqual(Option.some('blocked'))
     }),
     message(Message.ClickedSong({ song: b })),
     saved,
     model(current => {
-      expect(
-        Option.flatMap(
-          current.setlist.maybeNowPlaying,
-          ({ maybeLoadError }) => maybeLoadError,
-        ),
-      ).toEqual(Option.none())
+      expect(loadErrorOf(current)).toEqual(Option.none())
     }),
   )
 })

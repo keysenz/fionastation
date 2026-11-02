@@ -41,7 +41,8 @@ export const PlayerEvent = defineTaggedUnion({
   Playing: {},
   Paused: {},
   Ended: {},
-  Failed: { reason: Schema.String },
+  VideoFailed: { reason: Schema.String },
+  PlayerFailed: { reason: Schema.String },
 })
 export type PlayerEvent = typeof PlayerEvent.Type
 
@@ -123,7 +124,7 @@ export const playerEvents = (
               onError: () => {
                 Queue.offerUnsafe(
                   queue,
-                  PlayerEvent.Failed({ reason: VIDEO_UNAVAILABLE }),
+                  PlayerEvent.VideoFailed({ reason: VIDEO_UNAVAILABLE }),
                 )
               },
             },
@@ -144,7 +145,7 @@ export const playerEvents = (
         Effect.sync(() =>
           Queue.offerUnsafe(
             queue,
-            PlayerEvent.Failed({ reason: PLAYER_UNAVAILABLE }),
+            PlayerEvent.PlayerFailed({ reason: PLAYER_UNAVAILABLE }),
           ),
         ),
       ),

@@ -29,7 +29,7 @@ Exit code 0 means every property holds.
 
 ## What it checks
 
-Each sequence has up to 150 actions, or 52 to 80 consecutive plays to reach the history cap. It uses 12 distinct songs and the fixed seed `20261101`, with 1000 sequences per property.
+Each sequence has up to 150 actions, or 52 to 80 consecutive plays to reach the history cap. It uses 12 distinct songs, 4 to each of 3 videos in archive order, and the fixed seed `20261101`, with 1000 sequences per property.
 
 | Property | Plain meaning |
 | --- | --- |
@@ -37,6 +37,7 @@ Each sequence has up to 150 actions, or 52 to 80 consecutive plays to reach the 
 | `history-is-bounded-and-newest-first` | History never passes 50, and a replaced song becomes its newest entry. |
 | `new-play-gets-a-new-player` | Each play and Previous gets a new `playId`, even for the same song, and toggling keeps it. |
 | `end-of-video-continues-the-archive` | With an empty queue, a video end plays the archive's next song, and the last song pauses. |
+| `unavailable-video-is-skipped` | A video that fails leaves no song of it in the queue or history. Playback moves to the queue head or the next song of another video, without recording the failed song in history, or pauses with the reason if there is none. |
 | `reload-restores-queue-and-history` | Saving and restoring keeps the queue and history, and nothing plays. |
 
 "Playing with no current song" is no longer a property, because the `NowPlaying` type cannot represent it.

@@ -151,6 +151,40 @@ export const advanceAfterEnd = (
   })
 }
 
+/** A dead video takes every song of it out of the queue and history. The song
+ *  that hit it is not recorded in history, because Previous would land on it. */
+export const skipUnavailableVideo = (
+  setlist: Setlist,
+  allSongs: ReadonlyArray<PlayableSong>,
+  reason: string,
+): Setlist =>
+  Option.match(setlist.maybeNowPlaying, {
+    onNone: () => setlist,
+    onSome: ({ song: failedSong }) => {
+      const isOtherVideo = (song: PlayableSong): boolean =>
+        song.video_url !== failedSong.video_url
+      const cleaned = modifyFields(setlist, {
+        queue: queue => Array.filter(queue, isOtherVideo),
+        history: history => Array.filter(history, isOtherVideo),
+      })
+      const maybeNextSong = Option.orElse(Array.head(cleaned.queue), () =>
+        Option.flatMap(
+          Array.findFirstIndex(allSongs, ({ id }) => id === failedSong.id),
+          index =>
+            Array.findFirst(Array.drop(allSongs, index + 1), isOtherVideo),
+        ),
+      )
+      return Option.match(maybeNextSong, {
+        onNone: () => failLoad(cleaned, reason),
+        onSome: nextSong =>
+          startPlay(
+            modifyFields(cleaned, { queue: queue => Array.drop(queue, 1) }),
+            nextSong,
+          ),
+      })
+    },
+  })
+
 export const toPersistedJson = (setlist: Setlist): string =>
   Schema.encodeSync(PersistedSetlistJson)({
     state: { queue: setlist.queue, history: setlist.history },
