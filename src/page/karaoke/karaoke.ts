@@ -31,7 +31,6 @@ const SongsData = AsyncData.Schema(Schema.Array(PlayableSong), Schema.String)
 export const Model = Schema.Struct({
   songs: SongsData.schema,
   search: Schema.String,
-  maybeCategory: Schema.Option(Schema.String),
   setlist: Setlist,
   isExpanded: Schema.Boolean,
   isQueueOpen: Schema.Boolean,
@@ -45,7 +44,6 @@ export const Message = defineMessageUnion({
   FailedFetchSongs: { error: Schema.String },
   ClickedRetryFetch: {},
   UpdatedSearch: { value: Schema.String },
-  ClickedCategory: { category: Schema.String },
   ClickedSong: { song: PlayableSong },
   ClickedAddToQueue: { song: PlayableSong },
   ClickedPlayPause: {},
@@ -132,7 +130,6 @@ export const MountPlayer = Mount.defineStream('MountPlayer', {
 export const init = (): Model => ({
   songs: SongsData.Idle(),
   search: '',
-  maybeCategory: Option.none(),
   setlist: emptySetlist,
   isExpanded: false,
   isQueueOpen: false,
@@ -209,12 +206,6 @@ export const update = (model: Model, message: Message) =>
 
     UpdatedSearch: ({ value }) => ({
       model: modifyFields(model, { search: () => value }),
-    }),
-
-    ClickedCategory: ({ category }) => ({
-      model: modifyFields(model, {
-        maybeCategory: () => Option.some(category),
-      }),
     }),
 
     ClickedSong: ({ song }) => {

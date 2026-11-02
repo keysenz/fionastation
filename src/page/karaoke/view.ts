@@ -1,4 +1,4 @@
-import { Array, Equal, Option } from 'effect'
+import { Array, Option } from 'effect'
 import { AsyncData, Submodel } from 'foldkit'
 import { type Html, type HtmlBuilder, createKeyedLazy } from 'foldkit/html'
 import { twMerge } from 'tailwind-merge'
@@ -9,8 +9,6 @@ import { homeRouter } from '../../route'
 import { thumbnailUrl } from '../../youtube'
 import { Message, type Model, MountPlayer, allSongs } from './karaoke'
 import type { NowPlaying } from './setlist.ts'
-
-const CATEGORIES = ['Karaoke']
 
 const visibleSongs = makeFuzzySearch<PlayableSong>(['song_title', 'title_text'])
 
@@ -204,32 +202,6 @@ const spinnerView = (h: HtmlBuilder<Message>): Html =>
     ],
   )
 
-const filterBarView = (model: Model, h: HtmlBuilder<Message>): Html =>
-  h.div(
-    [
-      h.Class(
-        'w-full flex md:justify-start justify-center flex-wrap gap-2 py-2',
-      ),
-    ],
-    CATEGORIES.map(category =>
-      h.keyed('button')(
-        category,
-        [
-          h.OnClick(Message.ClickedCategory({ category })),
-          h.Class(
-            twMerge(
-              'px-4 py-1.5 rounded-full text-xs font-medium transition-all duration-200 backdrop-blur-sm border',
-              Option.exists(model.maybeCategory, Equal.equals(category))
-                ? 'bg-[#446e92] text-white border-[#446e92] shadow-lg shadow-sky-900/40'
-                : 'bg-black/40 text-gray-300 border-white/10 hover:bg-white/10 hover:text-white hover:border-white/30',
-            ),
-          ),
-        ],
-        [category],
-      ),
-    ),
-  )
-
 const headerView = (model: Model, h: HtmlBuilder<Message>): Html =>
   h.div(
     [h.Class('flex-none px-4 pt-4 pb-2 z-20')],
@@ -281,7 +253,6 @@ const headerView = (model: Model, h: HtmlBuilder<Message>): Html =>
           ]),
         ],
       ),
-      filterBarView(model, h),
     ],
   )
 
