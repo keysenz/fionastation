@@ -25,7 +25,7 @@ node --disable-warning=ExperimentalWarning check.mjs            # the properties
 node --disable-warning=ExperimentalWarning check.mjs --mutants  # proves that each property can fail
 ```
 
-Exit code 0 means every property holds, except for the known finding below.
+Exit code 0 means every property holds.
 
 ## What it checks
 
@@ -33,18 +33,13 @@ Each sequence has up to 150 actions, or 52 to 80 consecutive plays to reach the 
 
 | Property | Plain meaning |
 | --- | --- |
-| `queue-is-fifo-and-lossless` | The queue always equals a first-in, first-out list of what was added. Next and video end play its head. |
+| `queue-is-fifo-and-lossless` | Queue order is first-in, first-out, except that Previous returns the song it leaves to the front. Next and video end play the head. |
 | `history-is-bounded-and-newest-first` | History never passes 50, and a replaced song becomes its newest entry. |
 | `new-play-gets-a-new-player` | Each play and Previous gets a new `playId`, even for the same song, and toggling keeps it. |
 | `end-of-video-continues-the-archive` | With an empty queue, a video end plays the archive's next song, and the last song pauses. |
 | `reload-restores-queue-and-history` | Saving and restoring keeps the queue and history, and nothing plays. |
-| `previous-keeps-current-song` | Previous never makes the current song unreachable. This is the known finding. |
 
 "Playing with no current song" is no longer a property, because the `NowPlaying` type cannot represent it.
-
-## Known finding
-
-`previous-keeps-current-song` fails today. The steps are: play A, play B, then choose Previous. B is now not current, not queued, and not in history, so the visitor cannot go forward to it. The Next site behaved the same way, and the migration kept it. The check prints `KNOWN FINDING` and exits 0. If a change fixes this, the check prints `FIXED?` and exits 1, so remove the name from `KNOWN_FINDINGS`.
 
 ## Reading a failure
 

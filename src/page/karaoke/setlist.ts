@@ -117,7 +117,16 @@ export const playPrevious = (setlist: Setlist): Setlist =>
     onNone: () => setlist,
     onSome: previousSong =>
       startPlay(
-        modifyFields(setlist, { history: history => Array.drop(history, 1) }),
+        modifyFields(setlist, {
+          history: history => Array.drop(history, 1),
+          queue: queue => [
+            ...Option.match(setlist.maybeNowPlaying, {
+              onNone: () => [],
+              onSome: ({ song }) => [song],
+            }),
+            ...queue,
+          ],
+        }),
         previousSong,
       ),
   })

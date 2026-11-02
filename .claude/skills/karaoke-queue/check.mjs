@@ -12,10 +12,6 @@ const domainUrl = pathToFileURL(join(here, '../../../src/domain.ts')).href;
 const modulePath = process.env.KARAOKE_SETLIST ?? realModule;
 const RUNS = Number(process.env.RUNS ?? 1000);
 
-// A property in KNOWN_FINDINGS is a defect already reported to the owner. It must keep failing,
-// and the check fails if it starts passing so that the entry gets removed.
-const KNOWN_FINDINGS = new Set(['previous-keeps-current-song']);
-
 const S = await import(pathToFileURL(modulePath).href);
 
 const makeSong = (n) => ({
@@ -67,10 +63,12 @@ const walk = (seq, onStep) => {
 
 const properties = {
   // A queued song plays in the order it was queued, and nothing drops one before it plays.
+  // Previous is the one exception: the song it leaves goes to the front of the queue.
   'queue-is-fifo-and-lossless': (seq) => {
     const expectedQueue = [];
     walk(seq, (a, before, after) => {
       if (a.type === 'enqueue') expectedQueue.push(a.song);
+      if (a.type === 'previous' && current(before) && before.history.length) expectedQueue.unshift(current(before).song);
       if ((a.type === 'next' || a.type === 'end') && current(before) && expectedQueue.length) {
         const expected = expectedQueue.shift();
         if (!same(current(after).song, expected)) fail(`${a.type} played ${current(after).song.id}, expected ${expected.id}`);
@@ -122,17 +120,6 @@ const properties = {
     if (!same(after.history, before.history)) fail('reload changed the history');
     if (Option.isSome(after.maybeNowPlaying)) fail('reload resumed playback');
   },
-
-  // Previous must not make the song that was playing unreachable.
-  'previous-keeps-current-song': (seq) => {
-    walk(seq, (a, before, after) => {
-      if (a.type === 'previous' && current(before) && before.history.length) {
-        const id = current(before).song.id;
-        const reachable = [current(after)?.song, ...after.queue, ...after.history].some((s) => s?.id === id);
-        if (!reachable) fail(`Previous from ${id} left it nowhere: not current, queued or in history`);
-      }
-    });
-  },
 };
 
 async function checkProperty(name) {
@@ -154,6 +141,7 @@ const MUTANTS = [
   { property: 'new-play-gets-a-new-player', from: 'playCount: count => count + 1,', to: 'playCount: count => count,' },
   { property: 'end-of-video-continues-the-archive', from: 'Array.get(allSongs, index + 1)', to: 'Array.get(allSongs, index)' },
   { property: 'end-of-video-continues-the-archive', from: "onNone: () => setStatus(setlist, 'Paused'),\n    onSome: nextSong => play(setlist, nextSong),", to: 'onNone: () => setlist,\n    onSome: nextSong => play(setlist, nextSong),' },
+  { property: 'queue-is-fifo-and-lossless', from: 'queue: queue => [\n            ...Option.match(setlist.maybeNowPlaying, {\n              onNone: () => [],\n              onSome: ({ song }) => [song],\n            }),\n            ...queue,\n          ],', to: 'queue: queue => queue,' },
   { property: 'reload-restores-queue-and-history', from: 'queue: () => state.queue,', to: 'queue: queue => queue,' },
   { property: 'reload-restores-queue-and-history', from: 'history: () => state.history,', to: 'history: history => history,' },
 ];
@@ -191,14 +179,8 @@ const names = onlyAt > -1 ? [process.argv[onlyAt + 1]] : Object.keys(properties)
 let exit = 0;
 for (const name of names) {
   const r = await checkProperty(name);
-  const known = onlyAt === -1 && KNOWN_FINDINGS.has(name);
-  if (!r.failed && known) {
-    console.log(`FIXED? ${name}: passes now. Remove it from KNOWN_FINDINGS.`);
-    exit = 1;
-  } else if (!r.failed) {
+  if (!r.failed) {
     console.log(`PASS ${name} (${r.runs} sequences)`);
-  } else if (known) {
-    console.log(`KNOWN FINDING ${name}\n  steps: ${r.steps}\n  why: ${r.why}`);
   } else {
     console.log(`FAIL ${name}\n  steps: ${r.steps}\n  why: ${r.why}`);
     exit = 1;
