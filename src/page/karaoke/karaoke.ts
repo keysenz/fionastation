@@ -1,4 +1,4 @@
-import { Effect, Option, Result, Schema, Stream } from 'effect'
+import { Duration, Effect, Option, Result, Schema, Stream } from 'effect'
 import { AsyncData, Command, Mount, type Update } from 'foldkit'
 import { defineMessageUnion } from 'foldkit/message'
 import { modifyFields } from 'foldkit/struct'
@@ -29,12 +29,20 @@ const PLAYER_HOST_ID = 'karaoke'
 
 const SongsData = AsyncData.Schema(Schema.Array(PlayableSong), Schema.String)
 
+export const SkipToast = Schema.Struct({
+  firstSkippedTitle: Schema.String,
+  skippedCount: Schema.Number,
+  dismissId: Schema.Number,
+})
+export type SkipToast = typeof SkipToast.Type
+
 export const Model = Schema.Struct({
   songs: SongsData.schema,
   search: Schema.String,
   setlist: Setlist,
   isExpanded: Schema.Boolean,
   isQueueOpen: Schema.Boolean,
+  maybeSkipToast: Schema.Option(SkipToast),
 })
 export type Model = typeof Model.Type
 
@@ -53,10 +61,12 @@ export const Message = defineMessageUnion({
   ClickedToggleExpanded: {},
   ClickedCollapse: {},
   ClickedQueueHandle: {},
+  ClickedDismissToast: {},
   ReceivedPlayerEvent: { playId: Schema.Number, event: PlayerEvent },
   CompletedLoadSavedSetlist: { maybeJson: Schema.Option(Schema.String) },
   CompletedApplyPlayback: {},
   CompletedSaveSetlist: {},
+  CompletedWaitBeforeDismissToast: { dismissId: Schema.Number },
 })
 export type Message = typeof Message.Type
 
@@ -104,6 +114,20 @@ export const SaveSetlist = Command.define('SaveSetlist', {
     }).pipe(Effect.ignore, Effect.as(Message.CompletedSaveSetlist())),
 })
 
+const TOAST_SECONDS = 6
+
+export const WaitBeforeDismissToast = Command.define(
+  'WaitBeforeDismissToast',
+  {
+    args: { dismissId: Schema.Number },
+    messages: [Message.CompletedWaitBeforeDismissToast],
+    execute: ({ dismissId }) =>
+      Effect.sleep(Duration.seconds(TOAST_SECONDS)).pipe(
+        Effect.as(Message.CompletedWaitBeforeDismissToast({ dismissId })),
+      ),
+  },
+)
+
 export const MountPlayer = Mount.defineStream('MountPlayer', {
   args: {
     playId: Schema.Number,
@@ -134,6 +158,7 @@ export const init = (): Model => ({
   setlist: emptySetlist,
   isExpanded: false,
   isQueueOpen: false,
+  maybeSkipToast: Option.none(),
 })
 
 export type UpdateReturn = Update.Return<Model, Message>
@@ -188,6 +213,24 @@ const changeSetlist = (model: Model, setlist: Setlist): UpdateReturn => {
 const recordFromPlayer = (model: Model, setlist: Setlist): UpdateReturn => ({
   model: modifyFields(model, { setlist: () => setlist }),
 })
+
+const addSkip = (
+  maybeToast: Option.Option<SkipToast>,
+  failedTitle: string,
+  dismissId: number,
+): SkipToast =>
+  Option.match(maybeToast, {
+    onNone: () => ({
+      firstSkippedTitle: failedTitle,
+      skippedCount: 1,
+      dismissId,
+    }),
+    onSome: toast => ({
+      firstSkippedTitle: toast.firstSkippedTitle,
+      skippedCount: toast.skippedCount + 1,
+      dismissId,
+    }),
+  })
 
 export const update = (model: Model, message: Message) =>
   Message.match<UpdateReturn>(message, {
@@ -248,7 +291,7 @@ export const update = (model: Model, message: Message) =>
         ),
         {
           onNone: () => ({ model }),
-          onSome: ({ status }) =>
+          onSome: ({ status, song: nowPlayingSong }) =>
             PlayerEvent.match<UpdateReturn>(event, {
               Ready: () => ({
                 model,
@@ -269,10 +312,36 @@ export const update = (model: Model, message: Message) =>
                   allSongs(model),
                   reason,
                 )
-                return {
-                  model: modifyFields(model, { setlist: () => setlist }),
-                  commands: [SaveSetlist({ json: toPersistedJson(setlist) })],
-                }
+                const saveSetlist = SaveSetlist({
+                  json: toPersistedJson(setlist),
+                })
+                const maybeSkippedTo = Option.filter(
+                  setlist.maybeNowPlaying,
+                  after => after.playId !== playId,
+                )
+                return Option.match(maybeSkippedTo, {
+                  onNone: () => ({
+                    model: modifyFields(model, { setlist: () => setlist }),
+                    commands: [saveSetlist],
+                  }),
+                  onSome: ({ playId: dismissId }) => ({
+                    model: modifyFields(model, {
+                      setlist: () => setlist,
+                      maybeSkipToast: maybeToast =>
+                        Option.some(
+                          addSkip(
+                            maybeToast,
+                            nowPlayingSong.song_title,
+                            dismissId,
+                          ),
+                        ),
+                    }),
+                    commands: [
+                      saveSetlist,
+                      WaitBeforeDismissToast({ dismissId }),
+                    ],
+                  }),
+                })
               },
               PlayerFailed: ({ reason }) =>
                 recordFromPlayer(model, failLoad(model.setlist, reason)),
@@ -283,6 +352,17 @@ export const update = (model: Model, message: Message) =>
     CompletedLoadSavedSetlist: ({ maybeJson }) => ({
       model: modifyFields(model, {
         setlist: setlist => restoreSaved(setlist, maybeJson),
+      }),
+    }),
+
+    ClickedDismissToast: () => ({
+      model: modifyFields(model, { maybeSkipToast: () => Option.none() }),
+    }),
+
+    CompletedWaitBeforeDismissToast: ({ dismissId }) => ({
+      model: modifyFields(model, {
+        maybeSkipToast: maybeToast =>
+          Option.filter(maybeToast, toast => toast.dismissId !== dismissId),
       }),
     }),
 

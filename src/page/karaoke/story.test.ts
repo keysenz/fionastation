@@ -11,6 +11,7 @@ import {
   Message,
   type Model,
   SaveSetlist,
+  WaitBeforeDismissToast,
   entered,
   init,
   update,
@@ -29,6 +30,19 @@ const makeSong = (id: string, video = `video-${id}`): PlayableSong => ({
 const [a, b] = [makeSong('a'), makeSong('b')]
 const a2 = makeSong('a2', a.video_url)
 const saved = Command.resolve(SaveSetlist, Message.CompletedSaveSetlist())
+
+const failVideo = (playId: number) =>
+  Message.ReceivedPlayerEvent({
+    playId,
+    event: PlayerEvent.VideoFailed({ reason: 'gone' }),
+  })
+const waited = (dismissId: number) =>
+  Command.resolve(
+    WaitBeforeDismissToast,
+    Message.CompletedWaitBeforeDismissToast({ dismissId }),
+  )
+const toastOf = (current: Model) =>
+  Option.getOrUndefined(current.maybeSkipToast)
 
 const statusOf = (current: Model) =>
   Option.map(current.setlist.maybeNowPlaying, ({ status }) => status)
@@ -117,6 +131,7 @@ test('an unavailable video moves on to the next song of another video', () => {
       }),
     ),
     saved,
+    waited(99),
     model(current => {
       expect(currentIdOf(current)).toEqual(Option.some('b'))
       expect(statusOf(current)).toEqual(Option.some('Playing'))
@@ -210,4 +225,121 @@ test('a queue saved by the Next site still loads', () => {
 test('corrupt saved data changes nothing', () => {
   const current = restoreSaved(emptySetlist, Option.some('not json'))
   expect(current).toEqual(emptySetlist)
+})
+
+const c = makeSong('c')
+
+test('a skipped video shows a toast naming the song and starts the dismiss timer', () => {
+  story(
+    update,
+    given(init()),
+    message(Message.SucceededFetchSongs({ songs: [a, b] })),
+    message(Message.ClickedSong({ song: a })),
+    saved,
+    message(failVideo(1)),
+    Command.resolveAll(
+      [SaveSetlist, Message.CompletedSaveSetlist()],
+      [
+        WaitBeforeDismissToast,
+        Message.CompletedWaitBeforeDismissToast({ dismissId: 99 }),
+      ],
+    ),
+    model(current => {
+      expect(toastOf(current)).toEqual({
+        firstSkippedTitle: 'Song a',
+        skippedCount: 1,
+        dismissId: 2,
+      })
+    }),
+  )
+})
+
+test('a second consecutive skip keeps the first title and counts two', () => {
+  story(
+    update,
+    given(init()),
+    message(Message.SucceededFetchSongs({ songs: [a, b, c] })),
+    message(Message.ClickedSong({ song: a })),
+    saved,
+    message(failVideo(1)),
+    saved,
+    waited(99),
+    message(failVideo(2)),
+    saved,
+    waited(99),
+    model(current => {
+      expect(toastOf(current)).toEqual({
+        firstSkippedTitle: 'Song a',
+        skippedCount: 2,
+        dismissId: 3,
+      })
+    }),
+  )
+})
+
+test('a stale timer leaves a newer toast, and the matching timer clears it', () => {
+  story(
+    update,
+    given(init()),
+    message(Message.SucceededFetchSongs({ songs: [a, b, c] })),
+    message(Message.ClickedSong({ song: a })),
+    saved,
+    message(failVideo(1)),
+    saved,
+    waited(99),
+    message(failVideo(2)),
+    saved,
+    waited(99),
+    message(Message.CompletedWaitBeforeDismissToast({ dismissId: 2 })),
+    model(current => {
+      expect(toastOf(current)?.dismissId).toBe(3)
+    }),
+    message(Message.CompletedWaitBeforeDismissToast({ dismissId: 3 })),
+    model(current => {
+      expect(toastOf(current)).toBeUndefined()
+    }),
+  )
+})
+
+test('clicking dismiss clears the toast at once', () => {
+  story(
+    update,
+    given(init()),
+    message(Message.SucceededFetchSongs({ songs: [a, b] })),
+    message(Message.ClickedSong({ song: a })),
+    saved,
+    message(failVideo(1)),
+    saved,
+    waited(99),
+    message(Message.ClickedDismissToast()),
+    model(current => {
+      expect(toastOf(current)).toBeUndefined()
+    }),
+  )
+})
+
+test('an unavailable last video and a player that cannot load show no toast', () => {
+  story(
+    update,
+    given(init()),
+    message(Message.SucceededFetchSongs({ songs: [a, b] })),
+    message(Message.ClickedSong({ song: b })),
+    saved,
+    message(failVideo(1)),
+    saved,
+    model(current => {
+      expect(toastOf(current)).toBeUndefined()
+    }),
+    message(Message.ClickedSong({ song: a })),
+    saved,
+    message(
+      Message.ReceivedPlayerEvent({
+        playId: 2,
+        event: PlayerEvent.PlayerFailed({ reason: 'blocked' }),
+      }),
+    ),
+    model(current => {
+      expect(toastOf(current)).toBeUndefined()
+    }),
+  )
 })

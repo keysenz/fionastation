@@ -244,6 +244,20 @@ const journeys = {
     await songRow(page).first().waitFor();
     await songRow(page).nth(goneIndex).click();
     const bar = page.locator('.fixed.bottom-0');
+    const toast = page.getByRole('status');
+    await step('unavailable', 'a toast names the skipped song and says it is not available', async () => {
+      await toast.getByText(gone.song_title, { exact: false }).waitFor({ timeout: 60000 });
+      const text = await toast.innerText();
+      if (!/isn't available|aren't available/.test(text)) throw new Error(`unexpected toast text: ${text}`);
+      await page.screenshot({ path: join(out, 'karaoke-skip-toast.png') });
+    });
+    await step('unavailable', 'the toast fits a 375px phone with a 16px gutter', async () => {
+      await page.setViewportSize({ width: 375, height: 667 });
+      const box = await toast.boundingBox();
+      if (!box || box.x < 16 - 1 || box.x + box.width > 375 - 16 + 1) throw new Error(`toast box ${JSON.stringify(box)}`);
+      await page.setViewportSize({ width: 1280, height: 800 });
+    });
+    await step('unavailable', 'the toast disappears on its own', () => toast.waitFor({ state: 'detached', timeout: 15000 }));
     await step('unavailable', 'a private video skips on to the first later song of a public video', async () => {
       await bar.getByRole('heading', { name: target.song_title }).waitFor({ timeout: 60000 });
       await page.waitForFunction((url) => document.querySelector('iframe[src*="youtube"]')?.src.includes(url), target.video_url, { timeout: 60000 });

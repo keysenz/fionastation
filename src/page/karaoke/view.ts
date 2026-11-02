@@ -7,7 +7,13 @@ import { type PlayableSong, timestampToSeconds } from '../../domain.ts'
 import { makeFuzzySearch } from '../../fuzzySearch'
 import { homeRouter } from '../../route'
 import { thumbnailUrl } from '../../youtube'
-import { Message, type Model, MountPlayer, allSongs } from './karaoke'
+import {
+  Message,
+  type Model,
+  MountPlayer,
+  type SkipToast,
+  allSongs,
+} from './karaoke'
 import type { NowPlaying } from './setlist.ts'
 
 const visibleSongs = makeFuzzySearch<PlayableSong>(['song_title', 'title_text'])
@@ -726,6 +732,45 @@ const playerView = (
   )
 }
 
+const skipToastMessage = ({
+  firstSkippedTitle,
+  skippedCount,
+}: SkipToast): string =>
+  skippedCount === 1
+    ? `"${firstSkippedTitle}" isn't available on YouTube, so it was skipped.`
+    : `"${firstSkippedTitle}" and ${skippedCount - 1} more aren't available on YouTube, so they were skipped.`
+
+const skipToastView = (toast: SkipToast, h: HtmlBuilder<Message>): Html =>
+  h.div(
+    [
+      h.Role('status'),
+      h.AriaLive('polite'),
+      h.Class(
+        'fixed bottom-24 left-1/2 -translate-x-1/2 z-[60] w-[calc(100vw-2rem)] max-w-md flex items-start gap-3 bg-black/80 backdrop-blur-xl border border-white/10 text-white rounded-xl shadow-2xl p-3',
+      ),
+    ],
+    [
+      h.i([
+        h.Class('fas fa-exclamation-triangle text-amber-400 mt-0.5'),
+        h.AriaHidden(true),
+      ]),
+      h.p([h.Class('flex-1 min-w-0 text-sm break-words')], [
+        skipToastMessage(toast),
+      ]),
+      h.button(
+        [
+          h.Type('button'),
+          h.AriaLabel('Dismiss'),
+          h.OnClick(Message.ClickedDismissToast()),
+          h.Class(
+            'shrink-0 text-gray-400 hover:text-white transition-colors',
+          ),
+        ],
+        [h.i([h.Class('fas fa-times')])],
+      ),
+    ],
+  )
+
 export const view = Submodel.defineView<Model, Message>((model, h): Html =>
   h.div(
     [
@@ -758,6 +803,10 @@ export const view = Submodel.defineView<Model, Message>((model, h): Html =>
       Option.match(model.setlist.maybeNowPlaying, {
         onNone: () => h.empty,
         onSome: nowPlaying => playerView(nowPlaying, model, h),
+      }),
+      Option.match(model.maybeSkipToast, {
+        onNone: () => h.empty,
+        onSome: toast => skipToastView(toast, h),
       }),
     ],
   ),
