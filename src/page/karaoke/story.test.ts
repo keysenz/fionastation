@@ -952,3 +952,51 @@ test('closing an already closed panel issues no focus Command', () => {
     }),
   )
 })
+
+test('removing a queued song drops that one and saves', () => {
+  story(
+    update,
+    given(init()),
+    ...withQueue,
+    message(Message.ClickedRemoveFromQueue({ index: 1 })),
+    saved,
+    model(current => {
+      expect(queueOf(current)).toEqual(['a', 'c'])
+    }),
+  )
+})
+
+test('playing a queued song starts it, takes it out of the queue and moves the current song to history', () => {
+  story(
+    update,
+    given(init()),
+    ...withQueue,
+    message(Message.ClickedSong({ song: a2 })),
+    saved,
+    message(Message.ClickedQueuedSong({ index: 2 })),
+    saved,
+    model(current => {
+      expect(queueOf(current)).toEqual(['a', 'b'])
+      expect(
+        Option.map(current.setlist.maybeNowPlaying, ({ song }) => song.id),
+      ).toEqual(Option.some('c'))
+      expect(current.setlist.history.map(song => song.id)).toEqual(['a2'])
+    }),
+  )
+})
+
+test('removing or playing a queue slot that does not exist changes nothing and saves nothing', () => {
+  story(
+    update,
+    given(init()),
+    ...withQueue,
+    message(Message.ClickedRemoveFromQueue({ index: 3 })),
+    message(Message.ClickedRemoveFromQueue({ index: -1 })),
+    message(Message.ClickedQueuedSong({ index: 3 })),
+    Command.expectNone(),
+    model(current => {
+      expect(queueOf(current)).toEqual(['a', 'b', 'c'])
+      expect(current.setlist.maybeNowPlaying).toEqual(Option.none())
+    }),
+  )
+})

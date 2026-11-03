@@ -43,9 +43,11 @@ import {
   planAdvance,
   planSkip,
   play,
+  playFromQueue,
   playNext,
   playPicked,
   playPrevious,
+  removeFromQueue,
   restoreSaved,
   setStatus,
   toPersistedJson,
@@ -112,6 +114,8 @@ export const Message = defineMessageUnion({
   ClickedBackToVideos: {},
   ClickedSong: { song: PlayableSong },
   ClickedAddToQueue: { song: PlayableSong },
+  ClickedQueuedSong: { index: Schema.Number },
+  ClickedRemoveFromQueue: { index: Schema.Number },
   ClickedPlayPause: {},
   ClickedNext: {},
   ClickedPrevious: {},
@@ -541,6 +545,18 @@ export const update = (model: Model, message: Message) =>
 
     ClickedAddToQueue: ({ song }) =>
       changeSetlist(model, enqueue(model.setlist, song)),
+
+    ClickedQueuedSong: ({ index }) => {
+      const played = playFromQueue(model.setlist, index)
+      return played === model.setlist ? { model } : changeSetlist(model, played)
+    },
+
+    ClickedRemoveFromQueue: ({ index }) => {
+      const removed = removeFromQueue(model.setlist, index)
+      return removed === model.setlist
+        ? { model }
+        : changeSetlist(model, removed)
+    },
 
     StartedQueueDrag: ({ index }) => ({
       model: modifyFields(model, {

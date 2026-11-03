@@ -97,6 +97,21 @@ export const moveInQueue = (
   })
 }
 
+export const removeFromQueue = (setlist: Setlist, index: number): Setlist =>
+  Number.isInteger(index) && index >= 0 && index < setlist.queue.length
+    ? modifyFields(setlist, {
+        queue: queue => queue.filter((_, position) => position !== index),
+      })
+    : setlist
+
+export const playFromQueue = (setlist: Setlist, index: number): Setlist => {
+  const maybeSong = Array.get(setlist.queue, index)
+  return Option.match(maybeSong, {
+    onNone: () => setlist,
+    onSome: song => play(removeFromQueue(setlist, index), song),
+  })
+}
+
 const modifyNowPlaying = (
   setlist: Setlist,
   change: (nowPlaying: NowPlaying) => NowPlaying,
