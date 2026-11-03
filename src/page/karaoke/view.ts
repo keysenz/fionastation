@@ -20,7 +20,7 @@ import {
   allSongs,
   queueHandleId,
 } from './karaoke'
-import type { NowPlaying } from './setlist.ts'
+import type { NowPlaying, Repeat } from './setlist.ts'
 import {
   type VideoGroup,
   groupByVideo,
@@ -1067,6 +1067,38 @@ const autoplaySwitchView = (
     ],
   )
 
+const repeatButtonView = (repeat: Repeat, h: HtmlBuilder<Message>): Html =>
+  h.button(
+    [
+      h.Type('button'),
+      h.AriaLabel(`Repeat: ${repeat}`),
+      h.Title(`Repeat: ${repeat}. Press to change.`),
+      h.OnClick(Message.ClickedCycleRepeat()),
+      h.Class(
+        twMerge(
+          'relative flex items-center justify-center min-h-10 min-w-10 shrink-0 rounded-full transition active:scale-95',
+          repeat === 'Off'
+            ? 'text-gray-300 hover:text-white'
+            : 'text-sky-300 bg-sky-500/20 hover:text-sky-200',
+        ),
+      ),
+    ],
+    [
+      h.i([h.Class('fas fa-repeat drop-shadow-md'), h.AriaHidden(true)]),
+      repeat === 'One'
+        ? h.span(
+            [
+              h.Class(
+                'absolute top-1 right-1 text-[9px] font-bold leading-none',
+              ),
+              h.AriaHidden(true),
+            ],
+            ['1'],
+          )
+        : h.empty,
+    ],
+  )
+
 const playerBarView = (
   nowPlaying: NowPlaying,
   model: Model,
@@ -1225,6 +1257,7 @@ const playerBarView = (
       h.div(
         [h.Class('flex items-center justify-end space-x-2 sm:w-1/3')],
         [
+          repeatButtonView(model.repeat, h),
           autoplaySwitchView(model.isAutoplay, h),
           h.button(
             [

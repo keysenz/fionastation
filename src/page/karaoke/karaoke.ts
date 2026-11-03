@@ -32,6 +32,7 @@ import {
   Advance,
   type Continuation,
   PickCause,
+  Repeat,
   Setlist,
   applyAdvance,
   applySkip,
@@ -40,6 +41,7 @@ import {
   enqueueAll,
   failLoad,
   markPlayerReady,
+  nextRepeat,
   moveInQueue,
   planAdvance,
   planSkip,
@@ -57,6 +59,7 @@ import {
 
 const STORAGE_KEY = 'karaoke-storage'
 const AUTOPLAY_KEY = 'karaoke-autoplay'
+const REPEAT_KEY = 'karaoke-repeat'
 export const STREAM_GONE = 'This stream is gone'
 const PLAYER_HOST_ID = 'karaoke'
 export const SONG_LIST_ID = 'karaoke-song-list'
@@ -96,6 +99,7 @@ export const Model = Schema.Struct({
   maybeSkipToast: Schema.Option(SkipToast),
   goneVideoIds: Schema.Array(Schema.String),
   isAutoplay: Schema.Boolean,
+  repeat: Repeat,
   maybeSelectedVideoId: Schema.Option(Schema.String),
   maybeQueueDrag: Schema.Option(QueueDrag),
 })
@@ -128,6 +132,7 @@ export const Message = defineMessageUnion({
   ClickedCloseInfo: {},
   ClickedDismissToast: {},
   ClickedToggleAutoplay: {},
+  ClickedCycleRepeat: {},
   StartedQueueDrag: { index: Schema.Number },
   DraggedOverQueueSlot: { index: Schema.Number },
   DroppedQueueSong: { index: Schema.Number },
@@ -142,6 +147,8 @@ export const Message = defineMessageUnion({
   CompletedSaveSetlist: {},
   CompletedLoadAutoplay: { maybeValue: Schema.Option(Schema.String) },
   CompletedSaveAutoplay: {},
+  CompletedLoadRepeat: { maybeValue: Schema.Option(Schema.String) },
+  CompletedSaveRepeat: {},
   CompletedScrollListToTop: {},
   CompletedScrollSetlistToTop: {},
   CompletedFocusQueueHandle: {},
@@ -263,6 +270,27 @@ export const SaveAutoplay = Command.define('SaveAutoplay', {
       try: () => window.localStorage.setItem(AUTOPLAY_KEY, String(isAutoplay)),
       catch: () => 'storage is blocked or full',
     }).pipe(Effect.ignore, Effect.as(Message.CompletedSaveAutoplay())),
+})
+
+export const LoadRepeat = Command.define('LoadRepeat', {
+  messages: [Message.CompletedLoadRepeat],
+  execute: Effect.try({
+    try: () => Option.fromNullishOr(window.localStorage.getItem(REPEAT_KEY)),
+    catch: () => 'storage is blocked',
+  }).pipe(
+    Effect.orElseSucceed(() => Option.none<string>()),
+    Effect.map(maybeValue => Message.CompletedLoadRepeat({ maybeValue })),
+  ),
+})
+
+export const SaveRepeat = Command.define('SaveRepeat', {
+  args: { repeat: Repeat },
+  messages: [Message.CompletedSaveRepeat],
+  execute: ({ repeat }) =>
+    Effect.try({
+      try: () => window.localStorage.setItem(REPEAT_KEY, repeat),
+      catch: () => 'storage is blocked or full',
+    }).pipe(Effect.ignore, Effect.as(Message.CompletedSaveRepeat())),
 })
 
 export const PickRandomVideo = Command.define('PickRandomVideo', {
@@ -397,6 +425,7 @@ export const init = (): Model => ({
   maybeSkipToast: Option.none(),
   goneVideoIds: [],
   isAutoplay: true,
+  repeat: 'Off',
   maybeSelectedVideoId: Option.none(),
   maybeQueueDrag: Option.none(),
 })
@@ -420,7 +449,12 @@ export const entered = (model: Model): UpdateReturn => {
   const fetched = fetchIfNeeded(model)
   return {
     model: fetched.model,
-    commands: [LoadSavedSetlist(), LoadAutoplay(), ...(fetched.commands ?? [])],
+    commands: [
+      LoadSavedSetlist(),
+      LoadAutoplay(),
+      LoadRepeat(),
+      ...(fetched.commands ?? []),
+    ],
   }
 }
 
@@ -435,12 +469,20 @@ const continuationOf = (model: Model): Continuation => {
     archive: allSongs(model),
     isGone: song => goneIds.has(song.video_url),
     isAutoplay: model.isAutoplay,
+    repeat: model.repeat,
   }
 }
 
 /** Only a saved "false" turns autoplay off, so missing or corrupt data keeps it on. */
 const parseAutoplay = (maybeValue: Option.Option<string>): boolean =>
   !Option.contains(maybeValue, 'false')
+
+/** Anything but a saved mode name means Off, so corrupt data repeats nothing. */
+const parseRepeat = (maybeValue: Option.Option<string>): Repeat =>
+  Option.getOrElse(
+    Option.flatMap(maybeValue, Schema.decodeUnknownOption(Repeat)),
+    () => 'Off',
+  )
 
 /** What the visitor asks for goes through here, which saves it and tells the
  *  player. A player's own reports must not, because telling a player what it
@@ -624,7 +666,8 @@ export const update = (model: Model, message: Message) =>
     },
 
     ClickedPlayPause: () => changeSetlist(model, togglePlaying(model.setlist)),
-    ClickedNext: () => changeSetlist(model, playNext(model.setlist)),
+    ClickedNext: () =>
+      changeSetlist(model, playNext(model.setlist, model.repeat)),
     ClickedPrevious: () => changeSetlist(model, playPrevious(model.setlist)),
 
     ClickedToggleExpanded: () => ({
@@ -695,7 +738,10 @@ export const update = (model: Model, message: Message) =>
                     }),
                   },
                   () =>
-                    changeSetlist(model, applyAdvance(model.setlist, advance)),
+                    changeSetlist(
+                      model,
+                      applyAdvance(model.setlist, advance, model.repeat),
+                    ),
                 )
               },
               VideoFailed: () => {
@@ -811,6 +857,15 @@ export const update = (model: Model, message: Message) =>
       }),
     }),
 
+    ClickedCycleRepeat: () => ({
+      model: modifyFields(model, { repeat: nextRepeat }),
+      commands: [SaveRepeat({ repeat: nextRepeat(model.repeat) })],
+    }),
+
+    CompletedLoadRepeat: ({ maybeValue }) => ({
+      model: modifyFields(model, { repeat: () => parseRepeat(maybeValue) }),
+    }),
+
     ClickedDismissToast: () => ({
       model: modifyFields(model, { maybeSkipToast: () => Option.none() }),
     }),
@@ -825,6 +880,7 @@ export const update = (model: Model, message: Message) =>
     CompletedApplyPlayback: () => ({ model }),
     CompletedSaveSetlist: () => ({ model }),
     CompletedSaveAutoplay: () => ({ model }),
+    CompletedSaveRepeat: () => ({ model }),
     CompletedScrollListToTop: () => ({ model }),
     CompletedScrollSetlistToTop: () => ({ model }),
     CompletedFocusQueueHandle: () => ({ model }),

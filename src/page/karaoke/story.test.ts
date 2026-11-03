@@ -11,12 +11,14 @@ import {
   FocusInfoPanel,
   FocusQueueHandle,
   LoadAutoplay,
+  LoadRepeat,
   LoadSavedSetlist,
   Message,
   type Model,
   PickRandomVideo,
   STREAM_GONE,
   SaveAutoplay,
+  SaveRepeat,
   SaveSetlist,
   ScrollListToTop,
   ScrollSetlistToTop,
@@ -227,11 +229,13 @@ test('opening the page rereads saved data and fetches, and does not fetch twice'
   expect(opened.commands?.map(({ name }) => name)).toEqual([
     LoadSavedSetlist.name,
     LoadAutoplay.name,
+    LoadRepeat.name,
     FetchSongs.name,
   ])
   expect(entered(opened.model).commands?.map(({ name }) => name)).toEqual([
     LoadSavedSetlist.name,
     LoadAutoplay.name,
+    LoadRepeat.name,
   ])
 })
 
@@ -1017,6 +1021,146 @@ test('queueing the history appends it oldest first and saves, and an empty histo
     saved,
     model(current => {
       expect(queueOf(current)).toEqual(['a', 'b'])
+    }),
+  )
+})
+
+const savedRepeat = Command.resolve(SaveRepeat, Message.CompletedSaveRepeat())
+const endOf = (playId: number) =>
+  Message.ReceivedPlayerEvent({ playId, event: PlayerEvent.Ended() })
+const playIdOf = (current: Model) =>
+  Option.map(current.setlist.maybeNowPlaying, ({ playId }) => playId)
+const withRepeat = (steps: number) => [
+  ...Array.from({ length: steps }, () => [
+    message(Message.ClickedCycleRepeat()),
+    savedRepeat,
+  ]).flat(),
+]
+
+test('repeat starts Off, cycles Off, All, One, Off and saves each choice', () => {
+  expect(init().repeat).toBe('Off')
+  story(
+    update,
+    given(init()),
+    message(Message.ClickedCycleRepeat()),
+    savedRepeat,
+    model(current => expect(current.repeat).toBe('All')),
+    message(Message.ClickedCycleRepeat()),
+    savedRepeat,
+    model(current => expect(current.repeat).toBe('One')),
+    message(Message.ClickedCycleRepeat()),
+    savedRepeat,
+    model(current => expect(current.repeat).toBe('Off')),
+  )
+})
+
+test('a saved repeat mode loads, and missing or corrupt data means Off', () => {
+  const loaded = (maybeValue: Option.Option<string>) =>
+    update(init(), Message.CompletedLoadRepeat({ maybeValue })).model.repeat
+  expect(loaded(Option.some('All'))).toBe('All')
+  expect(loaded(Option.some('One'))).toBe('One')
+  expect(loaded(Option.some('garbage'))).toBe('Off')
+  expect(loaded(Option.none())).toBe('Off')
+})
+
+test('repeat One restarts the ended song with a new player, ignoring the queue and autoplay', () => {
+  story(
+    update,
+    given(init()),
+    message(
+      Message.SucceededFetchSongs({ songs: [a, b, c], goneVideoIds: [] }),
+    ),
+    ...autoplayOff,
+    ...withRepeat(2),
+    message(Message.ClickedSong({ song: a })),
+    saved,
+    message(Message.ClickedAddToQueue({ song: c })),
+    saved,
+    message(endOf(1)),
+    saved,
+    model(current => {
+      expect(currentIdOf(current)).toEqual(Option.some('a'))
+      expect(playIdOf(current)).toEqual(Option.some(2))
+      expect(queueOf(current)).toEqual(['c'])
+      expect(current.setlist.history).toEqual([])
+    }),
+  )
+})
+
+test('repeat All sends the ended song to the end of the queue and plays the head', () => {
+  story(
+    update,
+    given(init()),
+    message(
+      Message.SucceededFetchSongs({ songs: [a, b, c], goneVideoIds: [] }),
+    ),
+    ...withRepeat(1),
+    message(Message.ClickedSong({ song: a })),
+    saved,
+    message(Message.ClickedAddToQueue({ song: b })),
+    saved,
+    message(Message.ClickedAddToQueue({ song: c })),
+    saved,
+    message(endOf(1)),
+    saved,
+    model(current => {
+      expect(currentIdOf(current)).toEqual(Option.some('b'))
+      expect(queueOf(current)).toEqual(['c', 'a'])
+    }),
+  )
+})
+
+test('repeat All with an empty queue replays the ended song, even with autoplay off', () => {
+  story(
+    update,
+    given(init()),
+    message(Message.SucceededFetchSongs({ songs: [a, b], goneVideoIds: [] })),
+    ...autoplayOff,
+    ...withRepeat(1),
+    message(Message.ClickedSong({ song: a })),
+    saved,
+    message(endOf(1)),
+    saved,
+    model(current => {
+      expect(currentIdOf(current)).toEqual(Option.some('a'))
+      expect(playIdOf(current)).toEqual(Option.some(2))
+      expect(queueOf(current)).toEqual([])
+    }),
+  )
+})
+
+test('Next under repeat All also sends the current song to the end of the queue', () => {
+  story(
+    update,
+    given(init()),
+    ...withRepeat(1),
+    message(Message.ClickedSong({ song: a })),
+    saved,
+    message(Message.ClickedAddToQueue({ song: b })),
+    saved,
+    message(Message.ClickedNext()),
+    saved,
+    model(current => {
+      expect(currentIdOf(current)).toEqual(Option.some('b'))
+      expect(queueOf(current)).toEqual(['a'])
+    }),
+  )
+})
+
+test('Next under repeat One still moves to the queue head and does not requeue', () => {
+  story(
+    update,
+    given(init()),
+    ...withRepeat(2),
+    message(Message.ClickedSong({ song: a })),
+    saved,
+    message(Message.ClickedAddToQueue({ song: b })),
+    saved,
+    message(Message.ClickedNext()),
+    saved,
+    model(current => {
+      expect(currentIdOf(current)).toEqual(Option.some('b'))
+      expect(queueOf(current)).toEqual([])
     }),
   )
 })
