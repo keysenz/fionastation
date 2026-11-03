@@ -13,6 +13,7 @@ export const KaraokeVideo = Schema.Struct({
   video_title: Schema.String,
   video_url: Schema.String,
   membership: Schema.Boolean,
+  is_gone: Schema.Boolean,
   karaoke_song: Schema.Array(KaraokeSong),
 })
 export type KaraokeVideo = typeof KaraokeVideo.Type
@@ -44,6 +45,11 @@ export const toPlayableSongs = (
       membership: video.membership,
     })),
   )
+
+export const goneVideoIdsOf = (
+  videos: ReadonlyArray<KaraokeVideo>,
+): ReadonlyArray<string> =>
+  videos.filter(video => video.is_gone).map(video => video.video_url)
 
 export const timestampToSeconds = (timestamp: string): number => {
   const seconds = timestamp

@@ -24,7 +24,7 @@ function db(): DatabaseSync {
   return connection
 }
 
-export function listKaraokeVideos(): KaraokeVideo[] {
+export function listKaraokeVideos(): Omit<KaraokeVideo, 'is_gone'>[] {
   const videos = db()
     .prepare(
       `SELECT id, video_title, video_url, membership

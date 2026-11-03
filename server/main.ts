@@ -6,6 +6,7 @@ import { extname, join, resolve, sep } from 'node:path'
 import { gzipSync } from 'node:zlib'
 
 import { listCovers, listKaraokeVideos } from './db.ts'
+import { isGone, startRefreshing } from './videoStatus.ts'
 
 const ROOT = resolve(import.meta.dirname, '../dist')
 const PORT = Number(process.env.PORT ?? 3000)
@@ -14,7 +15,11 @@ const PORT = Number(process.env.PORT ?? 3000)
 const PAGE_PATHS = new Set(['/', '/about', '/karaoke', '/cover', '/credits'])
 
 const API_ROUTES: Record<string, () => unknown> = {
-  '/api/get-karaoke': listKaraokeVideos,
+  '/api/get-karaoke': () =>
+    listKaraokeVideos().map(video => ({
+      ...video,
+      is_gone: isGone(video.video_url),
+    })),
   '/api/get-cover': listCovers,
 }
 
@@ -186,6 +191,8 @@ const server = createServer((req, res) => {
 server.listen(PORT, process.env.HOSTNAME ?? '0.0.0.0', () => {
   console.log(`listening on ${PORT}`)
 })
+
+startRefreshing(() => listKaraokeVideos().map(video => video.video_url))
 
 // NOTE: Node runs as PID 1 in the container, where a signal with no handler is ignored.
 for (const signal of ['SIGTERM', 'SIGINT']) {

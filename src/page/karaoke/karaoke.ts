@@ -1,28 +1,50 @@
-import { Duration, Effect, Option, Result, Schema, Stream } from 'effect'
+import {
+  Array,
+  Duration,
+  Effect,
+  Option,
+  Random,
+  Result,
+  Schema,
+  Stream,
+} from 'effect'
 import { AsyncData, Command, Mount, type Update } from 'foldkit'
 import { defineMessageUnion } from 'foldkit/message'
 import { modifyFields } from 'foldkit/struct'
 
 import { fetchJson } from '../../api'
-import { KaraokeVideo, PlayableSong, toPlayableSongs } from '../../domain.ts'
+import {
+  KaraokeVideo,
+  PlayableSong,
+  goneVideoIdsOf,
+  toPlayableSongs,
+} from '../../domain.ts'
 import { PlayerEvent, playerEvents, setPlaying } from '../../youtube'
 import {
+  Advance,
+  type Continuation,
+  PickCause,
   Setlist,
-  advanceAfterEnd,
+  applyAdvance,
+  applySkip,
   emptySetlist,
   enqueue,
   failLoad,
+  planAdvance,
+  planSkip,
   play,
   playNext,
+  playPicked,
   playPrevious,
   restoreSaved,
   setStatus,
-  skipUnavailableVideo,
   toPersistedJson,
   togglePlaying,
 } from './setlist.ts'
 
 const STORAGE_KEY = 'karaoke-storage'
+const AUTOPLAY_KEY = 'karaoke-autoplay'
+export const STREAM_GONE = 'This stream is gone'
 const PLAYER_HOST_ID = 'karaoke'
 
 // MODEL
@@ -43,13 +65,18 @@ export const Model = Schema.Struct({
   isExpanded: Schema.Boolean,
   isQueueOpen: Schema.Boolean,
   maybeSkipToast: Schema.Option(SkipToast),
+  goneVideoIds: Schema.Array(Schema.String),
+  isAutoplay: Schema.Boolean,
 })
 export type Model = typeof Model.Type
 
 // MESSAGE
 
 export const Message = defineMessageUnion({
-  SucceededFetchSongs: { songs: Schema.Array(PlayableSong) },
+  SucceededFetchSongs: {
+    songs: Schema.Array(PlayableSong),
+    goneVideoIds: Schema.Array(Schema.String),
+  },
   FailedFetchSongs: { error: Schema.String },
   ClickedRetryFetch: {},
   UpdatedSearch: { value: Schema.String },
@@ -62,10 +89,18 @@ export const Message = defineMessageUnion({
   ClickedCollapse: {},
   ClickedQueueHandle: {},
   ClickedDismissToast: {},
+  ClickedToggleAutoplay: {},
   ReceivedPlayerEvent: { playId: Schema.Number, event: PlayerEvent },
   CompletedLoadSavedSetlist: { maybeJson: Schema.Option(Schema.String) },
   CompletedApplyPlayback: {},
   CompletedSaveSetlist: {},
+  CompletedLoadAutoplay: { maybeValue: Schema.Option(Schema.String) },
+  CompletedSaveAutoplay: {},
+  CompletedPickRandomVideo: {
+    playId: Schema.Number,
+    song: PlayableSong,
+    cause: PickCause,
+  },
   CompletedWaitBeforeDismissToast: { dismissId: Schema.Number },
 })
 export type Message = typeof Message.Type
@@ -78,7 +113,10 @@ export const FetchSongs = Command.define('FetchSongs', {
     Effect.match({
       onFailure: error => Message.FailedFetchSongs({ error }),
       onSuccess: videos =>
-        Message.SucceededFetchSongs({ songs: toPlayableSongs(videos) }),
+        Message.SucceededFetchSongs({
+          songs: toPlayableSongs(videos),
+          goneVideoIds: goneVideoIdsOf(videos),
+        }),
     }),
   ),
 })
@@ -114,19 +152,52 @@ export const SaveSetlist = Command.define('SaveSetlist', {
     }).pipe(Effect.ignore, Effect.as(Message.CompletedSaveSetlist())),
 })
 
+export const LoadAutoplay = Command.define('LoadAutoplay', {
+  messages: [Message.CompletedLoadAutoplay],
+  execute: Effect.try({
+    try: () => Option.fromNullishOr(window.localStorage.getItem(AUTOPLAY_KEY)),
+    catch: () => 'storage is blocked',
+  }).pipe(
+    Effect.orElseSucceed(() => Option.none<string>()),
+    Effect.map(maybeValue => Message.CompletedLoadAutoplay({ maybeValue })),
+  ),
+})
+
+export const SaveAutoplay = Command.define('SaveAutoplay', {
+  args: { isAutoplay: Schema.Boolean },
+  messages: [Message.CompletedSaveAutoplay],
+  execute: ({ isAutoplay }) =>
+    Effect.try({
+      try: () => window.localStorage.setItem(AUTOPLAY_KEY, String(isAutoplay)),
+      catch: () => 'storage is blocked or full',
+    }).pipe(Effect.ignore, Effect.as(Message.CompletedSaveAutoplay())),
+})
+
+export const PickRandomVideo = Command.define('PickRandomVideo', {
+  args: {
+    playId: Schema.Number,
+    candidates: Schema.NonEmptyArray(PlayableSong),
+    cause: PickCause,
+  },
+  messages: [Message.CompletedPickRandomVideo],
+  execute: ({ playId, candidates, cause }) =>
+    Random.choice(candidates).pipe(
+      Effect.map(song =>
+        Message.CompletedPickRandomVideo({ playId, song, cause }),
+      ),
+    ),
+})
+
 const TOAST_SECONDS = 6
 
-export const WaitBeforeDismissToast = Command.define(
-  'WaitBeforeDismissToast',
-  {
-    args: { dismissId: Schema.Number },
-    messages: [Message.CompletedWaitBeforeDismissToast],
-    execute: ({ dismissId }) =>
-      Effect.sleep(Duration.seconds(TOAST_SECONDS)).pipe(
-        Effect.as(Message.CompletedWaitBeforeDismissToast({ dismissId })),
-      ),
-  },
-)
+export const WaitBeforeDismissToast = Command.define('WaitBeforeDismissToast', {
+  args: { dismissId: Schema.Number },
+  messages: [Message.CompletedWaitBeforeDismissToast],
+  execute: ({ dismissId }) =>
+    Effect.sleep(Duration.seconds(TOAST_SECONDS)).pipe(
+      Effect.as(Message.CompletedWaitBeforeDismissToast({ dismissId })),
+    ),
+})
 
 export const MountPlayer = Mount.defineStream('MountPlayer', {
   args: {
@@ -159,6 +230,8 @@ export const init = (): Model => ({
   isExpanded: false,
   isQueueOpen: false,
   maybeSkipToast: Option.none(),
+  goneVideoIds: [],
+  isAutoplay: true,
 })
 
 export type UpdateReturn = Update.Return<Model, Message>
@@ -177,7 +250,7 @@ export const entered = (model: Model): UpdateReturn => {
   const fetched = fetchIfNeeded(model)
   return {
     model: fetched.model,
-    commands: [LoadSavedSetlist(), ...(fetched.commands ?? [])],
+    commands: [LoadSavedSetlist(), LoadAutoplay(), ...(fetched.commands ?? [])],
   }
 }
 
@@ -185,6 +258,19 @@ export const entered = (model: Model): UpdateReturn => {
 
 export const allSongs = (model: Model): ReadonlyArray<PlayableSong> =>
   Option.getOrElse(AsyncData.getData(model.songs), () => [])
+
+const continuationOf = (model: Model): Continuation => {
+  const goneIds = new Set(model.goneVideoIds)
+  return {
+    archive: allSongs(model),
+    isGone: song => goneIds.has(song.video_url),
+    isAutoplay: model.isAutoplay,
+  }
+}
+
+/** Only a saved "false" turns autoplay off, so missing or corrupt data keeps it on. */
+const parseAutoplay = (maybeValue: Option.Option<string>): boolean =>
+  !Option.contains(maybeValue, 'false')
 
 /** What the visitor asks for goes through here, which saves it and tells the
  *  player. A player's own reports must not, because telling a player what it
@@ -232,11 +318,22 @@ const addSkip = (
     }),
   })
 
+const withSkipToast = (
+  model: Model,
+  failedTitle: string,
+  dismissId: number,
+): Model =>
+  modifyFields(model, {
+    maybeSkipToast: maybeToast =>
+      Option.some(addSkip(maybeToast, failedTitle, dismissId)),
+  })
+
 export const update = (model: Model, message: Message) =>
   Message.match<UpdateReturn>(message, {
-    SucceededFetchSongs: ({ songs }) => ({
+    SucceededFetchSongs: ({ songs, goneVideoIds }) => ({
       model: modifyFields(model, {
         songs: current => AsyncData.settle(current, Result.succeed(songs)),
+        goneVideoIds: known => Array.dedupe([...known, ...goneVideoIds]),
       }),
     }),
 
@@ -301,47 +398,85 @@ export const update = (model: Model, message: Message) =>
                 recordFromPlayer(model, setStatus(model.setlist, 'Playing')),
               Paused: () =>
                 recordFromPlayer(model, setStatus(model.setlist, 'Paused')),
-              Ended: () =>
-                changeSetlist(
-                  model,
-                  advanceAfterEnd(model.setlist, allSongs(model)),
-                ),
-              VideoFailed: ({ reason }) => {
-                const setlist = skipUnavailableVideo(
+              Ended: () => {
+                const advance = planAdvance(
                   model.setlist,
-                  allSongs(model),
-                  reason,
+                  continuationOf(model),
                 )
-                const saveSetlist = SaveSetlist({
-                  json: toPersistedJson(setlist),
-                })
-                const maybeSkippedTo = Option.filter(
-                  setlist.maybeNowPlaying,
-                  after => after.playId !== playId,
-                )
-                return Option.match(maybeSkippedTo, {
-                  onNone: () => ({
-                    model: modifyFields(model, { setlist: () => setlist }),
-                    commands: [saveSetlist],
-                  }),
-                  onSome: ({ playId: dismissId }) => ({
-                    model: modifyFields(model, {
-                      setlist: () => setlist,
-                      maybeSkipToast: maybeToast =>
-                        Option.some(
-                          addSkip(
-                            maybeToast,
-                            nowPlayingSong.song_title,
-                            dismissId,
-                          ),
-                        ),
+                return Advance.matchOrElse(
+                  advance,
+                  {
+                    PickRandomVideo: ({ candidates }) => ({
+                      model,
+                      commands: [
+                        PickRandomVideo({
+                          playId,
+                          candidates,
+                          cause: 'Ended',
+                        }),
+                      ],
                     }),
-                    commands: [
-                      saveSetlist,
-                      WaitBeforeDismissToast({ dismissId }),
-                    ],
-                  }),
+                  },
+                  () =>
+                    changeSetlist(model, applyAdvance(model.setlist, advance)),
+                )
+              },
+              VideoFailed: () => {
+                const goneModel = modifyFields(model, {
+                  goneVideoIds: known =>
+                    Array.dedupe([...known, nowPlayingSong.video_url]),
                 })
+                const { cleaned, advance } = planSkip(
+                  goneModel.setlist,
+                  continuationOf(goneModel),
+                )
+                return Advance.matchOrElse(
+                  advance,
+                  {
+                    PickRandomVideo: ({ candidates }) => ({
+                      model: modifyFields(goneModel, {
+                        setlist: () => cleaned,
+                      }),
+                      commands: [
+                        SaveSetlist({ json: toPersistedJson(cleaned) }),
+                        PickRandomVideo({
+                          playId,
+                          candidates,
+                          cause: 'Unavailable',
+                        }),
+                      ],
+                    }),
+                  },
+                  () => {
+                    const setlist = applySkip(cleaned, advance, STREAM_GONE)
+                    const saveSetlist = SaveSetlist({
+                      json: toPersistedJson(setlist),
+                    })
+                    const maybeSkippedTo = Option.filter(
+                      setlist.maybeNowPlaying,
+                      after => after.playId !== playId,
+                    )
+                    return Option.match(maybeSkippedTo, {
+                      onNone: () => ({
+                        model: modifyFields(goneModel, {
+                          setlist: () => setlist,
+                        }),
+                        commands: [saveSetlist],
+                      }),
+                      onSome: ({ playId: dismissId }) => ({
+                        model: withSkipToast(
+                          modifyFields(goneModel, { setlist: () => setlist }),
+                          nowPlayingSong.song_title,
+                          dismissId,
+                        ),
+                        commands: [
+                          saveSetlist,
+                          WaitBeforeDismissToast({ dismissId }),
+                        ],
+                      }),
+                    })
+                  },
+                )
               },
               PlayerFailed: ({ reason }) =>
                 recordFromPlayer(model, failLoad(model.setlist, reason)),
@@ -349,9 +484,53 @@ export const update = (model: Model, message: Message) =>
         },
       ),
 
+    // NOTE: a click while the pick was pending changed the playId, and the visitor's choice wins.
+    CompletedPickRandomVideo: ({ playId, song, cause }) =>
+      Option.match(
+        Option.filter(
+          model.setlist.maybeNowPlaying,
+          nowPlaying => nowPlaying.playId === playId,
+        ),
+        {
+          onNone: () => ({ model }),
+          onSome: ({ song: previousSong }) => {
+            const setlist = playPicked(model.setlist, song, cause)
+            const saveSetlist = SaveSetlist({ json: toPersistedJson(setlist) })
+            const dismissId = setlist.playCount
+            return cause === 'Ended'
+              ? {
+                  model: modifyFields(model, { setlist: () => setlist }),
+                  commands: [saveSetlist],
+                }
+              : {
+                  model: withSkipToast(
+                    modifyFields(model, { setlist: () => setlist }),
+                    previousSong.song_title,
+                    dismissId,
+                  ),
+                  commands: [
+                    saveSetlist,
+                    WaitBeforeDismissToast({ dismissId }),
+                  ],
+                }
+          },
+        },
+      ),
+
     CompletedLoadSavedSetlist: ({ maybeJson }) => ({
       model: modifyFields(model, {
         setlist: setlist => restoreSaved(setlist, maybeJson),
+      }),
+    }),
+
+    ClickedToggleAutoplay: () => ({
+      model: modifyFields(model, { isAutoplay: isAutoplay => !isAutoplay }),
+      commands: [SaveAutoplay({ isAutoplay: !model.isAutoplay })],
+    }),
+
+    CompletedLoadAutoplay: ({ maybeValue }) => ({
+      model: modifyFields(model, {
+        isAutoplay: () => parseAutoplay(maybeValue),
       }),
     }),
 
@@ -368,4 +547,5 @@ export const update = (model: Model, message: Message) =>
 
     CompletedApplyPlayback: () => ({ model }),
     CompletedSaveSetlist: () => ({ model }),
+    CompletedSaveAutoplay: () => ({ model }),
   })

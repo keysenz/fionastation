@@ -22,7 +22,8 @@ const api = async (path, init) => {
   return { status: res.status, body: res.status === 200 ? await res.json() : null };
 };
 
-const songRow = (page) => page.locator('div.group.cursor-pointer', { has: page.locator('h4') });
+const songRow = (page) => page.locator('div.rounded-lg.p-3', { has: page.locator('h4') });
+const autoplaySwitch = (page) => page.getByRole('switch', { name: 'Autoplay' });
 const barButton = (page, icon) => page.locator(`.fixed.bottom-0 button:has(i.${icon})`);
 const playerSrc = (page) => page.locator('iframe[src*="youtube"]').first().getAttribute('src', { timeout: 30000 });
 
@@ -35,7 +36,19 @@ const step = async (feature, name, action) => {
   }
 };
 
-const songRows = (videos) => videos.flatMap((v) => v.karaoke_song.map((song) => ({ ...song, video_url: v.video_url })));
+const songRows = (videos) => videos.flatMap((v) => v.karaoke_song.map((song) => ({
+  ...song, video_url: v.video_url, title_text: v.video_title, membership: v.membership, is_gone: v.is_gone,
+})));
+
+const waitForGoneIds = async () => {
+  const deadline = Date.now() + 120000;
+  while (Date.now() < deadline) {
+    const { body: videos } = await api('/api/get-karaoke');
+    if (videos?.some((v) => v.is_gone)) return videos.filter((v) => v.is_gone).length;
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+  }
+  throw new Error('the api reported no gone video within 120s');
+};
 
 const statusCache = new Map();
 const videoStatus = async (videoUrl) => {
@@ -46,7 +59,7 @@ const videoStatus = async (videoUrl) => {
   return statusCache.get(videoUrl);
 };
 
-const isPublic = async (row) => (await videoStatus(row.video_url)) === 200;
+const isPublic = async (row) => !row.is_gone;
 
 const findRowIndex = async (rows, matches, from = 0) => {
   for (let i = from; i < rows.length; i++) {
@@ -188,8 +201,12 @@ const journeys = {
   async player(page) {
     const { body: videos } = await api('/api/get-karaoke');
     const rows = songRows(videos);
-    const start = await findRowIndex(rows.slice(0, -1), async (s, i) => (await isPublic(s)) && (await isPublic(rows[i + 1])));
+    const start = await findRowIndex(rows.slice(0, -1), async (s, i) => (await isPublic(s)) && rows[i + 1].video_url === s.video_url);
     const nextRow = rows[start + 1];
+    const lastIndex = await findRowIndex(rows, async (s, i) => (await isPublic(s)) && (i === rows.length - 1 || rows[i + 1].video_url !== s.video_url));
+    const lastRow = rows[lastIndex];
+    const otherFirsts = rows.filter((r, i) => !r.is_gone && r.video_url !== lastRow.video_url && rows.findIndex((x) => x.video_url === r.video_url) === i);
+    if (!otherFirsts.length) throw new Error('no other live video to pick');
 
     await page.goto(BASE + '/karaoke');
     await songRow(page).first().waitFor();
@@ -199,6 +216,18 @@ const journeys = {
     await playerReady(page);
     await page.evaluate(() => { window.__frame = document.querySelector('iframe[src*="youtube"]'); });
 
+    await step('player', 'the autoplay switch shows on by default', async () => {
+      await autoplaySwitch(page).waitFor();
+      if ((await autoplaySwitch(page).getAttribute('aria-checked')) !== 'true') throw new Error('the switch is not on');
+    });
+    await step('player', 'the autoplay switch fits a 375px bar with a 40px touch target', async () => {
+      await page.setViewportSize({ width: 375, height: 667 });
+      const box = await autoplaySwitch(page).boundingBox();
+      const expand = await barButton(page, 'fa-expand').boundingBox();
+      await page.setViewportSize({ width: 1280, height: 800 });
+      if (!box || box.height < 40 || box.x < 0 || box.x + box.width > 375) throw new Error(`switch box ${JSON.stringify(box)}`);
+      if (!expand || box.x + box.width > expand.x) throw new Error('the switch overlaps the expand button');
+    });
     await step('player', 'expand keeps the same video element', async () => {
       await barButton(page, 'fa-expand').click();
       await page.waitForFunction(() => window.__frame === document.querySelector('iframe[src*="youtube"]'));
@@ -220,7 +249,7 @@ const journeys = {
       await page.evaluate(() => { const f = document.querySelector('iframe[src*="youtube"]'); window.YT.get(f.id).pauseVideo(); });
       await bar.locator('i.fa-play').waitFor({ timeout: 15000 });
     });
-    await step('player', 'video end moves on to the next song in the archive', async () => {
+    await step('player', 'video end moves on to the next song of the same video', async () => {
       await playVideo(page);
       await seekNearEnd(page);
       await page.waitForFunction(() => { const f = document.querySelector('iframe[src*="youtube"]'); return f && f !== window.__frame; }, null, { timeout: 40000 });
@@ -229,26 +258,107 @@ const journeys = {
       if (!(await playerSrc(page)).includes(`start=${seconds}`)) throw new Error(`player is not at start=${seconds}`);
     });
     check('player', 'only one player exists after moving on', (await page.locator('iframe[src*="youtube"]').count()) === 1);
+
+    await step('player', 'the end of the last song of a video plays the first song of another live video', async () => {
+      await songRow(page).nth(lastIndex).click();
+      await bar.getByRole('heading', { name: lastRow.song_title }).waitFor();
+      await playerReady(page);
+      await page.evaluate(() => { window.__frame = document.querySelector('iframe[src*="youtube"]'); });
+      await playVideo(page);
+      await playerState(page, 1);
+      await seekNearEnd(page);
+      await page.waitForFunction(() => { const f = document.querySelector('iframe[src*="youtube"]'); return f && f !== window.__frame; }, null, { timeout: 40000 });
+      const src = await playerSrc(page);
+      const landed = otherFirsts.find((r) => src.includes(r.video_url));
+      if (!landed) throw new Error(`player is on a video that is not another live one: ${src}`);
+      const seconds = landed.timestamp.split(':').reduce((t, part) => t * 60 + Number(part), 0);
+      if (!src.includes(`start=${seconds}`)) throw new Error(`player is not at the first song, start=${seconds}`);
+      await bar.getByRole('heading', { name: landed.song_title }).waitFor();
+    });
+    await songRow(page).nth(start + 1).click();
+    await bar.getByRole('heading', { name: nextRow.song_title }).waitFor();
+
+    await step('player', 'with autoplay off the video end keeps the same song, paused, in the same player', async () => {
+      await page.evaluate(() => { window.__frame = document.querySelector('iframe[src*="youtube"]'); });
+      await playerReady(page);
+      await autoplaySwitch(page).click();
+      if ((await autoplaySwitch(page).getAttribute('aria-checked')) !== 'false') throw new Error('the switch did not turn off');
+      await playVideo(page);
+      await playerState(page, 1);
+      await seekNearEnd(page);
+      await bar.locator('i.fa-play').waitFor({ timeout: 40000 });
+      await bar.getByRole('heading', { name: nextRow.song_title }).waitFor();
+      if (!(await page.evaluate(() => window.__frame === document.querySelector('iframe[src*="youtube"]')))) throw new Error('a new iframe was created');
+      if ((await page.locator('iframe[src*="youtube"]').count()) !== 1) throw new Error('more than one player');
+    });
+    await step('player', 'the off state survives a reload', async () => {
+      await page.reload();
+      await songRow(page).first().waitFor();
+      if ((await page.evaluate(() => localStorage.getItem('karaoke-autoplay'))) !== 'false') throw new Error('nothing saved');
+      await songRow(page).nth(start).click();
+      await autoplaySwitch(page).waitFor();
+      if ((await autoplaySwitch(page).getAttribute('aria-checked')) !== 'false') throw new Error('the switch came back on');
+    });
+    await step('player', 'a page with blocked storage still renders and defaults to autoplay on', async () => {
+      const blockedTab = await page.context().newPage();
+      await blockedTab.addInitScript(() => {
+        Object.defineProperty(window, 'localStorage', { get() { throw new DOMException('blocked', 'SecurityError'); } });
+      });
+      await blockedTab.goto(BASE + '/karaoke');
+      await songRow(blockedTab).nth(start).click();
+      await autoplaySwitch(blockedTab).waitFor();
+      if ((await autoplaySwitch(blockedTab).getAttribute('aria-checked')) !== 'true') throw new Error('the switch is not on');
+      await autoplaySwitch(blockedTab).click();
+      if ((await autoplaySwitch(blockedTab).getAttribute('aria-checked')) !== 'false') throw new Error('the switch does not toggle');
+      await blockedTab.close();
+    });
   },
 
   async unavailable(page) {
     const { body: videos } = await api('/api/get-karaoke');
     const rows = songRows(videos);
-    const goneIndex = await findRowIndex(rows, async (s, i) => (await videoStatus(s.video_url)) === 403
-      && rows.findIndex((r) => r.video_url === s.video_url) === i
-      && await findRowIndex(rows, isPublic, i + 1).then(() => true, () => false));
+    const goneIndex = rows.findIndex((r, i) => r.is_gone && rows.findIndex((x) => x.video_url === r.video_url) === i
+      && rows.slice(i + 1).some((x) => !x.is_gone));
+    if (goneIndex < 0) throw new Error('no gone song has a live song after it');
     const gone = rows[goneIndex];
-    const targetIndex = await findRowIndex(rows, isPublic, goneIndex + 1);
-    const target = rows[targetIndex];
+    const liveIndex = rows.findIndex((r) => !r.is_gone);
+    const live = rows[liveIndex];
+    const liveFirsts = rows.filter((r, i) => !r.is_gone && r.video_url !== gone.video_url && rows.findIndex((x) => x.video_url === r.video_url) === i);
+    const bar = page.locator('.fixed.bottom-0');
+    const stepForward = barButton(page, 'fa-step-forward');
+
     await page.goto(BASE + '/karaoke');
     await songRow(page).first().waitFor();
-    await songRow(page).nth(goneIndex).click();
-    const bar = page.locator('.fixed.bottom-0');
+    const goneRow = songRow(page).nth(goneIndex);
+    await step('unavailable', 'a gone row shows Stream gone and offers no Add to Queue', async () => {
+      await goneRow.getByText('Stream gone', { exact: true }).waitFor();
+      await goneRow.hover();
+      if (await goneRow.getByRole('button', { name: 'Add to Queue' }).count()) throw new Error('the gone row has an Add to Queue button');
+      if ((await goneRow.getAttribute('aria-disabled')) !== 'true') throw new Error('the gone row is not aria-disabled');
+      if ((await goneRow.locator('img').count()) !== 0) throw new Error('the gone row requests a thumbnail');
+      await page.screenshot({ path: join(out, 'karaoke-gone-row.png') });
+    });
+    await step('unavailable', 'clicking a gone row changes nothing and opens no player', async () => {
+      await goneRow.click();
+      await page.waitForTimeout(1000);
+      if (await stepForward.count()) throw new Error('a player bar appeared');
+      if (await page.locator('iframe[src*="youtube"]').count()) throw new Error('a player was mounted');
+    });
+
+    await page.evaluate((song) => localStorage.setItem('karaoke-storage', JSON.stringify({
+      state: { queue: [{ id: song.id, song_title: song.song_title, timestamp: song.timestamp, created_at: song.created_at, video_url: song.video_url, title_text: song.title_text, membership: song.membership }], history: [] },
+      version: 0,
+    })), gone);
+    await page.reload();
+    await songRow(page).first().waitFor();
+    await songRow(page).nth(liveIndex).click();
+    await bar.getByRole('heading', { name: live.song_title }).waitFor();
+    await stepForward.click();
     const toast = page.getByRole('status');
-    await step('unavailable', 'a toast names the skipped song and says it is not available', async () => {
+    await step('unavailable', 'a queued gone song gives a toast that names it', async () => {
       await toast.getByText(gone.song_title, { exact: false }).waitFor({ timeout: 60000 });
       const text = await toast.innerText();
-      if (!/isn't available|aren't available/.test(text)) throw new Error(`unexpected toast text: ${text}`);
+      if (!/its stream is gone|their streams are gone/.test(text)) throw new Error(`unexpected toast text: ${text}`);
       await page.screenshot({ path: join(out, 'karaoke-skip-toast.png') });
     });
     await step('unavailable', 'the toast fits a 375px phone with a 16px gutter', async () => {
@@ -257,18 +367,15 @@ const journeys = {
       if (!box || box.x < 16 - 1 || box.x + box.width > 375 - 16 + 1) throw new Error(`toast box ${JSON.stringify(box)}`);
       await page.setViewportSize({ width: 1280, height: 800 });
     });
-    await step('unavailable', 'the toast disappears on its own', () => toast.waitFor({ state: 'detached', timeout: 15000 }));
-    await step('unavailable', 'a private video skips on to the first later song of a public video', async () => {
-      await bar.getByRole('heading', { name: target.song_title }).waitFor({ timeout: 60000 });
-      await page.waitForFunction((url) => document.querySelector('iframe[src*="youtube"]')?.src.includes(url), target.video_url, { timeout: 60000 });
-      if ((await page.locator('iframe[src*="youtube"]').count()) !== 1) throw new Error('more than one player');
-      if (await bar.getByText('This video is not available on YouTube').count()) throw new Error('the bar still shows the error');
-    });
-    await step('unavailable', 'the private video is no longer loaded and playback is running', async () => {
+    await step('unavailable', 'the player lands on the first song of a live video', async () => {
+      await page.waitForFunction((urls) => urls.some((url) => document.querySelector('iframe[src*="youtube"]')?.src.includes(url)), liveFirsts.map((r) => r.video_url), { timeout: 60000 });
       const src = await playerSrc(page);
-      if (src.includes(gone.video_url)) throw new Error('the private video is still loaded');
-      await bar.locator('i.fa-pause').waitFor({ timeout: 30000 });
+      const landed = liveFirsts.find((r) => src.includes(r.video_url));
+      await bar.getByRole('heading', { name: landed.song_title }).waitFor({ timeout: 60000 });
+      if ((await page.locator('iframe[src*="youtube"]').count()) !== 1) throw new Error('more than one player');
+      if (await bar.getByText('This stream is gone').count()) throw new Error('the bar still shows the error');
     });
+    await step('unavailable', 'the toast disappears on its own', () => toast.waitFor({ state: 'detached', timeout: 15000 }));
   },
 
   async coverPlayer(page) {
@@ -331,13 +438,14 @@ const journeys = {
 
     const { body: videos } = await api('/api/get-karaoke');
     const rows = songRows(videos);
-    const otherIndex = rows.findIndex((s) => s.song_title !== rows[0].song_title);
+    const firstIndex = rows.findIndex((s) => !s.is_gone);
+    const otherIndex = rows.findIndex((s) => !s.is_gone && s.song_title !== rows[firstIndex].song_title);
     const tabB = await context.newPage();
     await page.goto(BASE + '/');
     await tabB.goto(BASE + '/karaoke');
     await songRow(tabB).first().waitFor();
-    await songRow(tabB).first().hover();
-    await songRow(tabB).first().getByRole('button', { name: 'Add to Queue' }).click();
+    await songRow(tabB).nth(firstIndex).hover();
+    await songRow(tabB).nth(firstIndex).getByRole('button', { name: 'Add to Queue' }).click();
     await page.getByRole('link', { name: 'Karaoke' }).click();
     await songRow(page).first().waitFor();
     await songRow(page).nth(otherIndex).hover();
@@ -401,12 +509,26 @@ const journeys = {
     for (const route of ['/api/get-karaoke', '/api/get-cover']) {
       check('api', `POST ${route} is rejected`, (await api(route, { method: 'POST' })).status === 405);
     }
+    const { body: videos } = await api('/api/get-karaoke');
+    const mismatches = [];
+    for (const v of videos) {
+      const status = await videoStatus(v.video_url);
+      const expected = status === 200 ? false : [401, 403, 404].includes(status) ? true : undefined;
+      if (expected !== undefined && v.is_gone !== expected) mismatches.push(`${v.video_url} oembed ${status} is_gone ${v.is_gone}`);
+    }
+    check('api', 'is_gone matches oEmbed for every video', mismatches.length === 0 && videos.every((v) => typeof v.is_gone === 'boolean'), mismatches.slice(0, 3).join(' | '));
     for (const route of ['/api/post-karaoke', '/api/update-cover', '/api/update-karaoke', '/api/webhook', '/input_video']) {
       check('api', `${route} no longer exists`, (await api(route, { method: 'GET' })).status === 404);
     }
   },
 };
 
+try {
+  const count = await waitForGoneIds();
+  check('setup', 'the server has learned which streams are gone', true, `${count} videos`);
+} catch (e) {
+  check('setup', 'the server has learned which streams are gone', false, e.message);
+}
 const browser = await chromium.launch();
 for (const [name, journey] of Object.entries(journeys)) {
   if (wanted.length && !wanted.includes(name)) continue;

@@ -24,58 +24,87 @@ const songRowView = (
   song: PlayableSong,
   isCurrent: boolean,
   isPlaying: boolean,
+  isGone: boolean,
   h: HtmlBuilder<Message>,
 ): Html =>
   h.keyed('div')(
     song.id,
-    [
-      h.Class(
-        twMerge(
-          'group flex items-center justify-between p-3 rounded-lg transition-all cursor-pointer border border-transparent backdrop-blur-sm',
-          'hover:bg-white/10 hover:border-white/5',
-          isCurrent
-            ? 'bg-sky-900/40 border-sky-500/30 shadow-[0_0_15px_rgba(14,165,233,0.1)]'
-            : 'bg-black/20 hover:shadow-lg',
-        ),
-      ),
-      h.OnClick(Message.ClickedSong({ song })),
-    ],
+    isGone
+      ? [
+          h.Class(
+            'flex items-center justify-between p-3 rounded-lg border border-transparent backdrop-blur-sm bg-black/20 cursor-not-allowed',
+          ),
+          h.AriaDisabled(true),
+        ]
+      : [
+          h.Class(
+            twMerge(
+              'group flex items-center justify-between p-3 rounded-lg transition-all cursor-pointer border border-transparent backdrop-blur-sm',
+              'hover:bg-white/10 hover:border-white/5',
+              isCurrent
+                ? 'bg-sky-900/40 border-sky-500/30 shadow-[0_0_15px_rgba(14,165,233,0.1)]'
+                : 'bg-black/20 hover:shadow-lg',
+            ),
+          ),
+          h.OnClick(Message.ClickedSong({ song })),
+        ],
     [
       h.div(
-        [h.Class('flex items-center space-x-4 flex-1 min-w-0')],
         [
-          h.div(
-            [
-              h.Class(
-                'relative w-12 h-12 rounded overflow-hidden bg-slate-800 flex-shrink-0 shadow-md transition-transform group-hover:scale-105',
-              ),
-            ],
-            [
-              h.img([
-                h.Src(thumbnailUrl(song.video_url)),
-                h.Alt('thumb'),
-                h.Class(
-                  `w-full h-full object-cover transition-opacity ${isCurrent ? 'opacity-40' : 'opacity-80 group-hover:opacity-100'}`,
-                ),
-              ]),
-              h.div(
+          h.Class(
+            twMerge(
+              'flex items-center space-x-4 flex-1 min-w-0',
+              isGone && 'opacity-50',
+            ),
+          ),
+        ],
+        [
+          isGone
+            ? h.div(
                 [
                   h.Class(
-                    `absolute inset-0 flex items-center justify-center ${isCurrent ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'} bg-black/40 transition-opacity`,
+                    'w-12 h-12 rounded bg-slate-800 flex-shrink-0 flex items-center justify-center',
                   ),
                 ],
                 [
                   h.i([
-                    h.Class(
-                      isCurrent && isPlaying
-                        ? 'fas fa-chart-bar animate-pulse text-white drop-shadow-md'
-                        : 'fas fa-play text-white drop-shadow-md',
-                    ),
+                    h.Class('fas fa-ban text-gray-500'),
+                    h.AriaHidden(true),
                   ]),
                 ],
+              )
+            : h.div(
+                [
+                  h.Class(
+                    'relative w-12 h-12 rounded overflow-hidden bg-slate-800 flex-shrink-0 shadow-md transition-transform group-hover:scale-105',
+                  ),
+                ],
+                [
+                  h.img([
+                    h.Src(thumbnailUrl(song.video_url)),
+                    h.Alt('thumb'),
+                    h.Class(
+                      `w-full h-full object-cover transition-opacity ${isCurrent ? 'opacity-40' : 'opacity-80 group-hover:opacity-100'}`,
+                    ),
+                  ]),
+                  h.div(
+                    [
+                      h.Class(
+                        `absolute inset-0 flex items-center justify-center ${isCurrent ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'} bg-black/40 transition-opacity`,
+                      ),
+                    ],
+                    [
+                      h.i([
+                        h.Class(
+                          isCurrent && isPlaying
+                            ? 'fas fa-chart-bar animate-pulse text-white drop-shadow-md'
+                            : 'fas fa-play text-white drop-shadow-md',
+                        ),
+                      ]),
+                    ],
+                  ),
+                ],
               ),
-            ],
-          ),
           h.div(
             [h.Class('flex-col min-w-0')],
             [
@@ -104,37 +133,47 @@ const songRowView = (
           ),
         ],
       ),
-      h.div(
-        [h.Class('flex items-center px-1')],
-        [
-          h.button(
+      isGone
+        ? h.span(
             [
-              h.OnClick(Message.ClickedAddToQueue({ song }), {
-                propagation: 'Stop',
-              }),
               h.Class(
-                'flex items-center space-x-2 px-3 py-2 rounded-full transition-all active:scale-95 bg-white/5 border border-white/10 text-gray-400 font-bold hover:bg-[#446e92]/20 hover:border-[#446e92]/50 hover:text-white opacity-0 group-hover:opacity-100',
+                'flex-shrink-0 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest whitespace-nowrap bg-[#57182c] text-[#f0a3b4]',
               ),
             ],
+            ['Stream gone'],
+          )
+        : h.div(
+            [h.Class('flex items-center px-1')],
             [
-              h.i([h.Class('fas fa-list-ul text-xs')]),
-              h.span(
+              h.button(
                 [
+                  h.OnClick(Message.ClickedAddToQueue({ song }), {
+                    propagation: 'Stop',
+                  }),
                   h.Class(
-                    'text-[10px] uppercase tracking-widest whitespace-nowrap',
+                    'flex items-center space-x-2 px-3 py-2 rounded-full transition-all active:scale-95 bg-white/5 border border-white/10 text-gray-400 font-bold hover:bg-[#446e92]/20 hover:border-[#446e92]/50 hover:text-white opacity-0 group-hover:opacity-100',
                   ),
                 ],
-                ['Add to Queue'],
+                [
+                  h.i([h.Class('fas fa-list-ul text-xs')]),
+                  h.span(
+                    [
+                      h.Class(
+                        'text-[10px] uppercase tracking-widest whitespace-nowrap',
+                      ),
+                    ],
+                    ['Add to Queue'],
+                  ),
+                ],
               ),
             ],
           ),
-        ],
-      ),
     ],
   )
 
 const songListView = (model: Model, h: HtmlBuilder<Message>): Html => {
   const songs = allSongs(model)
+  const goneIds = new Set(model.goneVideoIds)
   const visible = visibleSongs(songs, model.search)
   const maybeNowPlaying = model.setlist.maybeNowPlaying
   return h.div(
@@ -169,6 +208,7 @@ const songListView = (model: Model, h: HtmlBuilder<Message>): Html => {
             song,
             isCurrent,
             isCurrent && isPlaying,
+            goneIds.has(song.video_url),
             h,
           ])
         }),
@@ -442,6 +482,47 @@ const queuePanelView = (model: Model, h: HtmlBuilder<Message>): Html =>
     ],
   )
 
+const autoplaySwitchView = (
+  isAutoplay: boolean,
+  h: HtmlBuilder<Message>,
+): Html =>
+  h.button(
+    [
+      h.Type('button'),
+      h.Role('switch'),
+      h.AriaChecked(isAutoplay),
+      h.AriaLabel('Autoplay'),
+      h.Title('Autoplay'),
+      h.OnClick(Message.ClickedToggleAutoplay()),
+      h.Class(
+        'flex items-center gap-2 min-h-10 px-2 text-xs text-gray-300 hover:text-white transition-colors',
+      ),
+    ],
+    [
+      h.span(
+        [
+          h.Class(
+            twMerge(
+              'relative inline-block w-9 h-3.5 shrink-0 rounded-full transition-colors',
+              isAutoplay ? 'bg-sky-400/50' : 'bg-white/30',
+            ),
+          ),
+        ],
+        [
+          h.span([
+            h.Class(
+              twMerge(
+                'absolute -top-[3px] left-0 h-5 w-5 rounded-full shadow transition-all',
+                isAutoplay ? 'translate-x-4 bg-sky-400' : 'bg-gray-300',
+              ),
+            ),
+          ]),
+        ],
+      ),
+      h.span([h.Class('hidden md:inline')], ['Autoplay']),
+    ],
+  )
+
 const playerBarView = (
   nowPlaying: NowPlaying,
   model: Model,
@@ -580,8 +661,9 @@ const playerBarView = (
         ],
       ),
       h.div(
-        [h.Class('flex items-center justify-end space-x-4 w-1/3')],
+        [h.Class('flex items-center justify-end space-x-2 w-1/3')],
         [
+          autoplaySwitchView(model.isAutoplay, h),
           h.button(
             [
               h.OnClick(Message.ClickedToggleExpanded()),
@@ -737,8 +819,8 @@ const skipToastMessage = ({
   skippedCount,
 }: SkipToast): string =>
   skippedCount === 1
-    ? `"${firstSkippedTitle}" isn't available on YouTube, so it was skipped.`
-    : `"${firstSkippedTitle}" and ${skippedCount - 1} more aren't available on YouTube, so they were skipped.`
+    ? `"${firstSkippedTitle}" was skipped because its stream is gone.`
+    : `"${firstSkippedTitle}" and ${skippedCount - 1} more were skipped because their streams are gone.`
 
 const skipToastView = (toast: SkipToast, h: HtmlBuilder<Message>): Html =>
   h.div(
@@ -754,17 +836,16 @@ const skipToastView = (toast: SkipToast, h: HtmlBuilder<Message>): Html =>
         h.Class('fas fa-exclamation-triangle text-amber-400 mt-0.5'),
         h.AriaHidden(true),
       ]),
-      h.p([h.Class('flex-1 min-w-0 text-sm break-words')], [
-        skipToastMessage(toast),
-      ]),
+      h.p(
+        [h.Class('flex-1 min-w-0 text-sm break-words')],
+        [skipToastMessage(toast)],
+      ),
       h.button(
         [
           h.Type('button'),
           h.AriaLabel('Dismiss'),
           h.OnClick(Message.ClickedDismissToast()),
-          h.Class(
-            'shrink-0 text-gray-400 hover:text-white transition-colors',
-          ),
+          h.Class('shrink-0 text-gray-400 hover:text-white transition-colors'),
         ],
         [h.i([h.Class('fas fa-times')])],
       ),
