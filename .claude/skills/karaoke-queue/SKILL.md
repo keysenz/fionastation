@@ -29,11 +29,11 @@ Exit code 0 means every property holds.
 
 ## What it checks
 
-Each sequence has up to 150 actions, or 52 to 80 consecutive plays to reach the history cap. It uses 12 distinct songs, 4 to each of 3 videos in archive order. Each run also draws which of the 3 videos are known gone and whether autoplay is on, and passes them to the module as its `Continuation`. Each action also carries a number that stands in for the random video pick, so a run resolves `PickRandomVideo` the way the Command does, with a deterministic choice. The seed is fixed at `20261101`, with 1000 runs per property.
+Each sequence has up to 150 actions, 52 to 80 consecutive plays to reach the history cap, or 4 to 30 enqueues and moves. A move has random indexes, so some are out of range and must change nothing. It uses 12 distinct songs, 4 to each of 3 videos in archive order. Each run also draws which of the 3 videos are known gone and whether autoplay is on, and passes them to the module as its `Continuation`. Each action also carries a number that stands in for the random video pick, so a run resolves `PickRandomVideo` the way the Command does, with a deterministic choice. The seed is fixed at `20261101`, with 1000 runs per property.
 
 | Property | Plain meaning |
 | --- | --- |
-| `queue-is-fifo-and-lossless` | Queue order is first-in, first-out, except that Previous returns the song it leaves to the front. Next and video end play the head. |
+| `queue-is-fifo-and-lossless` | Queue order is first-in, first-out, except that Previous returns the song it leaves to the front and a move reorders only the queue, by index, and leaves what is playing, history, and play count alone. Next and video end play the head. |
 | `history-is-bounded-and-newest-first` | History never passes 50, and a song replaced by a click or a video end becomes its newest entry. |
 | `new-play-gets-a-new-player` | Each play and Previous gets a new `playId`, even for the same song, and toggling keeps it. |
 | `end-of-video-continues-within-the-video` | With autoplay on and an empty queue, a video end plays the next song of the same video, with no random pick. |

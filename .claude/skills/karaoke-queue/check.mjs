@@ -25,16 +25,23 @@ const withPick = (base) => fc.record({ base, pick: fc.nat(1000) }).map(({ base: 
 const action = withPick(fc.oneof(
   { weight: 5, arbitrary: song.map((s) => ({ type: 'play', song: s })) },
   { weight: 4, arbitrary: song.map((s) => ({ type: 'enqueue', song: s })) },
+  { weight: 3, arbitrary: fc.record({ type: fc.constant('move'), from: fc.nat(4), to: fc.nat(4) }) },
   { weight: 3, arbitrary: fc.constant({ type: 'next' }) },
   { weight: 2, arbitrary: fc.constant({ type: 'previous' }) },
   { weight: 2, arbitrary: fc.constant({ type: 'end' }) },
   { weight: 1, arbitrary: fc.constant({ type: 'toggle' }) },
   { weight: 1, arbitrary: fc.constant({ type: 'fail' }) },
 ));
-// The second shape plays enough songs in a row to reach the history cap, which mixed sequences rarely do.
+const moveOrEnqueue = fc.oneof(
+  { weight: 2, arbitrary: withPick(song.map((s) => ({ type: 'enqueue', song: s }))) },
+  { weight: 3, arbitrary: withPick(fc.record({ type: fc.constant('move'), from: fc.nat(4), to: fc.nat(4) })) },
+);
+// The second shape plays enough songs in a row to reach the history cap, and the third queues and moves
+// songs, because mixed sequences rarely hold more than two queued songs at once.
 const actionSequence = fc.oneof(
   fc.array(action, { minLength: 1, maxLength: 150 }),
   fc.array(withPick(song.map((s) => ({ type: 'play', song: s }))), { minLength: 52, maxLength: 80 }),
+  fc.array(moveOrEnqueue, { minLength: 4, maxLength: 30 }),
 );
 // Each run also draws which of the 3 videos are known gone and whether autoplay is on.
 const scenario = fc.record({
@@ -52,6 +59,7 @@ const current = (setlist) => Option.getOrUndefined(setlist.maybeNowPlaying);
 function apply(setlist, a, continuation) {
   if (a.type === 'play') return { setlist: S.play(setlist, a.song) };
   if (a.type === 'enqueue') return { setlist: S.enqueue(setlist, a.song) };
+  if (a.type === 'move') return { setlist: S.moveInQueue(setlist, a.from, a.to) };
   if (!current(setlist)) return { setlist };
   if (a.type === 'next') return { setlist: S.playNext(setlist) };
   if (a.type === 'previous') return { setlist: S.playPrevious(setlist) };
@@ -96,12 +104,19 @@ const walk = (scene, onStep) => {
 };
 
 const properties = {
-  // A queued song plays in the order it was queued, and nothing drops one before it plays.
+  // A queued song plays in the order it was queued, as moved by the visitor, and nothing drops one before it plays.
   // Previous is the one exception: the song it leaves goes to the front of the queue.
   'queue-is-fifo-and-lossless': (scene) => {
     const expectedQueue = [];
     walk(scene, (a, before, after) => {
       if (a.type === 'enqueue') expectedQueue.push(a.song);
+      if (a.type === 'move' && a.from !== a.to && a.from < expectedQueue.length && a.to < expectedQueue.length) {
+        const [moved] = expectedQueue.splice(a.from, 1);
+        expectedQueue.splice(a.to, 0, moved);
+      }
+      if (a.type === 'move' && !same(after.playCount, before.playCount)) fail('move changed the play count');
+      if (a.type === 'move' && !same(after.maybeNowPlaying, before.maybeNowPlaying)) fail('move changed what is playing');
+      if (a.type === 'move' && !same(after.history, before.history)) fail('move changed the history');
       if (a.type === 'previous' && current(before) && before.history.length) expectedQueue.unshift(current(before).song);
       if ((a.type === 'next' || a.type === 'end') && current(before) && expectedQueue.length) {
         const expected = expectedQueue.shift();
@@ -277,13 +292,16 @@ async function checkProperty(name) {
   );
   if (!result.failed) return { name, failed: false, runs: RUNS };
   const [scene] = result.counterexample;
-  const steps = `autoplay ${scene.isAutoplay ? 'on' : 'off'}, gone [${scene.goneVideos}]: ${scene.seq.map((a) => (a.song ? `${a.type} ${a.song.id}` : a.type)).join(', ')}`;
+  const steps = `autoplay ${scene.isAutoplay ? 'on' : 'off'}, gone [${scene.goneVideos}]: ${scene.seq.map((a) => (a.song ? `${a.type} ${a.song.id}` : a.type === 'move' ? `move ${a.from}->${a.to}` : a.type)).join(', ')}`;
   return { name, failed: true, runs: RUNS, steps, why: result.errorInstance?.message ?? String(result.error) };
 }
 
 const MUTANTS = [
   { property: 'queue-is-fifo-and-lossless', from: 'modifyFields(setlist, { queue: queue => Array.drop(queue, 1) })', to: 'setlist' },
   { property: 'queue-is-fifo-and-lossless', from: 'Option.match(Array.head(setlist.queue), {', to: 'Option.match(Array.last(setlist.queue), {' },
+  { property: 'queue-is-fifo-and-lossless', from: '...without.slice(0, to), queue[from]!, ...without.slice(to)', to: '...without.slice(0, to + 1), queue[from]!, ...without.slice(to + 1)' },
+  { property: 'queue-is-fifo-and-lossless', from: 'queue: () => [...without.slice(0, to)', to: 'queue: () => [...queue.slice(0, to)' },
+  { property: 'queue-is-fifo-and-lossless', from: 'from === to || !isInRange(from) || !isInRange(to)', to: 'from === to || !isInRange(from)' },
   { property: 'queue-is-fifo-and-lossless', from: 'queue => [...queue, song]', to: 'queue => [song, ...queue]' },
   { property: 'history-is-bounded-and-newest-first', from: 'Array.take([nowPlaying.song, ...history], HISTORY_LIMIT)', to: '[nowPlaying.song, ...history]' },
   { property: 'history-is-bounded-and-newest-first', from: '[nowPlaying.song, ...history]', to: '[...history, nowPlaying.song]' },
