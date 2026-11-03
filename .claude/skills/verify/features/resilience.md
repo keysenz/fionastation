@@ -6,9 +6,9 @@ The site says what went wrong instead of showing a blank or misleading page, and
 
 - `fetch-failure` shows an error and a `Try again` button when an API route fails, and refuses data of the wrong shape.
 - `storage` keeps pages working when saved data is corrupt or storage is blocked, and two tabs keep each other's queued songs.
-- `navigation` plays the sound on `Back to Home`, browser back works, and an unknown path shows the 404 page.
-- `paths` answers 404 to malformed paths without stopping the server, redirects trailing slashes without leaving the site, and serves ranges and 304s.
-- `mobile` closes the playlist drawer when a video is chosen.
+- `navigation` shows the 404 page for an unknown path, its `Back to Fio Radio` link returns to `/`, and browser back returns to the 404 page.
+- `paths` answers 404 to malformed paths without stopping the server, redirects trailing slashes without leaving the site, redirects the old page paths to `/`, and serves ranges and 304s.
+- `mobile` keeps the list, the search and the queue drawer inside a 375px phone.
 
 ## How to get to it (user POV)
 

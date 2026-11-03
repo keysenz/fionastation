@@ -10,14 +10,13 @@ A visitor browses the karaoke streams in a master-detail layout, with the stream
 - `karaoke-queue` adds songs with an always visible `Add to Queue` button, and Next plays them in order. On a screen at least `md` wide the open queue drawer reserves its width (22.5rem with its handle), so no `Add to Queue` hides behind it. On a phone the drawer covers the page and has a `Close queue` button.
 - `karaoke-previous` returns to the earlier song and puts the song it left first under Up Next.
 - `karaoke-queue-reorder` moves a queued song by dragging its grip handle with a mouse or a finger (pointer events, `touch-action: none` on the handle), or with ArrowUp and ArrowDown on the focused handle. The dragged row dims and a sky line marks the slot it will land in. The new order is saved.
-- `radio-kind` shows the song's kind (`Karaoke`, `Cover`, `Original`) under the title in the player bar and on each queue drawer row. The `radio` journey checks the redirect, a Cover and an Original row in the list, `Cover` in the bar while a cover plays, and `Original` in the drawer for a queued original. Open `radio-list.png`, `radio-cover-playing.png` and `radio-queue.png`.
+- `radio-kind` shows the song's kind (`Karaoke`, `Cover`, `Original`) under the title in the player bar and on each queue drawer row. The `radio` journey checks that `/karaoke?x=1` lands on `/?x=1`, a Cover and an Original row in the list, `Cover` in the bar while a cover plays, and `Original` in the drawer for a queued original. Open `radio-list.png`, `radio-cover-playing.png` and `radio-queue.png`.
 - `karaoke-reload` restores the queue and history.
 - `karaoke-gone` labels a gone stream `Stream gone`, requests no thumbnail, and lets it be chosen to show disabled rows.
 
 ## How to get to it (user POV)
 
-- Choose `Fio Radio` in the home menu.
-- Open `/radio` directly. `/karaoke` answers 301 with `Location: /radio` and keeps the query string.
+- Open `/`. The old `/radio` and `/karaoke` answer 301 with `Location: /` and keep the query string.
 
 ## Driving it with drive.mjs
 
@@ -25,7 +24,7 @@ Preconditions:
 
 - Doctor reports a non-zero song count.
 
-- **List.** Open `/radio`. Run `node drive.mjs karaoke`. The stream row count equals the video count from `/api/get-karaoke`, exactly one is selected, and the setlist shows only its songs. Choosing a stream shows as many song rows as the API lists for it.
+- **List.** Open `/`. Run `node drive.mjs karaoke`. The stream row count equals the video count from `/api/get-karaoke`, exactly one is selected, and the setlist shows only its songs. Choosing a stream shows as many song rows as the API lists for it.
 - **Search.** The journey fills `Search songs...` with the title that is on the most live streams. The stream rows equal the streams the API says contain it. Choosing each in turn, the song rows add up to the matching songs, and each header reads `M of N songs match` with an `N matches` count on its row. `zzzqqqxxx` shows `No songs found`, and clearing the search restores every stream and the stream that was chosen.
 - **Play.** The journey plays that title from the last stream that has it. The iframe `src` holds that stream's video ID and `start=`. A plain play of another song checks the same. A stream row that is not selected but holds the current song shows a `Now playing` icon.
 - **Queue.** `Add to Queue` is visible without hovering and at least 40px high and wide. The journey adds a song, then chooses the forward icon. The player bar shows that song. A second queued song appears under `Up Next` in the drawer. With the drawer open at 1280x800, every `Add to Queue` ends left of the drawer, is not covered, and can be clicked. The `scrollbar-color` computed on the stream list, the setlist and the drawer is the #446e92 thumb on a dark track.

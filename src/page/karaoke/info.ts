@@ -247,7 +247,7 @@ export const infoPanelView = (h: HtmlBuilder<Message>): Html =>
           h.div(
             [
               h.Class(
-                'sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-white/10 bg-black/80 px-5 py-3 backdrop-blur-xl',
+                'sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-white/10 bg-neutral-950 px-5 py-3',
               ),
             ],
             [

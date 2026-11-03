@@ -238,7 +238,7 @@ const queueReorderJourney = async (page, feature, { touch }) => {
     else await page.mouse.up();
   };
 
-  await page.goto(BASE + '/radio');
+  await page.goto(BASE + '/');
   await videoRows(page).first().waitFor();
   const section = await openVideo(page, videos, video.video_url);
   for (const row of [a, b, c]) {
@@ -302,7 +302,7 @@ const queueReorderJourney = async (page, feature, { touch }) => {
 const journeys = {
   async site(page) {
     await page.goto(BASE + '/');
-    await page.getByRole('heading', { name: /Fiona/ }).waitFor();
+    await page.getByRole('heading', { name: 'Fio Radio' }).waitFor();
     const bg = page.getByAltText('Background');
     await bg.waitFor();
     const loaded = await bg.evaluate(async (img) => {
@@ -310,17 +310,6 @@ const journeys = {
       return img.naturalWidth;
     });
     check('site', 'background image renders', loaded > 0, `naturalWidth ${loaded}`);
-    await page.screenshot({ path: join(out, 'home.png') });
-    for (const [label, heading] of [
-      ['About', 'Fiona Clearesta'],
-      ['Credits', 'Credits'],
-      ['Fio Radio', 'Fio Radio'],
-    ]) {
-      await page.goto(BASE + '/');
-      await page.getByRole('link', { name: label }).click();
-      await page.getByRole('heading', { name: heading }).first().waitFor();
-      check('site', `home menu opens ${label}`, true);
-    }
     const headers = (await fetch(BASE + '/')).headers;
     check('site', 'security headers are served', headers.get('x-frame-options') === 'SAMEORIGIN');
   },
@@ -332,9 +321,9 @@ const journeys = {
     const original = live('original');
     if (!cover || !original) throw new Error('the data has no live cover and original');
 
-    await page.goto(BASE + '/karaoke');
-    await page.waitForURL(BASE + '/radio');
-    check('radio', '/karaoke lands on /radio in the browser', true);
+    await page.goto(BASE + '/karaoke?x=1');
+    await page.waitForURL(BASE + '/?x=1');
+    check('radio', '/karaoke lands on / in the browser', true);
     await page.getByRole('heading', { name: 'Fio Radio' }).waitFor();
     await videoRows(page).first().waitFor();
     check('radio', 'the badge counts every video', (await page.locator(`${STREAMS} > p`).first().innerText()).toLowerCase() === `${videos.length} videos`, `${videos.length} videos`);
@@ -370,7 +359,7 @@ const journeys = {
     const total = videos.reduce((n, v) => n + v.karaoke_song.length, 0);
     check('karaoke', 'api returns only karaoke streams with songs', total > 0, `${videos.length} videos, ${total} songs`);
 
-    await page.goto(BASE + '/radio');
+    await page.goto(BASE + '/');
     await videoRows(page).first().waitFor();
     check('karaoke', 'list shows one row per video', (await videoRows(page).count()) === videos.length, `${await videoRows(page).count()} rows`);
     const firstShown = displayOrder(videos)[0];
@@ -534,33 +523,6 @@ const journeys = {
     check('karaoke', 'drawer shows the restored queue after reload', true);
   },
 
-  async cover(page) {
-    const { body: covers } = await api('/api/get-cover');
-    check('cover', 'api returns covers and originals', covers.length > 0, `${covers.length} videos`);
-    await page.goto(BASE + '/cover');
-    await page.getByText(`${covers.length} Songs Loaded`).first().waitFor();
-    const title = page.locator('h2.text-2xl');
-    await title.filter({ hasText: covers[0].title }).waitFor();
-    check('cover', 'opens on the newest video', (await playerSrc(page)).includes(covers[0].video_id), covers[0].video_id);
-
-    await page.getByTitle('Next', { exact: true }).click();
-    await title.filter({ hasText: covers[1].title }).waitFor();
-    check('cover', 'next moves down the list', true, covers[1].title);
-    await page.getByTitle('Previous').click();
-    await page.getByTitle('Previous').click();
-    await title.filter({ hasText: covers.at(-1).title }).waitFor();
-    check('cover', 'previous wraps to the end of the list', true);
-
-    const search = page.getByPlaceholder('Search covers...').first();
-    await search.fill(covers[3].title);
-    const hit = page.locator('button', { hasText: covers[3].title }).first();
-    await hit.click();
-    await title.filter({ hasText: covers[3].title }).waitFor();
-    check('cover', 'playlist search selects a video', true, covers[3].title);
-    await page.waitForTimeout(400);
-    await page.screenshot({ path: join(out, 'cover.png') });
-  },
-
   async player(page) {
     const { body: videos } = await api('/api/get-karaoke');
     const rows = songRows(videos);
@@ -577,7 +539,7 @@ const journeys = {
       await apiHeld;
       await route.continue();
     });
-    await page.goto(BASE + '/radio');
+    await page.goto(BASE + '/');
     await videoRows(page).first().waitFor();
     await (await songRowOf(page, videos, rows[start])).click();
     const bar = page.locator('.fixed.bottom-0');
@@ -728,7 +690,7 @@ const journeys = {
           },
         });
       });
-      await blockedTab.goto(BASE + '/radio');
+      await blockedTab.goto(BASE + '/');
       await videoRows(blockedTab).first().waitFor();
       await (await songRowOf(blockedTab, videos, rows[start])).click();
       await autoplaySwitch(blockedTab).waitFor();
@@ -768,7 +730,7 @@ const journeys = {
     const bar = page.locator('.fixed.bottom-0');
     const stepForward = barButton(page, 'fa-step-forward');
 
-    await page.goto(BASE + '/radio');
+    await page.goto(BASE + '/');
     await videoRows(page).first().waitFor();
     const liveVideos = videos.filter((v) => !v.is_gone).length;
     const goneRow = videoRow(page, videos, gone.video_url);
@@ -863,46 +825,22 @@ const journeys = {
     await step('unavailable', 'the toast disappears on its own', () => toast.waitFor({ state: 'detached', timeout: 15000 }));
   },
 
-  async coverPlayer(page) {
-    const { body: covers } = await api('/api/get-cover');
-    await page.goto(BASE + '/cover');
-    const title = page.locator('h2.text-2xl');
-    await title.filter({ hasText: covers[0].title }).waitFor();
-    await playerReady(page);
-    await page.getByTitle('Autoplay Next').click();
-    await step('coverPlayer', 'autoplay moves on at video end', async () => {
-      await playVideo(page);
-      await playerState(page, 1);
-      await seekNearEnd(page);
-      await title.filter({ hasText: covers[1].title }).waitFor({ timeout: 40000 });
-    });
-  },
-
   async fetchFailure(page) {
     let blocked = true;
     await page.route('**/api/get-karaoke', (route) => (blocked ? route.fulfill({ status: 500, body: '{}' }) : route.continue()));
-    await page.goto(BASE + '/radio');
+    await page.goto(BASE + '/');
     await step('fetchFailure', 'a failed fetch says so instead of showing an empty list', () => page.getByText('Could not load Fio Radio').waitFor());
     blocked = false;
     await step('fetchFailure', 'try again recovers without a reload', async () => {
       await page.getByRole('button', { name: 'Try again' }).click();
       await videoRows(page).first().waitFor();
     });
-    await page.route('**/api/get-cover', (route) =>
-      route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: '[{"nope":1}]',
-      }),
-    );
-    await page.goto(BASE + '/cover');
-    await step('fetchFailure', 'data of the wrong shape is refused at the boundary', () => page.getByText('Could not load the covers').waitFor());
   },
 
   async storage(page, context) {
     await page.goto(BASE + '/');
     await page.evaluate(() => localStorage.setItem('karaoke-storage', 'not json'));
-    await page.goto(BASE + '/radio');
+    await page.goto(BASE + '/');
     await videoRows(page).first().waitFor();
     await step('storage', 'corrupt saved data starts with an empty queue', async () => {
       await page.getByRole('button', { name: 'Queue', exact: true }).click();
@@ -918,15 +856,7 @@ const journeys = {
         },
       });
     });
-    for (const [path, text] of [
-      ['/', 'Station'],
-      ['/about', 'Fiona Clearesta'],
-      ['/credits', 'Credits'],
-    ]) {
-      await blockedTab.goto(BASE + path);
-      await step('storage', `${path} renders with storage blocked`, () => blockedTab.getByRole('heading', { name: text }).first().waitFor());
-    }
-    await blockedTab.goto(BASE + '/radio');
+    await blockedTab.goto(BASE + '/');
     await step('storage', 'karaoke works with storage blocked', async () => {
       const { body: blockedVideos } = await api('/api/get-karaoke');
       const blockedRows = songRows(blockedVideos);
@@ -941,11 +871,10 @@ const journeys = {
     const firstIndex = rows.findIndex((s) => !s.is_gone);
     const otherIndex = rows.findIndex((s) => !s.is_gone && s.song_title !== rows[firstIndex].song_title);
     const tabB = await context.newPage();
-    await page.goto(BASE + '/');
-    await tabB.goto(BASE + '/radio');
+    await tabB.goto(BASE + '/');
     await videoRows(tabB).first().waitFor();
     await (await songRowOf(tabB, videos, rows[firstIndex])).getByRole('button', { name: 'Add to Queue', exact: true }).click();
-    await page.getByRole('link', { name: 'Fio Radio' }).click();
+    await page.goto(BASE + '/');
     await videoRows(page).first().waitFor();
     await (await songRowOf(page, videos, rows[otherIndex])).getByRole('button', { name: 'Add to Queue', exact: true }).click();
     const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('karaoke-storage')).state.queue.length);
@@ -954,42 +883,35 @@ const journeys = {
   },
 
   async navigation(page) {
-    await page.addInitScript(() => {
-      window.__sounds = 0;
-      const original = window.Audio.prototype.play;
-      window.Audio.prototype.play = function play() {
-        window.__sounds++;
-        return original.call(this);
-      };
-    });
-    await page.goto(BASE + '/cover');
-    await page.locator('h2.text-2xl').waitFor();
-    await page.getByRole('link', { name: 'Back to Home' }).click();
-    await page.getByRole('heading', { name: 'Station' }).waitFor();
-    check('navigation', 'back to home plays the sound and navigates', (await page.evaluate(() => window.__sounds)) === 1);
-    await page.goBack();
-    await page.locator('h2.text-2xl').waitFor();
-    check('navigation', 'browser back returns to the page', page.url().endsWith('/cover'));
     await page.goto(BASE + '/nope');
     await step('navigation', 'an unknown path shows the 404 page', () => page.getByText('This page could not be found.').waitFor());
+    await page.getByRole('link', { name: 'Back to Fio Radio' }).click();
+    await videoRows(page).first().waitFor();
+    check('navigation', 'the 404 link returns to the radio at /', new URL(page.url()).pathname === '/');
+    await page.goBack();
+    await page.getByText('This page could not be found.').waitFor();
+    check('navigation', 'browser back returns to the 404 page', page.url().endsWith('/nope'));
   },
 
   async paths() {
-    const legacy = await rawRequest('/karaoke?x=1');
-    check('paths', '/karaoke redirects to /radio with its query', legacy.status === 301 && legacy.headers.location === '/radio?x=1', `${legacy.status} ${legacy.headers.location}`);
+    for (const path of ['/radio', '/karaoke', '/cover', '/about', '/credits']) {
+      const moved = await rawRequest(`${path}?x=1`);
+      check('paths', `${path} redirects to / with its query`, moved.status === 301 && moved.headers.location === '/?x=1', `${moved.status} ${moved.headers.location}`);
+    }
+    check('paths', '/ answers 200', (await rawRequest('/')).status === 200);
     const statusOf = async (path, init) => (await rawRequest(path, init)).status;
     for (const path of ['/nope', '/..%2f..%2fpackage.json', '/%E0%A4%A', '/%FF', '//', '/robots.txt/x.js', '/a%00.js']) {
       check('paths', `${path} answers 404`, (await statusOf(path)) === 404);
     }
     check('paths', 'the server survives those requests', (await statusOf('/')) === 200);
-    const slash = await rawRequest('/about/');
-    check('paths', 'a trailing slash redirects', slash.status === 308 && slash.headers.location === '/about', slash.headers.location);
+    const slash = await rawRequest('/radio/');
+    check('paths', 'a trailing slash redirects', slash.status === 308 && slash.headers.location === '/radio', slash.headers.location);
     const offsite = await rawRequest('/.//evil.example/');
     check('paths', 'a redirect cannot leave the site', !String(offsite.headers.location).startsWith('//'), offsite.headers.location);
-    const range = await rawRequest('/piosayang.mp3', {
+    const range = await rawRequest('/pio_karaoke.webp', {
       headers: { Range: 'bytes=0-1' },
     });
-    check('paths', 'audio answers a range request', range.status === 206 && range.headers['content-range']?.startsWith('bytes 0-1/'));
+    check('paths', 'a static file answers a range request', range.status === 206 && range.headers['content-range']?.startsWith('bytes 0-1/'));
     const first = await rawRequest('/api/get-karaoke');
     const again = await rawRequest('/api/get-karaoke', {
       headers: { 'If-None-Match': first.headers.etag },
@@ -997,20 +919,119 @@ const journeys = {
     check('paths', 'unchanged data answers 304', first.status === 200 && again.status === 304);
   },
 
-  async mobile(page) {
-    await page.setViewportSize({ width: 390, height: 844 });
-    const { body: covers } = await api('/api/get-cover');
-    await page.goto(BASE + '/cover');
-    await page.locator('h2.text-2xl').waitFor();
-    await page.locator('header button').click();
-    const drawer = page.locator('div.absolute.inset-0.md\\:hidden');
-    await page.getByRole('heading', { name: 'Playlist' }).waitFor();
-    await step('mobile', 'choosing a video closes the playlist and plays it', async () => {
-      await drawer.locator('button', { hasText: covers[2].title }).first().click();
-      await page.waitForFunction(() => document.querySelector('div.absolute.inset-0.translate-x-full'));
-      await page.locator('h2.text-2xl').filter({ hasText: covers[2].title }).waitFor();
+  async info(page) {
+    const infoButton = page.getByRole('button', { name: 'About Fio Radio' });
+    const dialog = page.getByRole('dialog');
+    const focusedId = () => page.evaluate(() => document.activeElement?.id);
+    const panelFits = () =>
+      dialog.evaluate((el) => {
+        const box = el.getBoundingClientRect();
+        return { top: box.top, left: box.left, right: box.right, bottom: box.bottom, page: document.documentElement.scrollWidth, inner: innerWidth, innerHeight };
+      });
+    await page.goto(BASE + '/');
+    await videoRows(page).first().waitFor();
+    await step('info', 'the header has an info button and no back arrow to a home page', async () => {
+      const box = await infoButton.boundingBox();
+      if (!box || box.width < 40 || box.height < 40) throw new Error(`info button box ${JSON.stringify(box)}`);
+      if (await page.locator('header a:has(i.fa-arrow-left)').count()) throw new Error('a back link is still there');
+    });
+    await infoButton.click();
+    await dialog.waitFor();
+    await step('info', 'opening the panel labels the dialog, moves focus into it and shows both sections', async () => {
+      if ((await dialog.getAttribute('aria-modal')) !== 'true') throw new Error('aria-modal is not true');
+      const labelledBy = await dialog.getAttribute('aria-labelledby');
+      if (!labelledBy || !(await page.locator(`#${labelledBy}`).textContent()).includes('About Fio Radio')) throw new Error('aria-labelledby does not name the title');
+      if ((await focusedId()) !== 'karaoke-info-panel') throw new Error(`focus is on ${await focusedId()}`);
+      await dialog.getByRole('heading', { name: 'Who is Fiona' }).waitFor();
+      await dialog.getByRole('heading', { name: 'Credits' }).waitFor();
+      if ((await infoButton.getAttribute('aria-expanded')) !== 'true') throw new Error('aria-expanded is not true');
+    });
+    await step('info', 'the panel lists every credited name and the Fiona bio', async () => {
+      const text = await dialog.innerText();
+      for (const wanted of ['Keysenz', 'SuryaA', 'Bembot', 'Bang Nugs', 'ヤミアクマ', 'MaroonR19', 'handryaraart', 'Mystical White Rabbit', 'Metanoia Phase II']) {
+        if (!text.includes(wanted)) throw new Error(`missing ${wanted}`);
+      }
+    });
+    await step('info', 'every link opens a new tab safely and the profile links are present', async () => {
+      const links = await dialog.locator('a').evaluateAll((els) => els.map((a) => ({ href: a.href, target: a.target, rel: a.rel })));
+      const bad = links.filter((l) => l.target !== '_blank' || !l.rel.includes('noopener') || !l.rel.includes('noreferrer'));
+      if (bad.length) throw new Error(`unsafe links ${JSON.stringify(bad.slice(0, 2))}`);
+      for (const href of ['https://www.youtube.com/@FionaClearesta', 'https://twitter.com/FionaClearesta', 'https://virtualyoutuber.fandom.com/id/wiki/Fiona_Clearesta', 'https://discord.gg/vwfzuDFJA2']) {
+        if (!links.some((l) => l.href === href)) throw new Error(`no link to ${href}`);
+      }
+    });
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: join(out, 'info-desktop.png') });
+    await step('info', 'Escape closes the panel and returns focus to the info button', async () => {
+      await page.keyboard.press('Escape');
+      await dialog.waitFor({ state: 'detached' });
+      if ((await focusedId()) !== 'karaoke-info-button') throw new Error(`focus is on ${await focusedId()}`);
+    });
+    await step('info', 'the Close button closes it and returns focus to the info button', async () => {
+      await infoButton.click();
+      await dialog.waitFor();
+      await dialog.getByRole('button', { name: 'Close' }).click();
+      await dialog.waitFor({ state: 'detached' });
+      if ((await focusedId()) !== 'karaoke-info-button') throw new Error(`focus is on ${await focusedId()}`);
+    });
+    await step('info', 'a click on the backdrop closes it and a click inside the panel does not', async () => {
+      await infoButton.click();
+      await dialog.waitFor();
+      await dialog.getByRole('heading', { name: 'Credits' }).click();
+      await page.waitForTimeout(200);
+      if (!(await dialog.count())) throw new Error('a click inside closed the panel');
+      await page.mouse.click(5, 5);
+      await dialog.waitFor({ state: 'detached' });
+      if ((await focusedId()) !== 'karaoke-info-button') throw new Error(`focus is on ${await focusedId()}`);
+    });
+    await step('info', 'the panel sits above the player bar and the search stays usable after closing', async () => {
+      const { body: videos } = await api('/api/get-karaoke');
+      const rows = songRows(videos);
+      await (await songRowOf(page, videos, rows[await findRowIndex(rows, isPublic)])).click();
+      await page.locator('.fixed.bottom-0 h3').first().waitFor();
+      await infoButton.click();
+      await dialog.waitFor();
+      const barOnTop = await page.evaluate(() => {
+        const bar = document.querySelector('.fixed.bottom-0').getBoundingClientRect();
+        const hit = document.elementFromPoint(bar.left + bar.width / 2, bar.top + bar.height / 2);
+        return hit?.closest('.fixed.bottom-0') ? `${hit.tagName}.${hit.className}`.slice(0, 120) : '';
+      });
+      if (barOnTop) throw new Error(`the player bar is above the panel overlay: ${barOnTop}`);
+      await page.keyboard.press('Escape');
+      await dialog.waitFor({ state: 'detached' });
+      await page.getByPlaceholder('Search songs...').fill('x');
     });
 
+    await page.setViewportSize({ width: 375, height: 667 });
+    await page.goto(BASE + '/');
+    await videoRows(page).first().waitFor();
+    await infoButton.click();
+    await dialog.waitFor();
+    await page.waitForTimeout(300);
+    await step('info', 'at 375px the panel fits the screen and the page does not scroll sideways', async () => {
+      const f = await panelFits();
+      if (f.left < 0 || f.right > 375 || f.top < 0 || f.bottom > f.innerHeight || f.page > 375) throw new Error(JSON.stringify(f));
+      await page.screenshot({ path: join(out, 'info-375.png') });
+    });
+    await step('info', 'at 375px the panel scrolls to the end and the Close button stays visible', async () => {
+      const closeButton = dialog.getByRole('button', { name: 'Close' });
+      const scrolled = await dialog.evaluate((el) => {
+        const scrollable = el.scrollHeight > el.clientHeight;
+        el.scrollTop = el.scrollHeight;
+        return { scrollable, top: el.scrollTop };
+      });
+      if (!scrolled.scrollable || scrolled.top === 0) throw new Error(JSON.stringify(scrolled));
+      await page.waitForTimeout(200);
+      const box = await closeButton.boundingBox();
+      if (!box || box.width < 40 || box.height < 40 || box.x < 0 || box.x + box.width > 375 || box.y < 0 || box.y + box.height > 667) throw new Error(`close box ${JSON.stringify(box)}`);
+      await dialog.getByText('Maroon', { exact: true }).waitFor();
+      await page.screenshot({ path: join(out, 'info-375-scrolled.png') });
+      await closeButton.click();
+      await dialog.waitFor({ state: 'detached' });
+    });
+  },
+
+  async mobile(page) {
     await page.setViewportSize({ width: 375, height: 667 });
     const { body: videos } = await api('/api/get-karaoke');
     const rows = songRows(videos);
@@ -1022,7 +1043,7 @@ const journeys = {
           scroller: scroller.scrollWidth - scroller.clientWidth,
         };
       });
-    await page.goto(BASE + '/radio');
+    await page.goto(BASE + '/');
     await videoRows(page).first().waitFor();
     await page.waitForTimeout(400);
     await step('mobile', 'the karaoke list fits a 375px phone', async () => {
@@ -1091,9 +1112,7 @@ const journeys = {
   },
 
   async api() {
-    for (const route of ['/api/get-karaoke', '/api/get-cover']) {
-      check('api', `POST ${route} is rejected`, (await api(route, { method: 'POST' })).status === 405);
-    }
+    check('api', 'POST /api/get-karaoke is rejected', (await api('/api/get-karaoke', { method: 'POST' })).status === 405);
     const { body: videos } = await api('/api/get-karaoke');
     const mismatches = [];
     for (const v of videos) {
@@ -1102,7 +1121,7 @@ const journeys = {
       if (expected !== undefined && v.is_gone !== expected) mismatches.push(`${v.video_url} oembed ${status} is_gone ${v.is_gone}`);
     }
     check('api', 'is_gone matches oEmbed for every video', mismatches.length === 0 && videos.every((v) => typeof v.is_gone === 'boolean'), mismatches.slice(0, 3).join(' | '));
-    for (const route of ['/api/post-karaoke', '/api/update-cover', '/api/update-karaoke', '/api/webhook', '/input_video']) {
+    for (const route of ['/api/get-cover', '/api/post-karaoke', '/api/update-cover', '/api/update-karaoke', '/api/webhook', '/input_video']) {
       check('api', `${route} no longer exists`, (await api(route, { method: 'GET' })).status === 404);
     }
   },

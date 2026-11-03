@@ -11,11 +11,10 @@ A visitor plays a video, and the page and the YouTube player stay in agreement.
 - `player-unavailable` skips a video YouTube refuses, with every song that shares it, and lands on the first song of a random other live video. With autoplay off, or when nothing later is left, the same song stays paused and the bar says `This stream is gone`, with no toast.
 - `player-autoplay` is a switch in the bar (role `switch`, name `Autoplay`), on by default and saved in `localStorage` under `karaoke-autoplay`. Off, a video end with an empty queue keeps the same song, paused, and a failed video stays on it. The queue still plays either way.
 - `player-skip-toast` shows a toast saying why a different song started: `"<title>" was skipped because its stream is gone.` Consecutive dead videos keep the first title and say `and <n> more their streams are gone`. It dismisses itself after 6 seconds or on the close button, and shows nothing when no skip happened.
-- `cover-autoplay` moves to the next cover at video end when autoplay is on.
 
 ## How to get to it (user POV)
 
-- Choose a song on `/radio`, or open `/cover`.
+- Choose a song on `/`.
 
 ## Driving it with drive.mjs
 
@@ -23,7 +22,7 @@ Preconditions:
 
 - The network reaches YouTube.
 
-- **All.** Run `node drive.mjs player unavailable coverPlayer`. The journey reads `is_gone` from the API to tell live videos from gone ones and drives the player through `window.YT.get`.
+- **All.** Run `node drive.mjs player unavailable`. The journey reads `is_gone` from the API to tell live videos from gone ones and drives the player through `window.YT.get`.
 - **Autoplay.** The `player` journey expects the switch on by default and inside a 375px bar with a touch target of at least 40px. It also starts the last song of a live video, seeks near the end, and expects a new player on the first song (`start=` its timestamp) of a different live video. Then it turns the switch off, seeks near the end, and expects the same song, paused, in the same iframe. After a reload `karaoke-autoplay` is `false` and the switch is off. A page with blocked storage still renders with the switch on.
 - **Proof.** Open `player-expanded.png` and `results.json` in the evidence folder.
 

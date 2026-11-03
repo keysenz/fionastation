@@ -1,6 +1,6 @@
 ---
 name: verify
-description: Launch and drive the Fiona Station website (Foldkit pages for Fio Radio, covers, about, credits, and its read-only JSON API) in a real browser, locally or on the devbox, and capture proof. Use to confirm any UI, API, data-layer, or dependency change works in the real app.
+description: Launch and drive the Fiona Station website (the single Foldkit page of Fio Radio with its info panel, and its read-only JSON API) in a real browser, locally or on the devbox, and capture proof. Use to confirm any UI, API, data-layer, or dependency change works in the real app.
 ---
 
 # Verify Fiona Station
@@ -39,16 +39,16 @@ Run this first whenever something looks wrong. It only reads.
 .claude/skills/verify/doctor.sh
 ```
 
-Require `server: ours`, the expected Foldkit version, and non-zero counts for songs and covers. With `BASE_URL` set, it skips the ownership line.
+Require `server: ours`, the expected Foldkit version, and a non-zero count of songs. With `BASE_URL` set, it skips the ownership line.
 
 ## Drive
 
 ```sh
 (cd .claude/skills/verify && node drive.mjs)                 # every journey
-(cd .claude/skills/verify && node drive.mjs karaoke cover)   # chosen journeys
+(cd .claude/skills/verify && node drive.mjs karaoke info)   # chosen journeys
 ```
 
-The journeys are `site`, `radio`, `karaoke`, `cover`, `player`, `queueReorder`, `queueReorderTouch`, `unavailable`, `coverPlayer`, `fetchFailure`, `storage`, `navigation`, `paths`, `mobile`, and `api`. `features/README.md` maps each one to what it proves. The exit code is non-zero if any check fails.
+The journeys are `site`, `radio`, `karaoke`, `player`, `queueReorder`, `queueReorderTouch`, `unavailable`, `fetchFailure`, `storage`, `navigation`, `paths`, `info`, `mobile`, and `api`. `features/README.md` maps each one to what it proves. The exit code is non-zero if any check fails.
 
 ## Evidence
 

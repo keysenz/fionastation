@@ -22,9 +22,8 @@ This directory is the maintained source for verifying the user-facing behavior o
 
 ## Features
 
-- [Fio Radio](./karaoke.md) covers the `/radio` page (karaoke, cover and original videos in one list), the `/karaoke` redirect, the song list, search, player, queue, queue reordering by mouse, touch and keyboard, and reload.
-- [Covers](./cover.md) covers the cover player, its controls, and playlist search.
-- [Site pages](./site.md) covers the home menu, background image, static pages, and security headers.
+- [Fio Radio](./karaoke.md) covers the `/` page (karaoke, cover and original videos in one list), the song list, search, player, queue, queue reordering by mouse, touch and keyboard, and reload.
+- [Site](./site.md) covers the background image, the info panel with Who is Fiona and the Credits, the old page redirects, and security headers.
 - [Data API](./api.md) covers the read-only routes and the removed write routes.
 - [Player](./player.md) covers real playback, the video end, and the player's reports back to the page.
 - [Resilience](./resilience.md) covers failed fetches, bad data, blocked or corrupt saved data, two tabs, and bad paths.

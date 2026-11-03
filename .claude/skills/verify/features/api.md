@@ -1,17 +1,17 @@
 # Data API
 
-The pages read two JSON routes. The site never writes data, because the discord bot's `/setlist` command is the only way to change songs.
+The page reads one JSON route. The site never writes data, because the discord bot's `/setlist` command is the only way to change songs.
 
 ## Sub-features
 
-- `api-read` serves `/api/get-karaoke` and `/api/get-cover`.
+- `api-read` serves `/api/get-karaoke`.
 - `api-gone` marks each karaoke video with `is_gone`, learned from YouTube's oEmbed endpoint at startup and hourly.
 - `api-methods` rejects anything but GET.
-- `api-removed` confirms that the old write routes and form no longer exist.
+- `api-removed` confirms that the old write routes, the form and `/api/get-cover` no longer exist.
 
 ## How to get to it (user POV)
 
-- The Fio Radio (`/radio`) and cover pages call these routes. `/api/get-karaoke` returns every kind, each video with a `kind` of `karaoke`, `cover` or `original`.
+- Fio Radio (`/`) calls this route. `/api/get-karaoke` returns every kind, each video with a `kind` of `karaoke`, `cover` or `original`.
 - Run `curl` against a route directly.
 
 ## Driving it with drive.mjs
@@ -21,8 +21,8 @@ Preconditions:
 - Doctor reports non-zero counts.
 
 - **Gone.** The `api` journey compares `is_gone` of every video with oEmbed (200 is live, 401, 403 and 404 are gone). The `setup` check waits up to 120 seconds for the server to report some gone video after it starts.
-- **Methods.** Run `node drive.mjs api`. A POST to each read route returns 405.
-- **Removed.** The journey requests `/api/post-karaoke`, `/api/update-cover`, `/api/update-karaoke`, `/api/webhook`, and `/input_video`. Each returns 404.
+- **Methods.** Run `node drive.mjs api`. A POST to the read route returns 405.
+- **Removed.** The journey requests `/api/get-cover`, `/api/post-karaoke`, `/api/update-cover`, `/api/update-karaoke`, `/api/webhook`, and `/input_video`. Each returns 404.
 - **Proof.** Open `results.json` in the evidence folder.
 
 ## Gotchas
