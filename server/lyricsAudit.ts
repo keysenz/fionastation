@@ -1,8 +1,6 @@
-// Maintainer script. Judges every distinct title in the archive the way the site does and prints
-// a TSV, so the Unsure rows can become entries in lyrics-overrides.json.
 //   node server/lyricsAudit.ts [--from <get-karaoke.json path or url>] > audit.tsv
 //   node server/lyricsAudit.ts "Title" ["Artist"]   one title: candidates and a paste-ready fix
-// Reads the database named by DATABASE_PATH unless --from is given. Serial, one second apart.
+// Reads the database named by DATABASE_PATH unless --from is given.
 import { readFileSync } from 'node:fs'
 
 import type { KaraokeVideo } from '../src/domain.ts'
@@ -92,7 +90,6 @@ async function auditAll(from: string | undefined): Promise<void> {
   for (const song of songsOf(await loadVideos(from))) {
     const key = normalizeTitle(song.title)
     const known = byTitle.get(key)
-    // A cover or original carries an artist hint, so it represents the title.
     if (!known || (known.kind === 'karaoke' && song.kind !== 'karaoke')) {
       byTitle.set(key, song)
     }

@@ -77,7 +77,6 @@ interface LyricsSongRow {
   kind: VideoKind
 }
 
-/** The song with the length of its slot: the time up to the next song in the same video. */
 export function findSongForLyrics(id: string): SongForLyrics | undefined {
   const row = db()
     .prepare(

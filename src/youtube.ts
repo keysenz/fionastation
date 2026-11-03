@@ -65,7 +65,6 @@ export const PlayerEvent = defineTaggedUnion({
 export type PlayerEvent = typeof PlayerEvent.Type
 
 const PROGRESS_INTERVAL = Duration.millis(250)
-// NOTE: a paused player stays under this, so it sends nothing and the page does not re-render for it.
 const PROGRESS_EPSILON_SECONDS = 0.05
 
 const VIDEO_UNAVAILABLE = 'This video is not available on YouTube'

@@ -6,7 +6,6 @@ export type SongForLyrics = Readonly<{
   title: string
   videoTitle: string
   kind: VideoKind
-  /** Seconds from this song's timestamp to the next one in its video. Unknown for the last song. */
   spanSeconds?: number
 }>
 
@@ -74,7 +73,6 @@ const VERSION_BRACKET = new RegExp(
 const VERSION_DASH_SUFFIX =
   /\s[-–]\s.*\b(?:remaster(?:ed)?|live|version|ver\.|mix|edit)\b.*$/iu
 
-/** NFKC, lowercase, drop version brackets and " - ... remaster" suffixes, collapse punctuation and space. */
 export function normalizeTitle(title: string): string {
   return title
     .normalize('NFKC')
@@ -91,8 +89,6 @@ const normalizeArtist = (artist: string): string =>
 const NOISE_SEGMENT =
   /\b(?:cover|fiona|clearesta|fioyow|fioyoyow|fio|vtuber|ft|feat)\b/iu
 
-/** Covers and originals only. Splits the video title around " - ", " / " or " | ", drops the side that
- *  holds the song title, and returns the one remaining side that is not credit noise. */
 export function artistHintOf(song: SongForLyrics): string | undefined {
   if (song.kind === 'karaoke') return undefined
   const songKey = normalizeTitle(song.title)
@@ -122,8 +118,6 @@ export function artistHintOf(song: SongForLyrics): string | undefined {
 const addSeconds = (a: number | undefined, b: number | undefined): number =>
   (a ?? 0) + (b ?? 0)
 
-/** A song fix beats a title fix for the match. Offsets add. A song fix whose
- *  title guard no longer matches is ignored and reported through `ignoredSongFix`. */
 export function planLookup(
   song: SongForLyrics,
   overrides: Overrides,
@@ -166,7 +160,6 @@ export function planLookup(
   return { plan, offsetMs, ignoredSongFix }
 }
 
-/** Stable cache key for a plan, shared by every occurrence of a title. */
 export function planKey(plan: LookupPlan): string {
   switch (plan.kind) {
     case 'Hide':
@@ -180,7 +173,6 @@ export function planKey(plan: LookupPlan): string {
 
 const LRC_STAMP = /\[(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?\]/gu
 
-/** Multi-stamp lines, metadata tags ignored, sorted by time, empty text kept. */
 export function parseLrc(text: string): LyricLine[] {
   const lines: LyricLine[] = []
   for (const row of text.split(/\r?\n/u)) {
@@ -265,7 +257,6 @@ const picked = (group: ReadonlyArray<Candidate>): Verdict => {
     : { kind: 'Missing', reason: 'NotFound' }
 }
 
-/** A track a maintainer named by id. It skips the title and artist checks, and keeps only the lines check. */
 export function verdictForChosenTrack(track: LrclibTrack): Verdict {
   const lines = track.syncedLyrics ? parseLrc(track.syncedLyrics) : []
   return isNonEmpty(lines)
@@ -276,10 +267,6 @@ export function verdictForChosenTrack(track: LrclibTrack): Verdict {
 const UNSURE: Verdict = { kind: 'Missing', reason: 'Unsure' }
 const NOT_FOUND: Verdict = { kind: 'Missing', reason: 'NotFound' }
 
-/** The refusal rule. Needs an exact title with synced lyrics that pass the sanity checks. With an
- *  artist, only that artist's tracks count. Without one, exactly one artist must hold at least two
- *  entries, so a lone wrong-artist entry never wins. `spanSeconds` vetoes tracks too long for the
- *  song's slot in its stream. */
 export function judgeCandidates(
   plan: SearchPlan,
   tracks: ReadonlyArray<LrclibTrack>,
@@ -379,7 +366,6 @@ const parseFix = (value: unknown, path: string): LyricsFix => {
   }
 }
 
-/** Throws with a JSON path on the first problem, including title keys that are not already normalized. */
 export function parseOverrides(json: unknown): Overrides {
   if (!isRecord(json)) throw new Error('$: expected an object')
   for (const key of Object.keys(json)) {

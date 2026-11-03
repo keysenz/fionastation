@@ -12,8 +12,6 @@ const USER_AGENT =
 
 const RETRY_DELAYS_MS = [400, 1_200]
 
-/** LRCLIB is rate limiting, failing or slow. The caller does not cache. Only a rate limit
- *  carries `retryAfterSeconds`, and only a rate limit should make the caller back off. */
 export class LrclibUnavailable extends Error {
   readonly isRateLimited: boolean
   readonly isRetryable: boolean
@@ -41,7 +39,6 @@ export type StatusClass =
   | 'Transient'
   | 'Rejected'
 
-/** 5xx is LRCLIB flaking at random, so a retry is worth it. Other 4xx will not change. */
 export const classifyStatus = (status: number): StatusClass => {
   if (status >= 200 && status < 300) return 'Ok'
   if (status === 404) return 'Miss'
@@ -124,7 +121,6 @@ async function attempt(path: string, expectArray: boolean): Promise<unknown> {
   })
 }
 
-/** LRCLIB answers 503 on a random share of identical requests, so one failure says little. */
 async function request(path: string, expectArray = false): Promise<unknown> {
   for (let tries = 0; ; tries++) {
     try {
@@ -160,8 +156,6 @@ const hasExactSyncedTitle = (
   )
 }
 
-/** Searches by track (and artist) name. Only when that finds no synced track with the exact
- *  title does it make one free-text request. At most two requests. */
 export async function searchTracks(plan: SearchPlan): Promise<LrclibTrack[]> {
   const byName = new URLSearchParams({ track_name: plan.title })
   if (plan.artist !== undefined) byName.set('artist_name', plan.artist)

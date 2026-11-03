@@ -25,8 +25,6 @@ const MAX_IN_FLIGHT = 2
 const DEFAULT_PAUSE_MS = 60_000
 const CACHE_TTL_MS = 24 * 3600_000
 
-/** Throws with a JSON path, so a broken fix file stops the server instead of silently
- *  dropping a `hide` entry. */
 export function loadOverrides(path: string): Overrides {
   try {
     return parseOverrides(JSON.parse(readFileSync(path, 'utf8')))
@@ -92,7 +90,6 @@ async function fetchTracks(
   if (plan.kind === 'Search') {
     const key = normalizeTitle(plan.title)
     const tracks = await searchTracks(plan)
-    // NOTE: only exact-title synced tracks can ever be judged, so only they stay in memory.
     return tracks.filter(
       track =>
         track.syncedLyrics !== null && normalizeTitle(track.trackName) === key,
@@ -101,14 +98,11 @@ async function fetchTracks(
   return []
 }
 
-/** Only a rate limit pauses every lookup. Other failures are random and already retried. */
 export const pauseMsFor = (error: LrclibUnavailable): number | undefined =>
   error.isRateLimited
     ? (error.retryAfterSeconds ?? DEFAULT_PAUSE_MS / 1000) * 1000
     : undefined
 
-/** Cache, then single-flight, then at most two requests at once. A failure is never
- *  cached, and a rate limit pauses every lookup. */
 async function tracksFor(
   plan: LookupPlan,
 ): Promise<ReadonlyArray<LrclibTrack>> {

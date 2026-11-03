@@ -137,9 +137,7 @@ export const Model = Schema.Struct({
   maybeSelectedVideoId: Schema.Option(Schema.String),
   maybeQueueDrag: Schema.Option(QueueDrag),
   maybePlayhead: Schema.Option(Playhead),
-  // NOTE: a key means the fetch has started, which keeps asking for the same lyrics idempotent.
   lyricsBySongId: Schema.Record(Schema.String, LyricsData.schema),
-  // NOTE: delayed retries spent per song this session. A manual retry resets it.
   lyricsAutoRetries: Schema.Record(Schema.String, Schema.Number),
   lyricNudges: Nudges,
 })
@@ -634,15 +632,11 @@ export const allSongs = (model: Model): ReadonlyArray<PlayableSong> =>
 
 export type NowSinging = Readonly<{
   segment: Segment
-  /** None until the fetch for this song has started. */
   maybeLyrics: Option.Option<AsyncData.AsyncData<Lyrics, string>>
   nudge: NudgeSteps
-  /** Before whenever the lyrics are not synced. */
   cursor: LyricCursor
 }>
 
-/** The song being sung and where its lyrics are, worked out from the video's position. The
- *  clicked song is only where the stream started, so nothing else stores this. */
 export const nowSingingOf = (model: Model): Option.Option<NowSinging> =>
   Option.gen(function* () {
     const nowPlaying = yield* model.setlist.maybeNowPlaying
@@ -677,7 +671,6 @@ export const nowSingingOf = (model: Model): Option.Option<NowSinging> =>
     return { segment, maybeLyrics, nudge: nudgeSteps, cursor }
   })
 
-/** Starts the fetch for every song that has none yet. A song in any state is left alone. */
 const ensureLyrics = (
   model: Model,
   songIds: ReadonlyArray<string>,
@@ -697,8 +690,6 @@ const ensureLyrics = (
   }
 }
 
-/** The song now being sung and the one after it, so the next song's lyrics are there
- *  before it starts. */
 const currentAndNextSongIds = (model: Model): ReadonlyArray<string> =>
   Option.match(nowSingingOf(model), {
     onNone: () => [],

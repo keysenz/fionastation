@@ -31,7 +31,6 @@ export const Lyrics = defineTaggedUnion({
 })
 export type Lyrics = typeof Lyrics.Type
 
-/** Where the video is, tied to the play that reported it so another play never reads it. */
 export const Playhead = Schema.Struct({
   playId: Schema.Number,
   seconds: Schema.Number,
@@ -41,7 +40,6 @@ export type Playhead = typeof Playhead.Type
 export const NUDGE_LIMIT = 40
 export const NUDGE_STEP_MS = 500
 
-/** Half-second steps. Positive means the lyrics run later. Always within the limit. */
 export const NudgeSteps = Schema.Int.pipe(Schema.brand('NudgeSteps'))
 export type NudgeSteps = typeof NudgeSteps.Type
 
@@ -50,14 +48,12 @@ export const noNudge = NudgeSteps.make(0)
 const toSteps = (steps: number): NudgeSteps =>
   NudgeSteps.make(Math.max(-NUDGE_LIMIT, Math.min(NUDGE_LIMIT, steps)))
 
-/** Keyed by song id, since a rough timestamp belongs to one occurrence in one stream. Never holds a zero. */
 export const Nudges = Schema.Record(Schema.String, NudgeSteps)
 export type Nudges = typeof Nudges.Type
 
 export const nudgeOf = (nudges: Nudges, songId: string): NudgeSteps =>
   Option.getOrElse(Record.get(nudges, songId), () => noNudge)
 
-/** Clamps to the limit and removes the entry when it reaches zero. */
 export const nudge = (nudges: Nudges, songId: string, by: -1 | 1): Nudges => {
   const next = toSteps(nudgeOf(nudges, songId) + by)
   return next === 0
@@ -69,7 +65,6 @@ const NudgesJson = Schema.fromJsonString(
   Schema.Record(Schema.String, Schema.Unknown),
 )
 
-/** Missing or corrupt data gives no nudges. A corrupt entry is dropped and the valid ones stay. */
 export const parseNudges = (maybeJson: Option.Option<string>): Nudges =>
   Option.match(
     Option.flatMap(maybeJson, Schema.decodeUnknownOption(NudgesJson)),
@@ -88,7 +83,6 @@ export const parseNudges = (maybeJson: Option.Option<string>): Nudges =>
 
 export const toNudgesJson = (nudges: Nudges): string => JSON.stringify(nudges)
 
-/** A song's span in its video: from its timestamp to the next song's. */
 export type Segment = Readonly<{
   song: PlayableSong
   startSeconds: number
@@ -113,9 +107,6 @@ const spansOf = (
   }))
 }
 
-/** The song being sung at `seconds` in the video of `playing`, which is only the song that
- *  was clicked and that the stream then moves past. Falls back to `playing` alone when the
- *  archive lacks its video. None before the first song of the stream. */
 export const segmentAt = (
   archive: ReadonlyArray<PlayableSong>,
   playing: PlayableSong,
@@ -126,7 +117,6 @@ export const segmentAt = (
     segment => segment.startSeconds <= seconds,
   )
 
-/** The song after `segment` in its video, whose lyrics are fetched ahead of time. */
 export const nextSegmentSong = (
   archive: ReadonlyArray<PlayableSong>,
   segment: Segment,
@@ -158,10 +148,8 @@ export const LyricCursor = defineTaggedUnion({
 })
 export type LyricCursor = typeof LyricCursor.Type
 
-/** The last line stays lit this long, then the song counts as over. */
 const AFTER_LAST_LINE_MS = 8000
 
-/** The last line starting at or before `ms`, found by binary search. */
 export const cursorAt = (
   lines: Array.NonEmptyReadonlyArray<LyricLine>,
   ms: number,

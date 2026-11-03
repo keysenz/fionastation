@@ -50,10 +50,8 @@ type ApiReply = Readonly<{
 }>
 
 const NO_CACHE = 'no-cache'
-// NOTE: the Vercel CDN keeps lyrics for an hour, so a fix to the overrides file shows up within the hour.
 const LYRICS_CACHE = 'public, max-age=3600, s-maxage=3600'
 
-// NOTE: an invalid file throws here on purpose. A broken file could bring back lyrics a `hide` entry held back.
 const lyricsOverrides = loadOverrides(
   join(import.meta.dirname, 'lyrics-overrides.json'),
 )

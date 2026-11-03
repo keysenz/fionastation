@@ -12,8 +12,6 @@ import {
 } from '../../lyrics.ts'
 import { Message, type NowSinging } from './karaoke'
 
-// NOTE: every row has this fixed height, so the line column is placed by arithmetic on the
-// cursor and the page never measures the DOM.
 const ROW_REM = 3.25
 
 const MISSING_TEXT: Record<MissingReason, string> = {
@@ -34,7 +32,6 @@ const syncedOf = (singing: NowSinging): Option.Option<SyncedLyrics> =>
       }),
   )
 
-/** The line being sung, for the bars. None before the first line, after the last, and in a gap. */
 export const currentLineOf = (singing: NowSinging): Option.Option<string> =>
   Option.flatMap(syncedOf(singing), ({ lines }) =>
     LyricCursor.match(singing.cursor, {
@@ -48,7 +45,6 @@ export const currentLineOf = (singing: NowSinging): Option.Option<string> =>
     }),
   )
 
-/** True when the panel has something to show, so a hidden song takes no room. */
 export const hasLyricsPanel = (singing: NowSinging): boolean =>
   Option.match(Option.flatMap(singing.maybeLyrics, AsyncData.getData), {
     onNone: () => true,
@@ -211,7 +207,6 @@ const nudgeControlsView = (
   )
 }
 
-/** Which song the lyrics are for, only when the stream has moved past the song that was clicked. */
 const captionView = (
   singing: NowSinging,
   clickedSongId: string,
@@ -224,8 +219,6 @@ const captionView = (
         [`Now singing: ${singing.segment.song.song_title}`],
       )
 
-/** The lyrics, or why there are none, filling a box of the caller's size. The caller
- *  puts the nudge controls and credit below it. */
 const lyricsBodyView = (
   singing: NowSinging,
   boxClass: string,
@@ -260,7 +253,6 @@ const lyricsBodyView = (
 const creditOf = (singing: NowSinging): Option.Option<LyricsCredit> =>
   Option.map(syncedOf(singing), ({ credit }) => credit)
 
-/** The column beside the video on wider screens. */
 export const lyricsColumnView = (
   singing: NowSinging,
   clickedSongId: string,
@@ -280,7 +272,6 @@ export const lyricsColumnView = (
       )
     : h.empty
 
-/** Five lines between the title and the controls on phones. */
 export const lyricsWindowView = (
   singing: NowSinging,
   clickedSongId: string,
