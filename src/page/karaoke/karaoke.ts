@@ -29,6 +29,13 @@ import {
 } from '../../domain.ts'
 import { PlayerEvent, playerEvents, setPlaying } from '../../youtube'
 import {
+  type Layers,
+  OVERLAYS,
+  classifyChange,
+  layersToUrl,
+  parseLayers,
+} from './layers.ts'
+import {
   Advance,
   type Continuation,
   PickCause,
@@ -133,6 +140,9 @@ export const Message = defineMessageUnion({
   ClickedDismissToast: {},
   ClickedToggleAutoplay: {},
   ClickedCycleRepeat: {},
+  ChangedLayers: { search: Schema.String },
+  OpenedFromUrl: { search: Schema.String },
+  CompletedSyncUrl: {},
   StartedQueueDrag: { index: Schema.Number },
   DraggedOverQueueSlot: { index: Schema.Number },
   DroppedQueueSong: { index: Schema.Number },
@@ -270,6 +280,33 @@ export const SaveAutoplay = Command.define('SaveAutoplay', {
       try: () => window.localStorage.setItem(AUTOPLAY_KEY, String(isAutoplay)),
       catch: () => 'storage is blocked or full',
     }).pipe(Effect.ignore, Effect.as(Message.CompletedSaveAutoplay())),
+})
+
+export const SyncUrl = Command.define('SyncUrl', {
+  args: {
+    url: Schema.String,
+    change: Schema.Literals(['OpenVideo', 'OpenOverlay', 'Replace', 'Close']),
+  },
+  messages: [Message.CompletedSyncUrl],
+  execute: ({ url, change }) =>
+    Effect.sync(() => {
+      const { history } = window
+      const state: unknown = history.state
+      const isOurEntry =
+        typeof state === 'object' && state !== null && 'fkLayer' in state
+      const push = () => history.pushState({ fkLayer: true }, '', url)
+      const replace = () => history.replaceState(state, '', url)
+      if (change === 'OpenOverlay') {
+        push()
+      } else if (change === 'OpenVideo') {
+        window.matchMedia('(min-width: 768px)').matches ? replace() : push()
+      } else if (change === 'Close' && isOurEntry) {
+        history.back()
+      } else {
+        replace()
+      }
+      return Message.CompletedSyncUrl()
+    }),
 })
 
 export const LoadRepeat = Command.define('LoadRepeat', {
@@ -477,6 +514,24 @@ const continuationOf = (model: Model): Continuation => {
 const parseAutoplay = (maybeValue: Option.Option<string>): boolean =>
   !Option.contains(maybeValue, 'false')
 
+export const layersOf = (model: Model): Layers => ({
+  maybeVideoId: model.maybeSelectedVideoId,
+  overlays: OVERLAYS.filter(overlay =>
+    overlay === 'queue'
+      ? model.isQueueOpen
+      : overlay === 'player'
+        ? model.isExpanded
+        : model.isInfoOpen,
+  ),
+})
+
+const applyLayers = ({ maybeVideoId, overlays }: Layers) => ({
+  maybeSelectedVideoId: () => maybeVideoId,
+  isQueueOpen: () => overlays.includes('queue'),
+  isExpanded: () => overlays.includes('player'),
+  isInfoOpen: () => overlays.includes('info'),
+})
+
 /** Anything but a saved mode name means Off, so corrupt data repeats nothing. */
 const parseRepeat = (maybeValue: Option.Option<string>): Repeat =>
   Option.getOrElse(
@@ -540,7 +595,7 @@ const withSkipToast = (
       Option.some(addSkip(maybeToast, failedTitle, dismissId)),
   })
 
-export const update = (model: Model, message: Message) =>
+const updateModel = (model: Model, message: Message) =>
   Message.match<UpdateReturn>(message, {
     SucceededFetchSongs: ({ songs, goneVideoIds }) => ({
       model: modifyFields(model, {
@@ -866,6 +921,18 @@ export const update = (model: Model, message: Message) =>
       model: modifyFields(model, { repeat: () => parseRepeat(maybeValue) }),
     }),
 
+    ChangedLayers: ({ search }) => ({
+      model: modifyFields(model, applyLayers(parseLayers(search))),
+    }),
+
+    OpenedFromUrl: ({ search }) => ({
+      model: modifyFields(model, {
+        maybeSelectedVideoId: () => parseLayers(search).maybeVideoId,
+      }),
+    }),
+
+    CompletedSyncUrl: () => ({ model }),
+
     ClickedDismissToast: () => ({
       model: modifyFields(model, { maybeSkipToast: () => Option.none() }),
     }),
@@ -887,3 +954,31 @@ export const update = (model: Model, message: Message) =>
     CompletedFocusInfoPanel: () => ({ model }),
     CompletedFocusInfoButton: () => ({ model }),
   })
+
+/** The address bar follows the open layers, so the browser's Back button closes
+ *  the topmost one. A change that came from the address bar already has its
+ *  entry, so it only repairs a URL that says something the model does not. */
+export const update = (model: Model, message: Message): UpdateReturn => {
+  const result = updateModel(model, message)
+  const sync = (change: 'OpenVideo' | 'OpenOverlay' | 'Replace' | 'Close') =>
+    SyncUrl({ url: layersToUrl(layersOf(result.model)), change })
+  const fromUrl =
+    message._tag === 'ChangedLayers' || message._tag === 'OpenedFromUrl'
+  const change = fromUrl
+    ? layersToUrl(parseLayers(message.search)) ===
+      layersToUrl(layersOf(result.model))
+      ? 'Unchanged'
+      : 'Replace'
+    : classifyChange(layersOf(model), layersOf(result.model))
+  return change === 'Unchanged'
+    ? result
+    : { ...result, commands: [...(result.commands ?? []), sync(change)] }
+}
+
+/** The address bar moved, for example by the Back button. */
+export const changedLayers = (model: Model, search: string): UpdateReturn =>
+  update(model, Message.ChangedLayers({ search }))
+
+/** The page was opened on an address, maybe a link to one video. */
+export const openedFromUrl = (model: Model, search: string): UpdateReturn =>
+  update(model, Message.OpenedFromUrl({ search }))

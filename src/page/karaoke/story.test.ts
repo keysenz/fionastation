@@ -22,12 +22,14 @@ import {
   SaveSetlist,
   ScrollListToTop,
   ScrollSetlistToTop,
+  SyncUrl,
   type UpdateReturn,
   WaitBeforeDismissToast,
   entered,
   init,
   update,
 } from './karaoke'
+import { layersToUrl, parseLayers } from './layers.ts'
 import { emptySetlist, restoreSaved, toPersistedJson } from './setlist.ts'
 
 const makeSong = (
@@ -46,6 +48,7 @@ const makeSong = (
 })
 const [a, b] = [makeSong('a'), makeSong('b')]
 const a2 = makeSong('a2', a.video_url)
+const synced = Command.resolve(SyncUrl, Message.CompletedSyncUrl())
 const saved = Command.resolve(SaveSetlist, Message.CompletedSaveSetlist())
 
 const pickedFor = (
@@ -771,14 +774,17 @@ test('clicking a video selects it and scrolls its setlist to the top, and Back r
     update,
     given(init()),
     message(Message.ClickedVideo({ videoId: 'v1' })),
-    Command.expectHas(ScrollSetlistToTop),
+    Command.expectHas(ScrollSetlistToTop, SyncUrl),
     Command.resolve(ScrollSetlistToTop, Message.CompletedScrollSetlistToTop()),
+    synced,
     message(Message.ClickedVideo({ videoId: 'v2' })),
     Command.resolve(ScrollSetlistToTop, Message.CompletedScrollSetlistToTop()),
+    synced,
     model(current => {
       expect(current.maybeSelectedVideoId).toEqual(Option.some('v2'))
     }),
     message(Message.ClickedBackToVideos()),
+    synced,
     model(current => {
       expect(current.maybeSelectedVideoId).toEqual(Option.none())
     }),
@@ -791,6 +797,7 @@ test('searching keeps the chosen video, so clearing the search restores it', () 
     given(init()),
     message(Message.ClickedVideo({ videoId: 'v1' })),
     Command.resolve(ScrollSetlistToTop, Message.CompletedScrollSetlistToTop()),
+    synced,
     message(Message.UpdatedSearch({ value: 'tabako' })),
     Command.resolve(ScrollListToTop, Message.CompletedScrollListToTop()),
     Command.resolve(ScrollSetlistToTop, Message.CompletedScrollSetlistToTop()),
@@ -914,6 +921,7 @@ test('the info button opens the panel and moves focus into it', () => {
     given(init()),
     message(Message.ClickedToggleInfo()),
     Command.resolve(FocusInfoPanel, Message.CompletedFocusInfoPanel()),
+    synced,
     model(current => {
       expect(current.isInfoOpen).toBe(true)
     }),
@@ -926,8 +934,10 @@ test('the info button closes the panel and returns focus to itself', () => {
     given(init()),
     message(Message.ClickedToggleInfo()),
     Command.resolve(FocusInfoPanel, Message.CompletedFocusInfoPanel()),
+    synced,
     message(Message.ClickedToggleInfo()),
     Command.resolve(FocusInfoButton, Message.CompletedFocusInfoButton()),
+    synced,
     model(current => {
       expect(current.isInfoOpen).toBe(false)
     }),
@@ -940,6 +950,7 @@ test('the close message, sent by Escape, the Close button and the backdrop, clos
     given({ ...init(), isInfoOpen: true }),
     message(Message.ClickedCloseInfo()),
     Command.resolve(FocusInfoButton, Message.CompletedFocusInfoButton()),
+    synced,
     model(current => {
       expect(current.isInfoOpen).toBe(false)
     }),
@@ -1163,4 +1174,95 @@ test('Next under repeat One still moves to the queue head and does not requeue',
       expect(queueOf(current)).toEqual([])
     }),
   )
+})
+
+const syncOf = (result: UpdateReturn) =>
+  result.commands?.find(({ name }) => name === SyncUrl.name)?.args
+
+const run = (
+  start: Model,
+  messages: ReadonlyArray<Message>,
+): ReadonlyArray<unknown> => {
+  let current = start
+  return messages.map(next => {
+    const result = update(current, next)
+    current = result.model
+    return syncOf(result)
+  })
+}
+
+test('layers read from and write to the address, in a fixed order', () => {
+  expect(layersToUrl(parseLayers(''))).toBe('/')
+  expect(layersToUrl(parseLayers('?v=abc&o=player,queue'))).toBe(
+    '/?v=abc&o=queue%2Cplayer',
+  )
+  expect(parseLayers('?o=nonsense,info').overlays).toEqual(['info'])
+  expect(parseLayers('?v=').maybeVideoId).toEqual(Option.none())
+})
+
+test('opening a layer asks to push its address, and closing asks to pop it', () => {
+  expect(
+    run(init(), [
+      Message.ClickedQueueHandle(),
+      Message.ClickedToggleExpanded(),
+      Message.ClickedCollapse(),
+      Message.ClickedQueueHandle(),
+    ]),
+  ).toEqual([
+    { url: '/?o=queue', change: 'OpenOverlay' },
+    { url: '/?o=queue%2Cplayer', change: 'OpenOverlay' },
+    { url: '/?o=queue', change: 'Close' },
+    { url: '/', change: 'Close' },
+  ])
+})
+
+test('selecting a video pushes, choosing another replaces, and the list closes it', () => {
+  expect(
+    run(init(), [
+      Message.ClickedVideo({ videoId: 'v1' }),
+      Message.ClickedVideo({ videoId: 'v2' }),
+      Message.ClickedBackToVideos(),
+    ]),
+  ).toEqual([
+    { url: '/?v=v1', change: 'OpenVideo' },
+    { url: '/?v=v2', change: 'Replace' },
+    { url: '/', change: 'Close' },
+  ])
+})
+
+test('an address change closes the layers it drops, and needs no URL command', () => {
+  story(
+    update,
+    given({
+      ...init(),
+      isQueueOpen: true,
+      isExpanded: true,
+      maybeSelectedVideoId: Option.some('v1'),
+    }),
+    message(Message.ChangedLayers({ search: '?v=v1&o=queue' })),
+    Command.expectNone(),
+    model(current => {
+      expect(current.isExpanded).toBe(false)
+      expect(current.isQueueOpen).toBe(true)
+    }),
+    message(Message.ChangedLayers({ search: '' })),
+    Command.expectNone(),
+    model(current => {
+      expect(current.isQueueOpen).toBe(false)
+      expect(current.maybeSelectedVideoId).toEqual(Option.none())
+    }),
+  )
+})
+
+test('opening a direct link keeps the video, drops the overlays and repairs the address', () => {
+  const result = update(
+    init(),
+    Message.OpenedFromUrl({ search: '?v=v1&o=player' }),
+  )
+  expect(syncOf(result)).toEqual({ url: '/?v=v1', change: 'Replace' })
+  expect(result.model.maybeSelectedVideoId).toEqual(Option.some('v1'))
+  expect(result.model.isExpanded).toBe(false)
+  expect(
+    syncOf(update(init(), Message.OpenedFromUrl({ search: '?v=v1' }))),
+  ).toBeUndefined()
 })
