@@ -3,15 +3,18 @@ import { Command, given, message, model, story } from 'foldkit/story'
 import { expect, test } from 'vitest'
 
 import type { PlayableSong } from '../../domain.ts'
+import { LyricCursor, type Lyrics } from '../../lyrics.ts'
 import { PlayerEvent } from '../../youtube'
 import {
   ApplyPlayback,
   ApplyVolume,
+  FetchLyrics,
   FetchSongs,
   FocusInfoButton,
   FocusInfoPanel,
   FocusQueueHandle,
   LoadAutoplay,
+  LoadLyricNudges,
   LoadRepeat,
   LoadSavedSetlist,
   LoadVolume,
@@ -20,6 +23,7 @@ import {
   PickRandomVideo,
   STREAM_GONE,
   SaveAutoplay,
+  SaveLyricNudges,
   SaveRepeat,
   SaveSetlist,
   SaveVolume,
@@ -30,6 +34,7 @@ import {
   WaitBeforeDismissToast,
   entered,
   init,
+  nowSingingOf,
   update,
 } from './karaoke'
 import { layersToUrl, parseLayers } from './layers.ts'
@@ -244,6 +249,7 @@ test('opening the page rereads saved data and fetches, and does not fetch twice'
     LoadAutoplay.name,
     LoadRepeat.name,
     LoadVolume.name,
+    LoadLyricNudges.name,
     FetchSongs.name,
   ])
   expect(entered(opened.model).commands?.map(({ name }) => name)).toEqual([
@@ -251,6 +257,7 @@ test('opening the page rereads saved data and fetches, and does not fetch twice'
     LoadAutoplay.name,
     LoadRepeat.name,
     LoadVolume.name,
+    LoadLyricNudges.name,
   ])
 })
 
@@ -1379,4 +1386,153 @@ test('saved volume round trips, and missing, corrupt or out of range data is cla
     }),
   )
   expect(loaded.model.volume).toEqual(saved)
+})
+
+const lyricSong = (id: string, timestamp: string): PlayableSong => ({
+  ...makeSong(id, 'stream'),
+  timestamp,
+})
+const [early, late] = [
+  lyricSong('early', '00:01:00'),
+  lyricSong('late', '00:05:00'),
+]
+
+const playingStream = (): Model => {
+  const fetched = update(
+    init(),
+    Message.SucceededFetchSongs({ songs: [early, late], goneVideoIds: [] }),
+  ).model
+  return update(fetched, Message.ClickedSong({ song: early })).model
+}
+
+const tick = (current: Model, seconds: number, playId = 1): UpdateReturn =>
+  update(
+    current,
+    Message.ReceivedPlayerEvent({
+      playId,
+      event: PlayerEvent.Progressed({ seconds }),
+    }),
+  )
+
+const fetchedIds = (result: UpdateReturn) =>
+  result.commands
+    ?.filter(({ name }) => name === FetchLyrics.name)
+    .map(({ args }) => args?.['songId'])
+
+const singingId = (current: Model) =>
+  Option.map(nowSingingOf(current), ({ segment }) => segment.song.id)
+
+const cursorOf = (current: Model) =>
+  Option.map(nowSingingOf(current), ({ cursor }) => cursor)
+
+const threeLines: Lyrics = {
+  _tag: 'Synced',
+  lines: [
+    { atMs: 0, text: 'one' },
+    { atMs: 10000, text: 'two' },
+    { atMs: 20000, text: 'three' },
+  ],
+  offsetMs: 0,
+  credit: { lrclibId: 1, track: 'T', artist: 'A' },
+}
+
+test('a position report from another play changes nothing', () => {
+  const stale = tick(playingStream(), 100, 99)
+  expect(stale.model.maybePlayhead).toEqual(Option.none())
+  expect(stale.commands).toBeUndefined()
+})
+
+test("the first position inside a song fetches its lyrics and the next song's, and later ticks fetch nothing", () => {
+  const first = tick(playingStream(), 70)
+  expect(fetchedIds(first)).toEqual(['early', 'late'])
+  const second = tick(first.model, 72)
+  expect(fetchedIds(second)).toEqual([])
+  expect(second.model.maybePlayhead).toEqual(
+    Option.some({ playId: 1, seconds: 72 }),
+  )
+})
+
+test('a position before the first song fetches nothing and sings nothing', () => {
+  const before = tick(playingStream(), 30)
+  expect(before.commands).toBeUndefined()
+  expect(singingId(before.model)).toEqual(Option.none())
+})
+
+test('crossing a timestamp switches the song being sung', () => {
+  const inFirst = tick(playingStream(), 70).model
+  expect(singingId(inFirst)).toEqual(Option.some('early'))
+  const inSecond = tick(inFirst, 310)
+  expect(singingId(inSecond.model)).toEqual(Option.some('late'))
+  expect(fetchedIds(inSecond)).toEqual([])
+})
+
+test('lyrics that arrive put the cursor on the line being sung, and a nudge moves it', () => {
+  const received = update(
+    tick(playingStream(), 72).model,
+    Message.SucceededFetchLyrics({ songId: 'early', lyrics: threeLines }),
+  ).model
+  expect(cursorOf(received)).toEqual(
+    Option.some(LyricCursor.OnLine({ index: 1 })),
+  )
+  const atTwenty = tick(received, 80.2).model
+  expect(cursorOf(atTwenty)).toEqual(
+    Option.some(LyricCursor.OnLine({ index: 2 })),
+  )
+  const nudgedLater = update(
+    atTwenty,
+    Message.ClickedNudgeLyrics({ songId: 'early', by: 1 }),
+  ).model
+  expect(cursorOf(nudgedLater)).toEqual(
+    Option.some(LyricCursor.OnLine({ index: 1 })),
+  )
+})
+
+test('nudging saves the new nudges, and reset removes them', () => {
+  const nudged = update(
+    init(),
+    Message.ClickedNudgeLyrics({ songId: 'early', by: 1 }),
+  )
+  expect(nudged.commands?.map(({ name }) => name)).toEqual([
+    SaveLyricNudges.name,
+  ])
+  expect(nudged.commands?.[0]?.args?.['json']).toBe('{"early":1}')
+  const reset = update(
+    nudged.model,
+    Message.ClickedResetLyricsNudge({ songId: 'early' }),
+  )
+  expect(reset.model.lyricNudges).toEqual({})
+  expect(reset.commands?.[0]?.args?.['json']).toBe('{}')
+})
+
+test('saved nudges load, and garbage loads as none', () => {
+  const loaded = update(
+    init(),
+    Message.CompletedLoadLyricNudges({
+      maybeJson: Option.some('{"early":-3}'),
+    }),
+  )
+  expect(loaded.model.lyricNudges).toEqual({ early: -3 })
+  const garbage = update(
+    loaded.model,
+    Message.CompletedLoadLyricNudges({ maybeJson: Option.some('}{') }),
+  )
+  expect(garbage.model.lyricNudges).toEqual({})
+})
+
+test('retrying failed lyrics fetches again, and retrying anything else does nothing', () => {
+  const failed = update(
+    tick(playingStream(), 70).model,
+    Message.FailedFetchLyrics({ songId: 'early', error: 'down' }),
+  ).model
+  expect(failed.lyricsBySongId['early']?._tag).toBe('Failure')
+  const retried = update(
+    failed,
+    Message.ClickedRetryLyrics({ songId: 'early' }),
+  )
+  expect(fetchedIds(retried)).toEqual(['early'])
+  expect(retried.model.lyricsBySongId['early']?._tag).toBe('Loading')
+  expect(
+    update(retried.model, Message.ClickedRetryLyrics({ songId: 'early' }))
+      .commands,
+  ).toBeUndefined()
 })

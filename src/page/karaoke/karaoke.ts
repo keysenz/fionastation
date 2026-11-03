@@ -5,6 +5,7 @@ import {
   Option,
   Queue,
   Random,
+  Record,
   Result,
   Schema,
   Stream,
@@ -27,6 +28,22 @@ import {
   goneVideoIdsOf,
   toPlayableSongs,
 } from '../../domain.ts'
+import {
+  LyricCursor,
+  Lyrics,
+  type NudgeSteps,
+  Nudges,
+  Playhead,
+  type Segment,
+  cursorAt,
+  msIntoLyrics,
+  nextSegmentSong,
+  nudge,
+  nudgeOf,
+  parseNudges,
+  segmentAt,
+  toNudgesJson,
+} from '../../lyrics.ts'
 import { PlayerEvent, playerEvents, setPlaying, setVolume } from '../../youtube'
 import {
   type Layers,
@@ -74,6 +91,7 @@ const STORAGE_KEY = 'karaoke-storage'
 const AUTOPLAY_KEY = 'karaoke-autoplay'
 const REPEAT_KEY = 'karaoke-repeat'
 const VOLUME_KEY = 'karaoke-volume'
+const LYRIC_NUDGES_KEY = 'karaoke-lyric-nudges'
 export const STREAM_GONE = 'This stream is gone'
 const PLAYER_HOST_ID = 'karaoke'
 export const SONG_LIST_ID = 'karaoke-song-list'
@@ -84,6 +102,7 @@ export const INFO_BUTTON_ID = 'karaoke-info-button'
 // MODEL
 
 const SongsData = AsyncData.Schema(Schema.Array(PlayableSong), Schema.String)
+const LyricsData = AsyncData.Schema(Lyrics, Schema.String)
 
 export const SkipToast = Schema.Struct({
   firstSkippedTitle: Schema.String,
@@ -117,6 +136,10 @@ export const Model = Schema.Struct({
   volume: Volume,
   maybeSelectedVideoId: Schema.Option(Schema.String),
   maybeQueueDrag: Schema.Option(QueueDrag),
+  maybePlayhead: Schema.Option(Playhead),
+  // NOTE: a key means the fetch has started, which keeps asking for the same lyrics idempotent.
+  lyricsBySongId: Schema.Record(Schema.String, LyricsData.schema),
+  lyricNudges: Nudges,
 })
 export type Model = typeof Model.Type
 
@@ -153,6 +176,13 @@ export const Message = defineMessageUnion({
   CompletedLoadVolume: { maybeValue: Schema.Option(Schema.String) },
   CompletedSaveVolume: {},
   CompletedApplyVolume: {},
+  SucceededFetchLyrics: { songId: Schema.String, lyrics: Lyrics },
+  FailedFetchLyrics: { songId: Schema.String, error: Schema.String },
+  ClickedRetryLyrics: { songId: Schema.String },
+  ClickedNudgeLyrics: { songId: Schema.String, by: Schema.Literals([-1, 1]) },
+  ClickedResetLyricsNudge: { songId: Schema.String },
+  CompletedLoadLyricNudges: { maybeJson: Schema.Option(Schema.String) },
+  CompletedSaveLyricNudges: {},
   ChangedLayers: { search: Schema.String },
   OpenedFromUrl: { search: Schema.String },
   CompletedSyncUrl: {},
@@ -200,6 +230,43 @@ export const FetchSongs = Command.define('FetchSongs', {
         }),
     }),
   ),
+})
+
+export const FetchLyrics = Command.define('FetchLyrics', {
+  args: { songId: Schema.String },
+  messages: [Message.SucceededFetchLyrics, Message.FailedFetchLyrics],
+  execute: ({ songId }) =>
+    fetchJson(
+      `/api/get-lyrics?song=${encodeURIComponent(songId)}`,
+      Lyrics,
+    ).pipe(
+      Effect.match({
+        onFailure: error => Message.FailedFetchLyrics({ songId, error }),
+        onSuccess: lyrics => Message.SucceededFetchLyrics({ songId, lyrics }),
+      }),
+    ),
+})
+
+export const LoadLyricNudges = Command.define('LoadLyricNudges', {
+  messages: [Message.CompletedLoadLyricNudges],
+  execute: Effect.try({
+    try: () =>
+      Option.fromNullishOr(window.localStorage.getItem(LYRIC_NUDGES_KEY)),
+    catch: () => 'storage is blocked',
+  }).pipe(
+    Effect.orElseSucceed(() => Option.none<string>()),
+    Effect.map(maybeJson => Message.CompletedLoadLyricNudges({ maybeJson })),
+  ),
+})
+
+export const SaveLyricNudges = Command.define('SaveLyricNudges', {
+  args: { json: Schema.String },
+  messages: [Message.CompletedSaveLyricNudges],
+  execute: ({ json }) =>
+    Effect.try({
+      try: () => window.localStorage.setItem(LYRIC_NUDGES_KEY, json),
+      catch: () => 'storage is blocked or full',
+    }).pipe(Effect.ignore, Effect.as(Message.CompletedSaveLyricNudges())),
 })
 
 export const ApplyPlayback = Command.define('ApplyPlayback', {
@@ -509,6 +576,9 @@ export const init = (): Model => ({
   volume: defaultVolume,
   maybeSelectedVideoId: Option.none(),
   maybeQueueDrag: Option.none(),
+  maybePlayhead: Option.none(),
+  lyricsBySongId: {},
+  lyricNudges: {},
 })
 
 export type UpdateReturn = Update.Return<Model, Message>
@@ -535,6 +605,7 @@ export const entered = (model: Model): UpdateReturn => {
       LoadAutoplay(),
       LoadRepeat(),
       LoadVolume(),
+      LoadLyricNudges(),
       ...(fetched.commands ?? []),
     ],
   }
@@ -544,6 +615,96 @@ export const entered = (model: Model): UpdateReturn => {
 
 export const allSongs = (model: Model): ReadonlyArray<PlayableSong> =>
   Option.getOrElse(AsyncData.getData(model.songs), () => [])
+
+export type NowSinging = Readonly<{
+  segment: Segment
+  /** None until the fetch for this song has started. */
+  maybeLyrics: Option.Option<AsyncData.AsyncData<Lyrics, string>>
+  nudge: NudgeSteps
+  /** Before whenever the lyrics are not synced. */
+  cursor: LyricCursor
+}>
+
+/** The song being sung and where its lyrics are, worked out from the video's position. The
+ *  clicked song is only where the stream started, so nothing else stores this. */
+export const nowSingingOf = (model: Model): Option.Option<NowSinging> =>
+  Option.gen(function* () {
+    const nowPlaying = yield* model.setlist.maybeNowPlaying
+    const playhead = yield* Option.filter(
+      model.maybePlayhead,
+      ({ playId }) => playId === nowPlaying.playId,
+    )
+    const segment = yield* segmentAt(
+      allSongs(model),
+      nowPlaying.song,
+      playhead.seconds,
+    )
+    const maybeLyrics = Option.fromNullishOr(
+      model.lyricsBySongId[segment.song.id],
+    )
+    const nudgeSteps = nudgeOf(model.lyricNudges, segment.song.id)
+    const cursor = Option.match(
+      Option.flatMap(maybeLyrics, AsyncData.getData),
+      {
+        onNone: () => LyricCursor.Before(),
+        onSome: lyrics =>
+          Lyrics.match(lyrics, {
+            Synced: ({ lines, offsetMs }) =>
+              cursorAt(
+                lines,
+                msIntoLyrics(playhead.seconds, segment, offsetMs, nudgeSteps),
+              ),
+            Missing: () => LyricCursor.Before(),
+          }),
+      },
+    )
+    return { segment, maybeLyrics, nudge: nudgeSteps, cursor }
+  })
+
+/** Starts the fetch for every song that has none yet. A song in any state is left alone. */
+const ensureLyrics = (
+  model: Model,
+  songIds: ReadonlyArray<string>,
+): UpdateReturn => {
+  const missing = Array.dedupe(songIds).filter(
+    id => !(id in model.lyricsBySongId),
+  )
+  return {
+    model: modifyFields(model, {
+      lyricsBySongId: known =>
+        missing.reduce(
+          (lyricsById, id) => Record.set(lyricsById, id, AsyncData.Loading()),
+          known,
+        ),
+    }),
+    commands: missing.map(songId => FetchLyrics({ songId })),
+  }
+}
+
+/** Reads the song now being sung and the one after it, so the next song's lyrics are there
+ *  before it starts. */
+const progressed = (
+  model: Model,
+  playId: number,
+  seconds: number,
+): UpdateReturn => {
+  const moved = modifyFields(model, {
+    maybePlayhead: () => Option.some({ playId, seconds }),
+  })
+  return Option.match(nowSingingOf(moved), {
+    onNone: () => ({ model: moved }),
+    onSome: ({ segment }) =>
+      ensureLyrics(moved, [
+        segment.song.id,
+        ...Option.toArray(
+          Option.map(
+            nextSegmentSong(allSongs(moved), segment),
+            song => song.id,
+          ),
+        ),
+      ]),
+  })
+}
 
 const continuationOf = (model: Model): Continuation => {
   const goneIds = new Set(model.goneVideoIds)
@@ -575,6 +736,11 @@ const applyLayers = ({ maybeVideoId, overlays }: Layers) => ({
   isQueueOpen: () => overlays.includes('queue'),
   isExpanded: () => overlays.includes('player'),
   isInfoOpen: () => overlays.includes('info'),
+})
+
+const changeNudges = (model: Model, nudges: Nudges): UpdateReturn => ({
+  model: modifyFields(model, { lyricNudges: () => nudges }),
+  commands: [SaveLyricNudges({ json: toNudgesJson(nudges) })],
 })
 
 const changeVolume = (model: Model, volume: Volume): UpdateReturn => ({
@@ -911,6 +1077,7 @@ const updateModel = (model: Model, message: Message) =>
               },
               PlayerFailed: ({ reason }) =>
                 recordFromPlayer(model, failLoad(model.setlist, reason)),
+              Progressed: ({ seconds }) => progressed(model, playId, seconds),
             }),
         },
       ),
@@ -982,6 +1149,52 @@ const updateModel = (model: Model, message: Message) =>
 
     CompletedSaveVolume: () => ({ model }),
     CompletedApplyVolume: () => ({ model }),
+
+    SucceededFetchLyrics: ({ songId, lyrics }) => ({
+      model: modifyFields(model, {
+        lyricsBySongId: known => ({
+          ...known,
+          [songId]: AsyncData.succeed(lyrics),
+        }),
+      }),
+    }),
+
+    FailedFetchLyrics: ({ songId, error }) => ({
+      model: modifyFields(model, {
+        lyricsBySongId: known => ({
+          ...known,
+          [songId]: AsyncData.fail(error),
+        }),
+      }),
+    }),
+
+    ClickedRetryLyrics: ({ songId }) =>
+      Option.exists(
+        Option.fromNullishOr(model.lyricsBySongId[songId]),
+        AsyncData.isFailure,
+      )
+        ? {
+            model: modifyFields(model, {
+              lyricsBySongId: known => ({
+                ...known,
+                [songId]: AsyncData.Loading(),
+              }),
+            }),
+            commands: [FetchLyrics({ songId })],
+          }
+        : { model },
+
+    ClickedNudgeLyrics: ({ songId, by }) =>
+      changeNudges(model, nudge(model.lyricNudges, songId, by)),
+
+    ClickedResetLyricsNudge: ({ songId }) =>
+      changeNudges(model, Record.remove(model.lyricNudges, songId)),
+
+    CompletedLoadLyricNudges: ({ maybeJson }) => ({
+      model: modifyFields(model, { lyricNudges: () => parseNudges(maybeJson) }),
+    }),
+
+    CompletedSaveLyricNudges: () => ({ model }),
 
     CompletedLoadRepeat: ({ maybeValue }) => ({
       model: modifyFields(model, { repeat: () => parseRepeat(maybeValue) }),
