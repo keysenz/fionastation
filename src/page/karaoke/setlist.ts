@@ -12,6 +12,12 @@ export type PlaybackStatus = typeof PlaybackStatus.Type
 export const PlayerState = Schema.Literals(['Loading', 'Ready'])
 export type PlayerState = typeof PlayerState.Type
 
+export const Repeat = Schema.Literals(['Off', 'All', 'One'])
+export type Repeat = typeof Repeat.Type
+
+export const nextRepeat = (repeat: Repeat): Repeat =>
+  repeat === 'Off' ? 'All' : repeat === 'All' ? 'One' : 'Off'
+
 const PLAYING: PlaybackStatus = 'Playing'
 const PAUSED: PlaybackStatus = 'Paused'
 
@@ -80,6 +86,15 @@ export const play = (setlist: Setlist, song: PlayableSong): Setlist =>
 export const enqueue = (setlist: Setlist, song: PlayableSong): Setlist =>
   modifyFields(setlist, { queue: queue => [...queue, song] })
 
+/** Appends songs to the queue in the order given. */
+export const enqueueAll = (
+  setlist: Setlist,
+  songs: ReadonlyArray<PlayableSong>,
+): Setlist =>
+  Array.isReadonlyArrayNonEmpty(songs)
+    ? modifyFields(setlist, { queue: queue => [...queue, ...songs] })
+    : setlist
+
 export const moveInQueue = (
   setlist: Setlist,
   from: number,
@@ -94,6 +109,21 @@ export const moveInQueue = (
   const without = queue.filter((_, index) => index !== from)
   return modifyFields(setlist, {
     queue: () => [...without.slice(0, to), queue[from]!, ...without.slice(to)],
+  })
+}
+
+export const removeFromQueue = (setlist: Setlist, index: number): Setlist =>
+  Number.isInteger(index) && index >= 0 && index < setlist.queue.length
+    ? modifyFields(setlist, {
+        queue: queue => queue.filter((_, position) => position !== index),
+      })
+    : setlist
+
+export const playFromQueue = (setlist: Setlist, index: number): Setlist => {
+  const maybeSong = Array.get(setlist.queue, index)
+  return Option.match(maybeSong, {
+    onNone: () => setlist,
+    onSome: song => play(removeFromQueue(setlist, index), song),
   })
 }
 
@@ -130,15 +160,25 @@ export const togglePlaying = (setlist: Setlist): Setlist =>
       setStatus(setlist, status === 'Playing' ? 'Paused' : 'Playing'),
   })
 
-export const playNext = (setlist: Setlist): Setlist =>
-  Option.match(Array.head(setlist.queue), {
-    onNone: () => setStatus(setlist, 'Paused'),
+/** With repeat All, leaving a song puts it at the end of the queue first, so
+ *  the queue loops, and an empty queue replays the song. */
+export const playNext = (setlist: Setlist, repeat: Repeat = 'Off'): Setlist => {
+  const looped =
+    repeat === 'All'
+      ? Option.match(setlist.maybeNowPlaying, {
+          onNone: () => setlist,
+          onSome: ({ song }) => enqueue(setlist, song),
+        })
+      : setlist
+  return Option.match(Array.head(looped.queue), {
+    onNone: () => setStatus(looped, 'Paused'),
     onSome: nextSong =>
       play(
-        modifyFields(setlist, { queue: queue => Array.drop(queue, 1) }),
+        modifyFields(looped, { queue: queue => Array.drop(queue, 1) }),
         nextSong,
       ),
   })
+}
 
 export const playPrevious = (setlist: Setlist): Setlist =>
   Option.match(Array.head(setlist.history), {
@@ -166,6 +206,7 @@ export type Continuation = {
   archive: ReadonlyArray<PlayableSong>
   isGone: (song: PlayableSong) => boolean
   isAutoplay: boolean
+  repeat: Repeat
 }
 
 /** What happens once a song is over. Choosing a random video needs randomness,
@@ -173,6 +214,7 @@ export type Continuation = {
  *  song of each live video) and a Command picks one. */
 export const Advance = defineTaggedUnion({
   PlayQueued: {},
+  Replay: {},
   PlaySong: { song: PlayableSong },
   PickRandomVideo: { candidates: Schema.NonEmptyArray(PlayableSong) },
   Stop: {},
@@ -232,24 +274,43 @@ const planFromArchive = (
   })
 }
 
-/** When a video ends the queue plays first. Then, with autoplay on, the next
- *  song of the same video or a random other one. Autoplay off stops. */
+/** When a song ends, repeat One replays it and repeat All sends it to the end
+ *  of the queue and plays the head. Otherwise the queue plays first. Then, with
+ *  autoplay on, the next song of the same video or a random other one. Autoplay
+ *  off stops. */
 export const planAdvance = (
   setlist: Setlist,
   continuation: Continuation,
-): Advance =>
-  Array.isReadonlyArrayNonEmpty(setlist.queue)
+): Advance => {
+  const hasSong = Option.isSome(setlist.maybeNowPlaying)
+  if (hasSong && continuation.repeat === 'One') {
+    return Advance.Replay()
+  }
+  if (hasSong && continuation.repeat === 'All') {
+    return Advance.PlayQueued()
+  }
+  return Array.isReadonlyArrayNonEmpty(setlist.queue)
     ? Advance.PlayQueued()
     : Option.match(setlist.maybeNowPlaying, {
         onNone: () => Advance.Stop(),
         onSome: ({ song }) => planFromArchive(continuation, song, false),
       })
+}
 
 /** Applies a plan. A random pick changes nothing yet, because the Command that
  *  picks it comes back through `playPicked`. A stop pauses the same song. */
-export const applyAdvance = (setlist: Setlist, advance: Advance): Setlist =>
+export const applyAdvance = (
+  setlist: Setlist,
+  advance: Advance,
+  repeat: Repeat,
+): Setlist =>
   Advance.match<Setlist>(advance, {
-    PlayQueued: () => playNext(setlist),
+    PlayQueued: () => playNext(setlist, repeat),
+    Replay: () =>
+      Option.match(setlist.maybeNowPlaying, {
+        onNone: () => setlist,
+        onSome: ({ song }) => startPlay(setlist, song),
+      }),
     PlaySong: ({ song }) => play(setlist, song),
     PickRandomVideo: () => setlist,
     Stop: () => setStatus(setlist, 'Paused'),
@@ -287,6 +348,7 @@ export const applySkip = (
   reason: string,
 ): Setlist =>
   Advance.match<Setlist>(advance, {
+    Replay: () => failLoad(cleaned, reason),
     PlayQueued: () =>
       Option.match(Array.head(cleaned.queue), {
         onNone: () => failLoad(cleaned, reason),
@@ -330,5 +392,46 @@ export const restoreSaved = (
           queue: () => state.queue,
           history: () => state.history,
         }),
+    },
+  )
+
+export const Volume = Schema.Struct({
+  level: Schema.Number,
+  isMuted: Schema.Boolean,
+})
+export type Volume = typeof Volume.Type
+
+export const defaultVolume: Volume = { level: 100, isMuted: false }
+
+const VolumeJson = Schema.fromJsonString(Volume)
+
+const clampLevel = (level: number): number =>
+  Number.isFinite(level) ? Math.min(100, Math.max(0, Math.round(level))) : 100
+
+/** A slider above 0 unmutes, and 0 keeps whatever mute state there was. */
+export const setLevel = (volume: Volume, level: number): Volume => {
+  const clamped = clampLevel(level)
+  return { level: clamped, isMuted: clamped > 0 ? false : volume.isMuted }
+}
+
+export const isSilent = ({ level, isMuted }: Volume): boolean =>
+  isMuted || level === 0
+
+/** Unmuting from level 0 would stay silent, so it goes to a middle level. */
+export const toggleMute = (volume: Volume): Volume =>
+  isSilent(volume)
+    ? { level: volume.level === 0 ? 50 : volume.level, isMuted: false }
+    : { ...volume, isMuted: true }
+
+export const toVolumeJson = (volume: Volume): string =>
+  Schema.encodeSync(VolumeJson)(volume)
+
+/** Missing or corrupt saved data is full volume, and a saved level is clamped. */
+export const parseVolume = (maybeJson: Option.Option<string>): Volume =>
+  Option.match(
+    Option.flatMap(maybeJson, Schema.decodeUnknownOption(VolumeJson)),
+    {
+      onNone: () => defaultVolume,
+      onSome: ({ level, isMuted }) => ({ level: clampLevel(level), isMuted }),
     },
   )

@@ -48,6 +48,7 @@ const scenario = fc.record({
   seq: actionSequence,
   goneVideos: fc.subarray(['v1', 'v2', 'v3']),
   isAutoplay: fc.boolean(),
+  repeat: fc.constantFrom('Off', 'All', 'One'),
 });
 
 const current = (setlist) => Option.getOrUndefined(setlist.maybeNowPlaying);
@@ -61,11 +62,11 @@ function apply(setlist, a, continuation) {
   if (a.type === 'enqueue') return { setlist: S.enqueue(setlist, a.song) };
   if (a.type === 'move') return { setlist: S.moveInQueue(setlist, a.from, a.to) };
   if (!current(setlist)) return { setlist };
-  if (a.type === 'next') return { setlist: S.playNext(setlist) };
+  if (a.type === 'next') return { setlist: S.playNext(setlist, continuation.repeat) };
   if (a.type === 'previous') return { setlist: S.playPrevious(setlist) };
   if (a.type === 'end') {
     const advance = S.planAdvance(setlist, continuation);
-    const applied = S.applyAdvance(setlist, advance);
+    const applied = S.applyAdvance(setlist, advance, continuation.repeat);
     if (advance._tag !== 'PickRandomVideo') return { setlist: applied };
     const song = advance.candidates[a.pick % advance.candidates.length];
     return { setlist: S.playPicked(applied, song, 'Ended'), candidates: advance.candidates };
@@ -83,10 +84,11 @@ function apply(setlist, a, continuation) {
 const same = (x, y) => JSON.stringify(x) === JSON.stringify(y);
 const fail = (msg) => { throw new Error(msg); };
 
-const continuationOf = ({ goneVideos, isAutoplay }) => ({
+const continuationOf = ({ goneVideos, isAutoplay, repeat }) => ({
   archive,
   isGone: (s) => goneVideos.includes(s.video_url),
   isAutoplay,
+  repeat,
 });
 
 const expectedFirsts = (scene, now) => archive.filter((s, i) => !scene.goneVideos.includes(s.video_url)
@@ -283,7 +285,35 @@ const properties = {
     if (!same(after.history, before.history)) fail('reload changed the history');
     if (Option.isSome(after.maybeNowPlaying)) fail('reload resumed playback');
   },
+
+  // Repeat One restarts the ended song with a new player and leaves the queue and history alone, whatever autoplay says.
+  'repeat-one-restarts-the-ended-song': (scene) => {
+    if (scene.repeat !== 'One') return;
+    walk(scene, (a, before, after) => {
+      if (a.type !== 'end' || !current(before)) return;
+      if (!same(current(after).song, current(before).song)) fail(`end under repeat One moved to ${current(after).song.id}`);
+      if (current(after).playId <= current(before).playId) fail('end under repeat One kept the playId');
+      if (current(after).status !== 'Playing') fail('end under repeat One did not play');
+      if (!same(after.queue, before.queue) || !same(after.history, before.history)) fail('end under repeat One changed the queue or history');
+    });
+  },
+
+  // Repeat All loses no song: leaving the current one by end or Next puts it at the end of the queue, and the head plays.
+  'repeat-all-loops-the-queue': (scene) => {
+    if (scene.repeat !== 'All') return;
+    walk(scene, (a, before, after) => {
+      if ((a.type !== 'end' && a.type !== 'next') || !current(before)) return;
+      const expected = [...before.queue, current(before).song];
+      if (!same(current(after).song, expected[0])) fail(`${a.type} under repeat All played ${current(after).song.id}, expected ${expected[0].id}`);
+      if (!same(after.queue, expected.slice(1))) fail(`${a.type} under repeat All left queue [${after.queue.map((s) => s.id)}], expected [${expected.slice(1).map((s) => s.id)}]`);
+    });
+  },
 };
+
+// The older properties describe repeat Off.
+for (const [name, property] of Object.entries(properties)) {
+  if (!name.startsWith('repeat-')) properties[name] = (scene) => property({ ...scene, repeat: 'Off' });
+}
 
 async function checkProperty(name) {
     const result = await fc.check(
@@ -292,13 +322,13 @@ async function checkProperty(name) {
   );
   if (!result.failed) return { name, failed: false, runs: RUNS };
   const [scene] = result.counterexample;
-  const steps = `autoplay ${scene.isAutoplay ? 'on' : 'off'}, gone [${scene.goneVideos}]: ${scene.seq.map((a) => (a.song ? `${a.type} ${a.song.id}` : a.type === 'move' ? `move ${a.from}->${a.to}` : a.type)).join(', ')}`;
+  const steps = `autoplay ${scene.isAutoplay ? 'on' : 'off'}, repeat ${scene.repeat}, gone [${scene.goneVideos}]: ${scene.seq.map((a) => (a.song ? `${a.type} ${a.song.id}` : a.type === 'move' ? `move ${a.from}->${a.to}` : a.type)).join(', ')}`;
   return { name, failed: true, runs: RUNS, steps, why: result.errorInstance?.message ?? String(result.error) };
 }
 
 const MUTANTS = [
-  { property: 'queue-is-fifo-and-lossless', from: 'modifyFields(setlist, { queue: queue => Array.drop(queue, 1) })', to: 'setlist' },
-  { property: 'queue-is-fifo-and-lossless', from: 'Option.match(Array.head(setlist.queue), {', to: 'Option.match(Array.last(setlist.queue), {' },
+  { property: 'queue-is-fifo-and-lossless', from: 'modifyFields(looped, { queue: queue => Array.drop(queue, 1) })', to: 'looped' },
+  { property: 'queue-is-fifo-and-lossless', from: 'Option.match(Array.head(looped.queue), {', to: 'Option.match(Array.last(looped.queue), {' },
   { property: 'queue-is-fifo-and-lossless', from: '...without.slice(0, to), queue[from]!, ...without.slice(to)', to: '...without.slice(0, to + 1), queue[from]!, ...without.slice(to + 1)' },
   { property: 'queue-is-fifo-and-lossless', from: 'queue: () => [...without.slice(0, to)', to: 'queue: () => [...queue.slice(0, to)' },
   { property: 'queue-is-fifo-and-lossless', from: 'from === to || !isInRange(from) || !isInRange(to)', to: 'from === to || !isInRange(from)' },
@@ -326,6 +356,9 @@ const MUTANTS = [
   { property: 'unavailable-video-is-skipped', from: 'queue: queue => Array.filter(queue, isOtherVideo),', to: 'queue: queue => queue,' },
   { property: 'unavailable-video-is-skipped', from: 'history: history => Array.filter(history, isOtherVideo),', to: 'history: history => history,' },
   { property: 'unavailable-video-is-skipped', from: 'startPlay(\n            modifyFields(cleaned,', to: 'play(\n            modifyFields(cleaned,' },
+  { property: 'repeat-one-restarts-the-ended-song', from: 'if (hasSong && continuation.repeat === \'One\') {', to: 'if (false) {' },
+  { property: 'repeat-all-loops-the-queue', from: "onSome: ({ song }) => enqueue(setlist, song),", to: "onSome: () => setlist," },
+  { property: 'repeat-all-loops-the-queue', from: "if (hasSong && continuation.repeat === 'All') {", to: 'if (false) {' },
   { property: 'reload-restores-queue-and-history', from: 'queue: () => state.queue,', to: 'queue: queue => queue,' },
   { property: 'reload-restores-queue-and-history', from: 'history: () => state.history,', to: 'history: history => history,' },
 ];

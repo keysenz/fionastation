@@ -51,6 +51,8 @@ const LoadExternal = Command.define('LoadExternal', {
 
 // UPDATE
 
+const searchOf = (url: Url): string => Option.getOrElse(url.search, () => '')
+
 type UpdateReturn = Update.Return<Model, Message>
 
 const karaokeChild = {
@@ -65,6 +67,9 @@ const foldKaraoke = Update.foldChild({
   update: Karaoke.update,
   ...karaokeChild,
 })
+const foldKaraokeStep = (
+  update: (model: Karaoke.Model) => Karaoke.UpdateReturn,
+) => Update.foldChildStep({ update, ...karaokeChild })
 const foldKaraokeEntered = Update.foldChildStep({
   update: Karaoke.entered,
   ...karaokeChild,
@@ -105,9 +110,17 @@ export const update = (model: Model, message: Message) =>
     ChangedUrl: ({ url }) => {
       const nextRoute = urlToAppRoute(url)
       const nextModel = modifyFields(model, { route: () => nextRoute })
-      return nextRoute._tag === model.route._tag
-        ? { model: nextModel }
-        : enterRoute(nextModel)
+      const layers = foldKaraokeStep(model =>
+        Karaoke.changedLayers(model, searchOf(url)),
+      )
+      return nextRoute._tag === 'Radio'
+        ? Update.combine(nextModel, [
+            nextRoute._tag === model.route._tag
+              ? (next: Model) => ({ model: next })
+              : enterRoute,
+            layers,
+          ])
+        : { model: nextModel }
     },
 
     GotKaraokeMessage: ({ message }) => foldKaraoke(model, message),
@@ -115,11 +128,18 @@ export const update = (model: Model, message: Message) =>
 
 // INIT
 
-export const init: Runtime.RoutingApplicationInit<Model, Message> = url =>
-  enterRoute({
+export const init: Runtime.RoutingApplicationInit<Model, Message> = url => {
+  const start = {
     route: urlToAppRoute(url),
     karaoke: Karaoke.init(),
-  })
+  }
+  return start.route._tag === 'Radio'
+    ? Update.combine(start, [
+        enterRoute,
+        foldKaraokeStep(model => Karaoke.openedFromUrl(model, searchOf(url))),
+      ])
+    : enterRoute(start)
+}
 
 // VIEW
 

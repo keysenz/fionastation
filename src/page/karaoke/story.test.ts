@@ -6,27 +6,41 @@ import type { PlayableSong } from '../../domain.ts'
 import { PlayerEvent } from '../../youtube'
 import {
   ApplyPlayback,
+  ApplyVolume,
   FetchSongs,
   FocusInfoButton,
   FocusInfoPanel,
   FocusQueueHandle,
   LoadAutoplay,
+  LoadRepeat,
   LoadSavedSetlist,
+  LoadVolume,
   Message,
   type Model,
   PickRandomVideo,
   STREAM_GONE,
   SaveAutoplay,
+  SaveRepeat,
   SaveSetlist,
+  SaveVolume,
   ScrollListToTop,
   ScrollSetlistToTop,
+  SyncUrl,
   type UpdateReturn,
   WaitBeforeDismissToast,
   entered,
   init,
   update,
 } from './karaoke'
-import { emptySetlist, restoreSaved, toPersistedJson } from './setlist.ts'
+import { layersToUrl, parseLayers } from './layers.ts'
+import {
+  defaultVolume,
+  emptySetlist,
+  parseVolume,
+  restoreSaved,
+  toPersistedJson,
+  toVolumeJson,
+} from './setlist.ts'
 
 const makeSong = (
   id: string,
@@ -44,6 +58,7 @@ const makeSong = (
 })
 const [a, b] = [makeSong('a'), makeSong('b')]
 const a2 = makeSong('a2', a.video_url)
+const synced = Command.resolve(SyncUrl, Message.CompletedSyncUrl())
 const saved = Command.resolve(SaveSetlist, Message.CompletedSaveSetlist())
 
 const pickedFor = (
@@ -227,11 +242,15 @@ test('opening the page rereads saved data and fetches, and does not fetch twice'
   expect(opened.commands?.map(({ name }) => name)).toEqual([
     LoadSavedSetlist.name,
     LoadAutoplay.name,
+    LoadRepeat.name,
+    LoadVolume.name,
     FetchSongs.name,
   ])
   expect(entered(opened.model).commands?.map(({ name }) => name)).toEqual([
     LoadSavedSetlist.name,
     LoadAutoplay.name,
+    LoadRepeat.name,
+    LoadVolume.name,
   ])
 })
 
@@ -767,14 +786,17 @@ test('clicking a video selects it and scrolls its setlist to the top, and Back r
     update,
     given(init()),
     message(Message.ClickedVideo({ videoId: 'v1' })),
-    Command.expectHas(ScrollSetlistToTop),
+    Command.expectHas(ScrollSetlistToTop, SyncUrl),
     Command.resolve(ScrollSetlistToTop, Message.CompletedScrollSetlistToTop()),
+    synced,
     message(Message.ClickedVideo({ videoId: 'v2' })),
     Command.resolve(ScrollSetlistToTop, Message.CompletedScrollSetlistToTop()),
+    synced,
     model(current => {
       expect(current.maybeSelectedVideoId).toEqual(Option.some('v2'))
     }),
     message(Message.ClickedBackToVideos()),
+    synced,
     model(current => {
       expect(current.maybeSelectedVideoId).toEqual(Option.none())
     }),
@@ -787,6 +809,7 @@ test('searching keeps the chosen video, so clearing the search restores it', () 
     given(init()),
     message(Message.ClickedVideo({ videoId: 'v1' })),
     Command.resolve(ScrollSetlistToTop, Message.CompletedScrollSetlistToTop()),
+    synced,
     message(Message.UpdatedSearch({ value: 'tabako' })),
     Command.resolve(ScrollListToTop, Message.CompletedScrollListToTop()),
     Command.resolve(ScrollSetlistToTop, Message.CompletedScrollSetlistToTop()),
@@ -910,6 +933,7 @@ test('the info button opens the panel and moves focus into it', () => {
     given(init()),
     message(Message.ClickedToggleInfo()),
     Command.resolve(FocusInfoPanel, Message.CompletedFocusInfoPanel()),
+    synced,
     model(current => {
       expect(current.isInfoOpen).toBe(true)
     }),
@@ -922,8 +946,10 @@ test('the info button closes the panel and returns focus to itself', () => {
     given(init()),
     message(Message.ClickedToggleInfo()),
     Command.resolve(FocusInfoPanel, Message.CompletedFocusInfoPanel()),
+    synced,
     message(Message.ClickedToggleInfo()),
     Command.resolve(FocusInfoButton, Message.CompletedFocusInfoButton()),
+    synced,
     model(current => {
       expect(current.isInfoOpen).toBe(false)
     }),
@@ -936,6 +962,7 @@ test('the close message, sent by Escape, the Close button and the backdrop, clos
     given({ ...init(), isInfoOpen: true }),
     message(Message.ClickedCloseInfo()),
     Command.resolve(FocusInfoButton, Message.CompletedFocusInfoButton()),
+    synced,
     model(current => {
       expect(current.isInfoOpen).toBe(false)
     }),
@@ -951,4 +978,405 @@ test('closing an already closed panel issues no focus Command', () => {
       expect(current.isInfoOpen).toBe(false)
     }),
   )
+})
+
+test('removing a queued song drops that one and saves', () => {
+  story(
+    update,
+    given(init()),
+    ...withQueue,
+    message(Message.ClickedRemoveFromQueue({ index: 1 })),
+    saved,
+    model(current => {
+      expect(queueOf(current)).toEqual(['a', 'c'])
+    }),
+  )
+})
+
+test('playing a queued song starts it, takes it out of the queue and moves the current song to history', () => {
+  story(
+    update,
+    given(init()),
+    ...withQueue,
+    message(Message.ClickedSong({ song: a2 })),
+    saved,
+    message(Message.ClickedQueuedSong({ index: 2 })),
+    saved,
+    model(current => {
+      expect(queueOf(current)).toEqual(['a', 'b'])
+      expect(
+        Option.map(current.setlist.maybeNowPlaying, ({ song }) => song.id),
+      ).toEqual(Option.some('c'))
+      expect(current.setlist.history.map(song => song.id)).toEqual(['a2'])
+    }),
+  )
+})
+
+test('removing or playing a queue slot that does not exist changes nothing and saves nothing', () => {
+  story(
+    update,
+    given(init()),
+    ...withQueue,
+    message(Message.ClickedRemoveFromQueue({ index: 3 })),
+    message(Message.ClickedRemoveFromQueue({ index: -1 })),
+    message(Message.ClickedQueuedSong({ index: 3 })),
+    Command.expectNone(),
+    model(current => {
+      expect(queueOf(current)).toEqual(['a', 'b', 'c'])
+      expect(current.setlist.maybeNowPlaying).toEqual(Option.none())
+    }),
+  )
+})
+
+test('queueing the history appends it oldest first and saves, and an empty history changes nothing', () => {
+  story(
+    update,
+    given(init()),
+    message(Message.ClickedQueueHistory()),
+    Command.expectNone(),
+    message(Message.ClickedSong({ song: a })),
+    saved,
+    message(Message.ClickedSong({ song: b })),
+    saved,
+    message(Message.ClickedSong({ song: a2 })),
+    saved,
+    message(Message.ClickedQueueHistory()),
+    saved,
+    model(current => {
+      expect(queueOf(current)).toEqual(['a', 'b'])
+    }),
+  )
+})
+
+const savedRepeat = Command.resolve(SaveRepeat, Message.CompletedSaveRepeat())
+const endOf = (playId: number) =>
+  Message.ReceivedPlayerEvent({ playId, event: PlayerEvent.Ended() })
+const playIdOf = (current: Model) =>
+  Option.map(current.setlist.maybeNowPlaying, ({ playId }) => playId)
+const withRepeat = (steps: number) => [
+  ...Array.from({ length: steps }, () => [
+    message(Message.ClickedCycleRepeat()),
+    savedRepeat,
+  ]).flat(),
+]
+
+test('repeat starts Off, cycles Off, All, One, Off and saves each choice', () => {
+  expect(init().repeat).toBe('Off')
+  story(
+    update,
+    given(init()),
+    message(Message.ClickedCycleRepeat()),
+    savedRepeat,
+    model(current => expect(current.repeat).toBe('All')),
+    message(Message.ClickedCycleRepeat()),
+    savedRepeat,
+    model(current => expect(current.repeat).toBe('One')),
+    message(Message.ClickedCycleRepeat()),
+    savedRepeat,
+    model(current => expect(current.repeat).toBe('Off')),
+  )
+})
+
+test('a saved repeat mode loads, and missing or corrupt data means Off', () => {
+  const loaded = (maybeValue: Option.Option<string>) =>
+    update(init(), Message.CompletedLoadRepeat({ maybeValue })).model.repeat
+  expect(loaded(Option.some('All'))).toBe('All')
+  expect(loaded(Option.some('One'))).toBe('One')
+  expect(loaded(Option.some('garbage'))).toBe('Off')
+  expect(loaded(Option.none())).toBe('Off')
+})
+
+test('repeat One restarts the ended song with a new player, ignoring the queue and autoplay', () => {
+  story(
+    update,
+    given(init()),
+    message(
+      Message.SucceededFetchSongs({ songs: [a, b, c], goneVideoIds: [] }),
+    ),
+    ...autoplayOff,
+    ...withRepeat(2),
+    message(Message.ClickedSong({ song: a })),
+    saved,
+    message(Message.ClickedAddToQueue({ song: c })),
+    saved,
+    message(endOf(1)),
+    saved,
+    model(current => {
+      expect(currentIdOf(current)).toEqual(Option.some('a'))
+      expect(playIdOf(current)).toEqual(Option.some(2))
+      expect(queueOf(current)).toEqual(['c'])
+      expect(current.setlist.history).toEqual([])
+    }),
+  )
+})
+
+test('repeat All sends the ended song to the end of the queue and plays the head', () => {
+  story(
+    update,
+    given(init()),
+    message(
+      Message.SucceededFetchSongs({ songs: [a, b, c], goneVideoIds: [] }),
+    ),
+    ...withRepeat(1),
+    message(Message.ClickedSong({ song: a })),
+    saved,
+    message(Message.ClickedAddToQueue({ song: b })),
+    saved,
+    message(Message.ClickedAddToQueue({ song: c })),
+    saved,
+    message(endOf(1)),
+    saved,
+    model(current => {
+      expect(currentIdOf(current)).toEqual(Option.some('b'))
+      expect(queueOf(current)).toEqual(['c', 'a'])
+    }),
+  )
+})
+
+test('repeat All with an empty queue replays the ended song, even with autoplay off', () => {
+  story(
+    update,
+    given(init()),
+    message(Message.SucceededFetchSongs({ songs: [a, b], goneVideoIds: [] })),
+    ...autoplayOff,
+    ...withRepeat(1),
+    message(Message.ClickedSong({ song: a })),
+    saved,
+    message(endOf(1)),
+    saved,
+    model(current => {
+      expect(currentIdOf(current)).toEqual(Option.some('a'))
+      expect(playIdOf(current)).toEqual(Option.some(2))
+      expect(queueOf(current)).toEqual([])
+    }),
+  )
+})
+
+test('Next under repeat All also sends the current song to the end of the queue', () => {
+  story(
+    update,
+    given(init()),
+    ...withRepeat(1),
+    message(Message.ClickedSong({ song: a })),
+    saved,
+    message(Message.ClickedAddToQueue({ song: b })),
+    saved,
+    message(Message.ClickedNext()),
+    saved,
+    model(current => {
+      expect(currentIdOf(current)).toEqual(Option.some('b'))
+      expect(queueOf(current)).toEqual(['a'])
+    }),
+  )
+})
+
+test('Next under repeat One still moves to the queue head and does not requeue', () => {
+  story(
+    update,
+    given(init()),
+    ...withRepeat(2),
+    message(Message.ClickedSong({ song: a })),
+    saved,
+    message(Message.ClickedAddToQueue({ song: b })),
+    saved,
+    message(Message.ClickedNext()),
+    saved,
+    model(current => {
+      expect(currentIdOf(current)).toEqual(Option.some('b'))
+      expect(queueOf(current)).toEqual([])
+    }),
+  )
+})
+
+const syncOf = (result: UpdateReturn) =>
+  result.commands?.find(({ name }) => name === SyncUrl.name)?.args
+
+const run = (
+  start: Model,
+  messages: ReadonlyArray<Message>,
+): ReadonlyArray<unknown> => {
+  let current = start
+  return messages.map(next => {
+    const result = update(current, next)
+    current = result.model
+    return syncOf(result)
+  })
+}
+
+test('layers read from and write to the address, in a fixed order', () => {
+  expect(layersToUrl(parseLayers(''))).toBe('/')
+  expect(layersToUrl(parseLayers('?v=abc&o=player,queue'))).toBe(
+    '/?v=abc&o=queue%2Cplayer',
+  )
+  expect(parseLayers('?o=nonsense,info').overlays).toEqual(['info'])
+  expect(parseLayers('?v=').maybeVideoId).toEqual(Option.none())
+})
+
+test('opening a layer asks to push its address, and closing asks to pop it', () => {
+  expect(
+    run(init(), [
+      Message.ClickedQueueHandle(),
+      Message.ClickedToggleExpanded(),
+      Message.ClickedCollapse(),
+      Message.ClickedQueueHandle(),
+    ]),
+  ).toEqual([
+    { url: '/?o=queue', change: 'OpenOverlay' },
+    { url: '/?o=queue%2Cplayer', change: 'OpenOverlay' },
+    { url: '/?o=queue', change: 'Close' },
+    { url: '/', change: 'Close' },
+  ])
+})
+
+test('selecting a video pushes, choosing another replaces, and the list closes it', () => {
+  expect(
+    run(init(), [
+      Message.ClickedVideo({ videoId: 'v1' }),
+      Message.ClickedVideo({ videoId: 'v2' }),
+      Message.ClickedBackToVideos(),
+    ]),
+  ).toEqual([
+    { url: '/?v=v1', change: 'OpenVideo' },
+    { url: '/?v=v2', change: 'Replace' },
+    { url: '/', change: 'Close' },
+  ])
+})
+
+test('an address change closes the layers it drops, and needs no URL command', () => {
+  story(
+    update,
+    given({
+      ...init(),
+      isQueueOpen: true,
+      isExpanded: true,
+      maybeSelectedVideoId: Option.some('v1'),
+    }),
+    message(Message.ChangedLayers({ search: '?v=v1&o=queue' })),
+    Command.expectNone(),
+    model(current => {
+      expect(current.isExpanded).toBe(false)
+      expect(current.isQueueOpen).toBe(true)
+    }),
+    message(Message.ChangedLayers({ search: '' })),
+    Command.expectNone(),
+    model(current => {
+      expect(current.isQueueOpen).toBe(false)
+      expect(current.maybeSelectedVideoId).toEqual(Option.none())
+    }),
+  )
+})
+
+test('opening a direct link keeps the video, drops the overlays and repairs the address', () => {
+  const result = update(
+    init(),
+    Message.OpenedFromUrl({ search: '?v=v1&o=player' }),
+  )
+  expect(syncOf(result)).toEqual({ url: '/?v=v1', change: 'Replace' })
+  expect(result.model.maybeSelectedVideoId).toEqual(Option.some('v1'))
+  expect(result.model.isExpanded).toBe(false)
+  expect(
+    syncOf(update(init(), Message.OpenedFromUrl({ search: '?v=v1' }))),
+  ).toBeUndefined()
+})
+
+const volumeChanged = [
+  Command.resolve(ApplyVolume, Message.CompletedApplyVolume()),
+  Command.resolve(SaveVolume, Message.CompletedSaveVolume()),
+] as const
+
+test('volume starts at 100 and unmuted', () => {
+  expect(init().volume).toEqual({ level: 100, isMuted: false })
+})
+
+test('the slider sets and clamps the level, applies it to the player and saves it', () => {
+  story(
+    update,
+    given(init()),
+    message(Message.ChangedVolume({ level: 40 })),
+    ...volumeChanged,
+    model(current =>
+      expect(current.volume).toEqual({ level: 40, isMuted: false }),
+    ),
+    message(Message.ChangedVolume({ level: 250 })),
+    ...volumeChanged,
+    model(current => expect(current.volume.level).toBe(100)),
+    message(Message.ChangedVolume({ level: -5 })),
+    ...volumeChanged,
+    model(current => expect(current.volume.level).toBe(0)),
+  )
+})
+
+test('mute keeps the level, the slider above 0 unmutes, and 0 stays muted', () => {
+  story(
+    update,
+    given(init()),
+    message(Message.ChangedVolume({ level: 30 })),
+    ...volumeChanged,
+    message(Message.ClickedToggleMute()),
+    ...volumeChanged,
+    model(current =>
+      expect(current.volume).toEqual({ level: 30, isMuted: true }),
+    ),
+    message(Message.ChangedVolume({ level: 0 })),
+    ...volumeChanged,
+    model(current =>
+      expect(current.volume).toEqual({ level: 0, isMuted: true }),
+    ),
+    message(Message.ChangedVolume({ level: 20 })),
+    ...volumeChanged,
+    model(current =>
+      expect(current.volume).toEqual({ level: 20, isMuted: false }),
+    ),
+  )
+})
+
+test('unmuting from level 0 goes to a middle level, so it is not still silent', () => {
+  story(
+    update,
+    given({ ...init(), volume: { level: 0, isMuted: false } }),
+    message(Message.ClickedToggleMute()),
+    ...volumeChanged,
+    model(current =>
+      expect(current.volume).toEqual({ level: 50, isMuted: false }),
+    ),
+  )
+})
+
+test('a ready player gets the volume, so each new song keeps the level', () => {
+  story(
+    update,
+    given({
+      ...init(),
+      volume: { level: 35, isMuted: true },
+    }),
+    message(Message.ClickedSong({ song: a })),
+    saved,
+    message(
+      Message.ReceivedPlayerEvent({ playId: 1, event: PlayerEvent.Ready() }),
+    ),
+    Command.expectHas(ApplyPlayback, ApplyVolume),
+    Command.resolve(ApplyPlayback, Message.CompletedApplyPlayback()),
+    Command.resolve(ApplyVolume, Message.CompletedApplyVolume()),
+  )
+})
+
+test('saved volume round trips, and missing, corrupt or out of range data is clamped or defaulted', () => {
+  const saved = { level: 42, isMuted: true }
+  expect(parseVolume(Option.some(toVolumeJson(saved)))).toEqual(saved)
+  expect(parseVolume(Option.none())).toEqual(defaultVolume)
+  expect(parseVolume(Option.some('garbage'))).toEqual(defaultVolume)
+  expect(parseVolume(Option.some('{"level":"loud","isMuted":false}'))).toEqual(
+    defaultVolume,
+  )
+  expect(parseVolume(Option.some('{"level":900,"isMuted":false}')).level).toBe(
+    100,
+  )
+  expect(parseVolume(Option.some('{"level":-3,"isMuted":false}')).level).toBe(0)
+  const loaded = update(
+    init(),
+    Message.CompletedLoadVolume({
+      maybeValue: Option.some(toVolumeJson(saved)),
+    }),
+  )
+  expect(loaded.model.volume).toEqual(saved)
 })

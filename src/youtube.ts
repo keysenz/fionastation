@@ -4,6 +4,9 @@ import { defineTaggedUnion } from 'foldkit/schema'
 type YouTubePlayer = Readonly<{
   playVideo: () => void
   pauseVideo: () => void
+  setVolume: (level: number) => void
+  mute: () => void
+  unMute: () => void
   destroy: () => void
 }>
 
@@ -166,5 +169,21 @@ export const setPlaying = (
       player?.playVideo()
     } else {
       player?.pauseVideo()
+    }
+  })
+
+/** iOS Safari ignores a page's volume, so there only mute has an effect. */
+export const setVolume = (
+  hostId: string,
+  level: number,
+  isMuted: boolean,
+): Effect.Effect<void> =>
+  Effect.sync(() => {
+    const player = playersByHostId.get(hostId)
+    player?.setVolume(level)
+    if (isMuted) {
+      player?.mute()
+    } else {
+      player?.unMute()
     }
   })

@@ -20,7 +20,12 @@ import {
   allSongs,
   queueHandleId,
 } from './karaoke'
-import type { NowPlaying } from './setlist.ts'
+import {
+  type NowPlaying,
+  type Repeat,
+  type Volume,
+  isSilent,
+} from './setlist.ts'
 import {
   type VideoGroup,
   groupByVideo,
@@ -251,76 +256,100 @@ const videoListItemView = (
   h: HtmlBuilder<Message>,
 ): Html => {
   const hasCurrent = holdsCurrent(group, playback)
+  const maybePlayOnTap =
+    totalSongs === 1 && !group.isGone
+      ? Array.head(group.songs)
+      : Option.none<PlayableSong>()
+  const rowClass = twMerge(
+    'rounded-xl border transition-colors',
+    isSelected
+      ? 'bg-black/60 border-transparent md:bg-[#2f5675] md:border-sky-300/50 md:shadow-lg'
+      : 'bg-black/60 border-transparent hover:bg-black/75',
+    hasCurrent && 'border-sky-500/40',
+  )
+  const rowChildren = [
+    videoListThumbnailView(group, hasCurrent, playback.isPlaying, h),
+    h.div(
+      [h.Class('flex-1 min-w-0')],
+      [
+        h.p(
+          [
+            h.Class(
+              twMerge(
+                'text-sm font-semibold leading-snug line-clamp-2 break-words',
+                hasCurrent ? 'text-sky-200' : 'text-white',
+                isSelected && hasCurrent && 'md:text-white',
+                group.isGone && 'text-gray-200',
+              ),
+            ),
+          ],
+          [group.title],
+        ),
+        h.p(
+          [h.Class('mt-1 flex flex-wrap items-center gap-1.5 text-xs')],
+          [
+            isSearching
+              ? h.span(
+                  [
+                    h.Class(
+                      'px-2 py-0.5 rounded-full bg-sky-500/25 text-white font-semibold whitespace-nowrap',
+                    ),
+                  ],
+                  [
+                    `${group.songs.length} ${group.songs.length === 1 ? 'match' : 'matches'}`,
+                  ],
+                )
+              : h.empty,
+            group.kind === 'karaoke'
+              ? h.span(
+                  [h.Class('text-gray-200 whitespace-nowrap')],
+                  [songCountText(totalSongs)],
+                )
+              : kindPillView(group.kind, h),
+            group.isGone ? goneBadgeView(h) : h.empty,
+          ],
+        ),
+      ],
+    ),
+  ]
   return h.keyed('li')(
     group.videoId,
-    [],
-    [
-      h.button(
-        [
-          h.Type('button'),
-          h.AriaCurrent(isSelected ? 'true' : 'false'),
-          h.OnClick(Message.ClickedVideo({ videoId: group.videoId })),
-          h.Class(
-            twMerge(
-              'flex items-center gap-3 w-full p-2 rounded-xl text-left border transition-colors',
-              isSelected
-                ? 'bg-black/60 border-transparent md:bg-[#2f5675] md:border-sky-300/50 md:shadow-lg'
-                : 'bg-black/60 border-transparent hover:bg-black/75',
-              hasCurrent && 'border-sky-500/40',
+    Option.isSome(maybePlayOnTap)
+      ? [h.Class(twMerge('flex items-center gap-1 pr-2', rowClass))]
+      : [],
+    Option.match(maybePlayOnTap, {
+      onNone: () => [
+        h.button(
+          [
+            h.Type('button'),
+            h.AriaCurrent(isSelected ? 'true' : 'false'),
+            h.OnClick(Message.ClickedVideo({ videoId: group.videoId })),
+            h.Class(
+              twMerge('flex items-center gap-3 w-full p-2 text-left', rowClass),
             ),
-          ),
-        ],
-        [
-          videoListThumbnailView(group, hasCurrent, playback.isPlaying, h),
-          h.div(
-            [h.Class('flex-1 min-w-0')],
-            [
-              h.p(
-                [
-                  h.Class(
-                    twMerge(
-                      'text-sm font-semibold leading-snug line-clamp-2 break-words',
-                      hasCurrent ? 'text-sky-200' : 'text-white',
-                      isSelected && hasCurrent && 'md:text-white',
-                      group.isGone && 'text-gray-200',
-                    ),
-                  ),
-                ],
-                [group.title],
-              ),
-              h.p(
-                [h.Class('mt-1 flex flex-wrap items-center gap-1.5 text-xs')],
-                [
-                  isSearching
-                    ? h.span(
-                        [
-                          h.Class(
-                            'px-2 py-0.5 rounded-full bg-sky-500/25 text-white font-semibold whitespace-nowrap',
-                          ),
-                        ],
-                        [
-                          `${group.songs.length} ${group.songs.length === 1 ? 'match' : 'matches'}`,
-                        ],
-                      )
-                    : h.empty,
-                  group.kind === 'karaoke'
-                    ? h.span(
-                        [h.Class('text-gray-200 whitespace-nowrap')],
-                        [songCountText(totalSongs)],
-                      )
-                    : kindPillView(group.kind, h),
-                  group.isGone ? goneBadgeView(h) : h.empty,
-                ],
-              ),
-            ],
-          ),
-          h.i([
-            h.Class('fas fa-chevron-right md:hidden text-gray-300 text-xs'),
-            h.AriaHidden(true),
-          ]),
-        ],
-      ),
-    ],
+          ],
+          [
+            ...rowChildren,
+            h.i([
+              h.Class('fas fa-chevron-right md:hidden text-gray-300 text-xs'),
+              h.AriaHidden(true),
+            ]),
+          ],
+        ),
+      ],
+      onSome: song => [
+        h.button(
+          [
+            h.Type('button'),
+            h.AriaCurrent(isSelected ? 'true' : 'false'),
+            h.OnClick(Message.ClickedSong({ song })),
+            h.Class('flex flex-1 min-w-0 items-center gap-3 p-2 text-left'),
+          ],
+          rowChildren,
+        ),
+        addToQueueButtonView(song, h),
+      ],
+    }),
   )
 }
 
@@ -736,16 +765,22 @@ const queueDrawerView = (model: Model, h: HtmlBuilder<Message>): Html => {
         ],
         [
           h.h2([h.Class('text-lg font-bold drop-shadow-md')], ['Up Next']),
-          h.button(
+          h.div(
+            [h.Class('flex items-center gap-2')],
             [
-              h.Type('button'),
-              h.AriaLabel('Close queue'),
-              h.OnClick(Message.ClickedQueueHandle()),
-              h.Class(
-                'flex items-center justify-center min-h-10 min-w-10 rounded-full bg-white/10 text-white hover:bg-white/20 active:scale-95 transition',
+              autoplaySwitchView(model.isAutoplay, '', h),
+              h.button(
+                [
+                  h.Type('button'),
+                  h.AriaLabel('Close queue'),
+                  h.OnClick(Message.ClickedQueueHandle()),
+                  h.Class(
+                    'flex items-center justify-center min-h-10 min-w-10 rounded-full bg-white/10 text-white hover:bg-white/20 active:scale-95 transition',
+                  ),
+                ],
+                [h.i([h.Class('fas fa-times'), h.AriaHidden(true)])],
               ),
             ],
-            [h.i([h.Class('fas fa-times'), h.AriaHidden(true)])],
           ),
         ],
       ),
@@ -809,36 +844,59 @@ const queueDrawerView = (model: Model, h: HtmlBuilder<Message>): Html => {
                       [h.Class('text-gray-300 text-xs w-4')],
                       [`${index + 1}`],
                     ),
-                    h.div(
+                    h.button(
                       [
+                        h.Type('button'),
+                        h.AriaLabel(`Play "${song.song_title}" now`),
+                        h.OnClick(Message.ClickedQueuedSong({ index })),
                         h.Class(
-                          'w-10 h-10 bg-slate-800 rounded flex-shrink-0 overflow-hidden shadow-sm',
+                          'flex flex-1 min-w-0 items-center space-x-3 min-h-10 text-left',
                         ),
                       ],
                       [
-                        h.img([
-                          h.Src(thumbnailUrl(song.video_url)),
-                          h.Alt('art'),
-                          h.Class('w-full h-full object-cover opacity-80'),
-                        ]),
-                      ],
-                    ),
-                    h.div(
-                      [h.Class('flex-1 min-w-0')],
-                      [
-                        h.p(
+                        h.div(
                           [
                             h.Class(
-                              'text-sm font-medium truncate group-hover:text-sky-300 cursor-pointer text-white drop-shadow-sm',
+                              'w-10 h-10 bg-slate-800 rounded flex-shrink-0 overflow-hidden shadow-sm',
                             ),
                           ],
-                          [song.song_title],
+                          [
+                            h.img([
+                              h.Src(thumbnailUrl(song.video_url)),
+                              h.Alt('art'),
+                              h.Class('w-full h-full object-cover opacity-80'),
+                            ]),
+                          ],
                         ),
-                        h.p(
-                          [h.Class('text-xs text-gray-300 truncate')],
-                          [kindLabel(song.kind)],
+                        h.div(
+                          [h.Class('flex-1 min-w-0')],
+                          [
+                            h.p(
+                              [
+                                h.Class(
+                                  'text-sm font-medium truncate group-hover:text-sky-300 text-white drop-shadow-sm',
+                                ),
+                              ],
+                              [song.song_title],
+                            ),
+                            h.p(
+                              [h.Class('text-xs text-gray-300 truncate')],
+                              [kindLabel(song.kind)],
+                            ),
+                          ],
                         ),
                       ],
+                    ),
+                    h.button(
+                      [
+                        h.Type('button'),
+                        h.AriaLabel(`Remove "${song.song_title}" from queue`),
+                        h.OnClick(Message.ClickedRemoveFromQueue({ index })),
+                        h.Class(
+                          'flex items-center justify-center min-h-10 min-w-10 shrink-0 rounded-full text-gray-300 hover:text-white hover:bg-white/10 active:scale-95 transition',
+                        ),
+                      ],
+                      [h.i([h.Class('fas fa-times'), h.AriaHidden(true)])],
                     ),
                   ],
                 ),
@@ -849,13 +907,28 @@ const queueDrawerView = (model: Model, h: HtmlBuilder<Message>): Html => {
                 h.div(
                   [h.Class('pt-4 border-t border-white/10 mt-4')],
                   [
-                    h.h3(
+                    h.div(
+                      [h.Class('flex items-center justify-between mb-2 px-2')],
                       [
-                        h.Class(
-                          'text-sm font-semibold text-gray-300 mb-2 px-2 uppercase tracking-wider',
+                        h.h3(
+                          [
+                            h.Class(
+                              'text-sm font-semibold text-gray-300 uppercase tracking-wider',
+                            ),
+                          ],
+                          ['History'],
+                        ),
+                        h.button(
+                          [
+                            h.Type('button'),
+                            h.OnClick(Message.ClickedQueueHistory()),
+                            h.Class(
+                              'min-h-10 px-3 rounded-full bg-black/30 border border-white/20 text-[10px] font-bold uppercase tracking-widest text-white hover:bg-[#446e92]/30 active:scale-95 transition',
+                            ),
+                          ],
+                          ['Queue all'],
                         ),
                       ],
-                      ['History'],
                     ),
                   ],
                 ),
@@ -863,33 +936,45 @@ const queueDrawerView = (model: Model, h: HtmlBuilder<Message>): Html => {
                   h.div(
                     [
                       h.Class(
-                        'flex items-center space-x-3 opacity-80 hover:opacity-100 transition-opacity p-2 rounded hover:bg-white/5',
+                        'flex items-center gap-2 opacity-80 hover:opacity-100 transition-opacity p-2 rounded hover:bg-white/5',
                       ),
                     ],
                     [
-                      h.div(
+                      h.button(
                         [
+                          h.Type('button'),
+                          h.AriaLabel(`Play "${song.song_title}" again`),
+                          h.OnClick(Message.ClickedSong({ song })),
                           h.Class(
-                            'w-8 h-8 bg-slate-800 rounded flex-shrink-0 overflow-hidden',
+                            'flex flex-1 min-w-0 items-center space-x-3 min-h-10 text-left',
                           ),
                         ],
                         [
-                          h.img([
-                            h.Src(thumbnailUrl(song.video_url)),
-                            h.Alt('art'),
-                            h.Class('w-full h-full object-cover'),
-                          ]),
-                        ],
-                      ),
-                      h.div(
-                        [h.Class('flex-1 min-w-0')],
-                        [
+                          h.div(
+                            [
+                              h.Class(
+                                'w-8 h-8 bg-slate-800 rounded flex-shrink-0 overflow-hidden',
+                              ),
+                            ],
+                            [
+                              h.img([
+                                h.Src(thumbnailUrl(song.video_url)),
+                                h.Alt('art'),
+                                h.Class('w-full h-full object-cover'),
+                              ]),
+                            ],
+                          ),
                           h.p(
-                            [h.Class('text-sm truncate text-gray-200')],
+                            [
+                              h.Class(
+                                'flex-1 min-w-0 text-sm truncate text-gray-200',
+                              ),
+                            ],
                             [song.song_title],
                           ),
                         ],
                       ),
+                      addToQueueButtonView(song, h),
                     ],
                   ),
                 ),
@@ -955,6 +1040,7 @@ const queuePanelView = (model: Model, h: HtmlBuilder<Message>): Html =>
 
 const autoplaySwitchView = (
   isAutoplay: boolean,
+  labelClass: string,
   h: HtmlBuilder<Message>,
 ): Html =>
   h.button(
@@ -963,7 +1049,7 @@ const autoplaySwitchView = (
       h.Role('switch'),
       h.AriaChecked(isAutoplay),
       h.AriaLabel('Autoplay'),
-      h.Title('Autoplay'),
+      h.Title(isAutoplay ? 'Autoplay is on' : 'Autoplay is off'),
       h.OnClick(Message.ClickedToggleAutoplay()),
       h.Class(
         'flex items-center gap-2 min-h-10 px-2 text-xs text-gray-300 hover:text-white transition-colors',
@@ -980,17 +1066,109 @@ const autoplaySwitchView = (
           ),
         ],
         [
-          h.span([
-            h.Class(
-              twMerge(
-                'absolute -top-[3px] left-0 h-5 w-5 rounded-full shadow transition-all',
-                isAutoplay ? 'translate-x-4 bg-sky-400' : 'bg-gray-300',
+          h.span(
+            [
+              h.Class(
+                twMerge(
+                  'absolute -top-[3px] left-0 h-5 w-5 rounded-full shadow transition-all flex items-center justify-center',
+                  isAutoplay
+                    ? 'translate-x-4 bg-white text-black'
+                    : 'bg-gray-300 text-gray-700',
+                ),
               ),
-            ),
-          ]),
+            ],
+            [
+              h.i([
+                h.Class(
+                  twMerge(
+                    'fas text-[8px]',
+                    isAutoplay ? 'fa-play pl-px' : 'fa-pause',
+                  ),
+                ),
+                h.AriaHidden(true),
+              ]),
+            ],
+          ),
         ],
       ),
-      h.span([h.Class('hidden md:inline')], ['Autoplay']),
+      h.span([h.Class(labelClass)], ['Autoplay']),
+    ],
+  )
+
+const muteButtonView = (volume: Volume, h: HtmlBuilder<Message>): Html => {
+  const isSilentNow = isSilent(volume)
+  const icon = isSilentNow
+    ? 'fa-volume-xmark'
+    : volume.level < 50
+      ? 'fa-volume-low'
+      : 'fa-volume-high'
+  return h.button(
+    [
+      h.Type('button'),
+      h.AriaLabel(isSilentNow ? 'Unmute' : 'Mute'),
+      h.Title(isSilentNow ? 'Unmute' : 'Mute'),
+      h.OnClick(Message.ClickedToggleMute()),
+      h.Class(
+        'flex items-center justify-center min-h-10 min-w-10 shrink-0 rounded-full text-gray-300 hover:text-white transition active:scale-95',
+      ),
+    ],
+    [h.i([h.Class(`fas ${icon} drop-shadow-md`), h.AriaHidden(true)])],
+  )
+}
+
+const volumeSliderView = (
+  volume: Volume,
+  className: string,
+  h: HtmlBuilder<Message>,
+): Html => {
+  const shown = isSilent(volume) ? 0 : volume.level
+  return h.input([
+    h.Type('range'),
+    h.Min('0'),
+    h.Max('100'),
+    h.Step('1'),
+    h.Value(`${shown}`),
+    h.AriaLabel('Volume'),
+    h.Attribute('aria-valuetext', `${shown} percent`),
+    h.OnInput(value => Message.ChangedVolume({ level: Number(value) })),
+    h.Class(twMerge('min-h-10 accent-sky-400 cursor-pointer', className)),
+  ])
+}
+
+const repeatButtonView = (
+  repeat: Repeat,
+  sizeClass: string,
+  h: HtmlBuilder<Message>,
+): Html =>
+  h.button(
+    [
+      h.Type('button'),
+      h.AriaLabel(`Repeat: ${repeat}`),
+      h.Title(`Repeat: ${repeat}. Press to change.`),
+      h.OnClick(Message.ClickedCycleRepeat()),
+      h.Class(
+        twMerge(
+          'relative flex items-center justify-center min-h-10 min-w-10 shrink-0 rounded-full transition active:scale-95',
+          sizeClass,
+          repeat === 'Off'
+            ? 'text-gray-300 hover:text-white'
+            : 'text-sky-300 bg-sky-500/20 hover:text-sky-200',
+        ),
+      ),
+    ],
+    [
+      h.i([h.Class('fas fa-repeat drop-shadow-md'), h.AriaHidden(true)]),
+      repeat === 'One'
+        ? h.span(
+            [
+              h.Class(
+                'absolute top-1 right-1 text-[9px] font-bold leading-none',
+              ),
+              h.AriaHidden(true),
+            ],
+            ['1'],
+          )
+        : h.empty,
     ],
   )
 
@@ -1002,8 +1180,12 @@ const playerBarView = (
   const isPlayerReady = nowPlaying.player === 'Ready'
   return h.div(
     [
+      h.DataAttribute('player-bar', ''),
       h.Class(
-        'fixed bottom-0 left-0 right-0 bg-black/80 backdrop-blur-xl border-t border-white/10 text-white z-[55] h-20 flex items-center px-4 shadow-2xl transition-all duration-300',
+        twMerge(
+          'fixed bottom-0 left-0 right-0 bg-black/80 backdrop-blur-xl border-t border-white/10 text-white z-[55] h-20 items-center px-1.5 sm:px-4 shadow-2xl transition-all duration-300',
+          model.isExpanded ? 'hidden sm:flex' : 'flex',
+        ),
       ),
     ],
     [
@@ -1031,7 +1213,11 @@ const playerBarView = (
         ],
       ),
       h.div(
-        [h.Class('flex items-center space-x-4 w-1/3')],
+        [
+          h.Class(
+            'relative flex items-center space-x-2 sm:space-x-4 flex-1 min-w-0 sm:flex-none sm:w-1/3',
+          ),
+        ],
         [
           h.div(
             [
@@ -1049,7 +1235,7 @@ const playerBarView = (
               h.div(
                 [
                   h.Class(
-                    `transition-all duration-300 ${model.isExpanded ? 'w-0 h-0 opacity-0' : 'w-14 h-14 bg-gray-800 rounded overflow-hidden shadow-lg border border-white/10'}`,
+                    `transition-all duration-300 ${model.isExpanded ? 'w-0 h-0 opacity-0' : 'w-10 h-10 sm:w-14 sm:h-14 bg-gray-800 rounded overflow-hidden shadow-lg border border-white/10'}`,
                   ),
                 ],
                 [
@@ -1075,7 +1261,7 @@ const playerBarView = (
             ],
           ),
           h.div(
-            [h.Class('min-w-0')],
+            [h.Class('min-w-0 flex-1')],
             [
               h.h3(
                 [h.Class('font-bold text-sm truncate drop-shadow-sm')],
@@ -1091,19 +1277,26 @@ const playerBarView = (
               ),
             ],
           ),
+          h.button([
+            h.Type('button'),
+            h.Disabled(!isPlayerReady),
+            h.AriaLabel(model.isExpanded ? 'Collapse player' : 'Expand player'),
+            h.OnClick(Message.ClickedToggleExpanded()),
+            h.Class('absolute inset-0 !ml-0 sm:hidden'),
+          ]),
         ],
       ),
       h.div(
-        [h.Class('flex flex-col items-center justify-center w-1/3')],
+        [h.Class('flex flex-col items-center justify-center sm:w-1/3')],
         [
           h.div(
-            [h.Class('flex items-center space-x-6')],
+            [h.Class('flex items-center sm:space-x-6')],
             [
               h.button(
                 [
                   h.OnClick(Message.ClickedPrevious()),
                   h.Class(
-                    'text-gray-300 hover:text-white transition hover:scale-110 active:scale-95',
+                    'hidden sm:flex items-center justify-center min-h-10 min-w-10 text-gray-300 hover:text-white transition hover:scale-110 active:scale-95',
                   ),
                 ],
                 [h.i([h.Class('fas fa-step-backward fa-lg drop-shadow-md')])],
@@ -1129,7 +1322,7 @@ const playerBarView = (
                 [
                   h.OnClick(Message.ClickedNext()),
                   h.Class(
-                    'text-gray-300 hover:text-white transition hover:scale-110 active:scale-95',
+                    'flex items-center justify-center min-h-10 min-w-10 text-gray-300 hover:text-white transition hover:scale-110 active:scale-95',
                   ),
                 ],
                 [h.i([h.Class('fas fa-step-forward fa-lg drop-shadow-md')])],
@@ -1139,9 +1332,21 @@ const playerBarView = (
         ],
       ),
       h.div(
-        [h.Class('flex items-center justify-end space-x-2 w-1/3')],
         [
-          autoplaySwitchView(model.isAutoplay, h),
+          h.Class(
+            'hidden sm:flex sm:flex-row sm:items-center sm:justify-end sm:space-x-2 sm:w-1/3',
+          ),
+        ],
+        [
+          h.div(
+            [h.Class('flex items-center sm:contents')],
+            [
+              repeatButtonView(model.repeat, '', h),
+              muteButtonView(model.volume, h),
+              volumeSliderView(model.volume, 'hidden sm:block w-24', h),
+            ],
+          ),
+          autoplaySwitchView(model.isAutoplay, 'hidden md:inline', h),
           h.button(
             [
               h.Type('button'),
@@ -1158,7 +1363,7 @@ const playerBarView = (
               ),
               h.OnClick(Message.ClickedToggleExpanded()),
               h.Class(
-                'text-gray-300 hover:text-white transition hover:rotate-90 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-gray-300 disabled:hover:rotate-0',
+                'hidden sm:block text-gray-300 hover:text-white transition hover:rotate-90 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-gray-300 disabled:hover:rotate-0',
               ),
             ],
             [
@@ -1182,7 +1387,7 @@ const upNextPreviewView = (
   h.div(
     [
       h.Class(
-        'bg-white/5 backdrop-blur-md rounded-xl p-6 border border-white/10',
+        'hidden sm:block bg-white/5 backdrop-blur-md rounded-xl p-6 border border-white/10',
       ),
     ],
     [
@@ -1214,6 +1419,150 @@ const upNextPreviewView = (
     ],
   )
 
+const emptyQueueText = (model: Model): string =>
+  model.repeat !== 'Off'
+    ? 'Queue is empty. Repeat is on, so this song plays again'
+    : model.isAutoplay
+      ? 'Queue is empty. When this song ends, autoplay continues with the next song in this video, then a random other video'
+      : 'Playback stops after this song'
+
+const phoneQueueRowView = (
+  song: PlayableSong,
+  index: number,
+  h: HtmlBuilder<Message>,
+): Html =>
+  h.div(
+    [h.Class('flex items-center gap-1 rounded hover:bg-white/10')],
+    [
+      h.button(
+        [
+          h.Type('button'),
+          h.AriaLabel(`Play "${song.song_title}" now`),
+          h.OnClick(Message.ClickedQueuedSong({ index })),
+          h.Class(
+            'flex flex-1 min-w-0 items-center gap-3 min-h-12 p-1 text-left',
+          ),
+        ],
+        [
+          h.div(
+            [
+              h.Class(
+                'w-10 h-10 bg-slate-800 rounded flex-shrink-0 overflow-hidden',
+              ),
+            ],
+            [
+              h.img([
+                h.Src(thumbnailUrl(song.video_url)),
+                h.Alt('art'),
+                h.Class('w-full h-full object-cover'),
+              ]),
+            ],
+          ),
+          h.div(
+            [h.Class('flex-1 min-w-0')],
+            [
+              h.p(
+                [h.Class('text-sm font-medium truncate text-white')],
+                [song.song_title],
+              ),
+              h.p(
+                [h.Class('text-xs text-gray-300 truncate')],
+                [kindLabel(song.kind)],
+              ),
+            ],
+          ),
+        ],
+      ),
+      h.button(
+        [
+          h.Type('button'),
+          h.AriaLabel(`Remove "${song.song_title}" from queue`),
+          h.OnClick(Message.ClickedRemoveFromQueue({ index })),
+          h.Class(
+            'flex items-center justify-center min-h-10 min-w-10 shrink-0 rounded-full text-gray-300 hover:text-white hover:bg-white/10 active:scale-95 transition',
+          ),
+        ],
+        [h.i([h.Class('fas fa-times'), h.AriaHidden(true)])],
+      ),
+    ],
+  )
+
+const phoneUpNextView = (model: Model, h: HtmlBuilder<Message>): Html =>
+  h.div(
+    [h.Class('sm:hidden mt-2')],
+    [
+      h.div(
+        [h.Class('flex items-center justify-between mb-2')],
+        [
+          h.h3([h.Class('text-base font-bold')], ['Up next']),
+          autoplaySwitchView(model.isAutoplay, '', h),
+        ],
+      ),
+      Array.match(model.setlist.queue, {
+        onEmpty: () =>
+          h.p([h.Class('text-sm text-gray-300 py-4')], [emptyQueueText(model)]),
+        onNonEmpty: songs =>
+          h.div(
+            [h.Class('space-y-1')],
+            songs.map((song, index) => phoneQueueRowView(song, index, h)),
+          ),
+      }),
+    ],
+  )
+
+const phoneControlsView = (
+  nowPlaying: NowPlaying,
+  model: Model,
+  h: HtmlBuilder<Message>,
+): Html => {
+  const sideButtonClass =
+    'flex items-center justify-center min-h-12 min-w-12 rounded-full text-gray-200 hover:text-white active:scale-95 transition'
+  return h.div(
+    [h.Class('sm:hidden flex items-center justify-center gap-4 mb-2')],
+    [
+      repeatButtonView(model.repeat, 'min-h-12 min-w-12', h),
+      h.button(
+        [
+          h.Type('button'),
+          h.AriaLabel('Previous song'),
+          h.OnClick(Message.ClickedPrevious()),
+          h.Class(sideButtonClass),
+        ],
+        [h.i([h.Class('fas fa-step-backward fa-lg'), h.AriaHidden(true)])],
+      ),
+      h.button(
+        [
+          h.Type('button'),
+          h.AriaLabel(nowPlaying.status === 'Playing' ? 'Pause' : 'Play'),
+          h.OnClick(Message.ClickedPlayPause()),
+          h.Class(
+            'w-16 h-16 rounded-full bg-white text-black flex items-center justify-center text-2xl active:scale-95 transition shadow-lg',
+          ),
+        ],
+        [
+          h.i([
+            h.Class(
+              nowPlaying.status === 'Playing'
+                ? 'fas fa-pause'
+                : 'fas fa-play pl-1',
+            ),
+            h.AriaHidden(true),
+          ]),
+        ],
+      ),
+      h.button(
+        [
+          h.Type('button'),
+          h.AriaLabel('Next song'),
+          h.OnClick(Message.ClickedNext()),
+          h.Class(sideButtonClass),
+        ],
+        [h.i([h.Class('fas fa-step-forward fa-lg'), h.AriaHidden(true)])],
+      ),
+    ],
+  )
+}
+
 // NOTE: this stays one element at one place in the tree, because expanding must not reload the video.
 const playerView = (
   nowPlaying: NowPlaying,
@@ -1231,19 +1580,21 @@ const playerView = (
       h.div(
         [
           h.Class(
-            `relative w-full ${isExpanded ? 'h-full flex flex-col' : 'h-1'}`,
+            `relative w-full ${isExpanded ? 'min-h-full sm:h-full flex flex-col' : 'h-1'}`,
           ),
         ],
         [
           h.div(
             [
               h.Class(
-                `${isExpanded ? 'flex' : 'hidden'} justify-between p-4 absolute top-0 left-0 right-0 z-10 bg-gradient-to-b from-black/80 to-transparent`,
+                `${isExpanded ? 'flex' : 'hidden'} justify-between p-2 sm:p-4 sm:absolute sm:top-0 sm:left-0 sm:right-0 z-10 sm:bg-gradient-to-b from-black/80 to-transparent`,
               ),
             ],
             [
               h.button(
                 [
+                  h.Type('button'),
+                  h.AriaLabel('Collapse player'),
                   h.OnClick(Message.ClickedCollapse()),
                   h.Class('text-white hover:text-[#446e92] p-2'),
                 ],
@@ -1254,7 +1605,7 @@ const playerView = (
           h.div(
             [
               h.Class(
-                `flex items-center justify-center bg-transparent ${isExpanded ? 'flex-1' : ''}`,
+                `flex items-center justify-center bg-transparent ${isExpanded ? 'sm:flex-1' : ''}`,
               ),
             ],
             [
@@ -1286,23 +1637,36 @@ const playerView = (
           h.div(
             [
               h.Class(
-                `${isExpanded ? 'block' : 'hidden'} p-8 pb-32 w-full max-w-4xl mx-auto`,
+                `${isExpanded ? 'block' : 'hidden'} p-4 pb-6 sm:p-8 sm:pb-32 w-full max-w-4xl mx-auto`,
               ),
             ],
             [
               h.h1(
                 [
                   h.Class(
-                    'text-2xl md:text-3xl font-bold text-center mb-2 drop-shadow-lg',
+                    'text-xl sm:text-2xl md:text-3xl font-bold text-center mb-1 sm:mb-2 drop-shadow-lg',
                   ),
                 ],
                 [nowPlaying.song.song_title],
               ),
               h.p(
-                [h.Class('text-center text-gray-400 mb-8')],
+                [h.Class('text-center text-gray-400 mb-4')],
                 [nowPlaying.song.title_text],
               ),
+              isExpanded ? phoneControlsView(nowPlaying, model, h) : h.empty,
+              h.div(
+                [
+                  h.Class(
+                    'flex items-center justify-center gap-2 mb-4 sm:mb-8',
+                  ),
+                ],
+                [
+                  muteButtonView(model.volume, h),
+                  volumeSliderView(model.volume, 'w-full max-w-xs', h),
+                ],
+              ),
               upNextPreviewView(model.setlist.queue, h),
+              isExpanded ? phoneUpNextView(model, h) : h.empty,
             ],
           ),
         ],
