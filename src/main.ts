@@ -1,5 +1,5 @@
 import { Effect, Option, Schema } from 'effect'
-import { Command, Runtime, Update } from 'foldkit'
+import { Command, Runtime, Subscription, Update } from 'foldkit'
 import { type Document, type Html, type HtmlBuilder } from 'foldkit/html'
 import { defineMessageUnion } from 'foldkit/message'
 import { UrlRequest, load, pushUrl } from 'foldkit/navigation'
@@ -84,6 +84,15 @@ const foldCover = Update.foldChild({ update: Cover.update, ...coverChild })
 const foldCoverEntered = Update.foldChildStep({
   update: Cover.entered,
   ...coverChild,
+})
+
+export const subscriptions = Subscription.lift(Karaoke.subscriptions)<
+  Model,
+  Message
+>({
+  read: karaokeChild.read,
+  toParentMessage: karaokeChild.toParentMessage,
+  when: model => model.route._tag === 'Karaoke',
 })
 
 const enterRoute = (model: Model): UpdateReturn =>

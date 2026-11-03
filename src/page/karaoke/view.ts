@@ -14,6 +14,7 @@ import {
   SONG_LIST_ID,
   type SkipToast,
   allSongs,
+  queueHandleId,
 } from './karaoke'
 import type { NowPlaying } from './setlist.ts'
 import {
@@ -680,6 +681,23 @@ const headerView = (model: Model, h: HtmlBuilder<Message>): Html =>
     ],
   )
 
+const queueRowDragClass = (
+  maybeDrag: Model['maybeQueueDrag'],
+  index: number,
+): string =>
+  Option.match(maybeDrag, {
+    onNone: () => '',
+    onSome: ({ from, over }) =>
+      twMerge(
+        index === from && 'opacity-40',
+        index === over &&
+          from !== over &&
+          (over > from
+            ? 'shadow-[inset_0_-2px_0_0_#38bdf8]'
+            : 'shadow-[inset_0_2px_0_0_#38bdf8]'),
+      ),
+  })
+
 const queueDrawerView = (model: Model, h: HtmlBuilder<Message>): Html => {
   const { queue, history } = model.setlist
   return h.div(
@@ -725,10 +743,47 @@ const queueDrawerView = (model: Model, h: HtmlBuilder<Message>): Html => {
                 h.div(
                   [
                     h.Class(
-                      'flex items-center space-x-3 group p-2 rounded hover:bg-white/10 transition-colors',
+                      twMerge(
+                        'flex items-center space-x-3 group p-2 rounded hover:bg-white/10 transition-colors select-none',
+                        queueRowDragClass(model.maybeQueueDrag, index),
+                      ),
                     ),
+                    h.DataAttribute('queue-index', `${index}`),
                   ],
                   [
+                    h.button(
+                      [
+                        h.Type('button'),
+                        h.Id(queueHandleId(index)),
+                        h.AriaLabel(`Move "${song.song_title}"`),
+                        h.Title('Drag, or press the up and down arrow keys'),
+                        h.OnPointerDown((pointerType, button) =>
+                          pointerType !== 'mouse' || button === 0
+                            ? Option.some(Message.StartedQueueDrag({ index }))
+                            : Option.none(),
+                        ),
+                        h.OnKeyDownPreventDefault(key =>
+                          key === 'ArrowUp'
+                            ? Option.some(
+                                Message.PressedQueueMoveKey({ index, by: -1 }),
+                              )
+                            : key === 'ArrowDown'
+                              ? Option.some(
+                                  Message.PressedQueueMoveKey({ index, by: 1 }),
+                                )
+                              : Option.none(),
+                        ),
+                        h.Class(
+                          'flex items-center justify-center min-h-10 w-6 shrink-0 touch-none text-gray-400 hover:text-white cursor-grab active:cursor-grabbing',
+                        ),
+                      ],
+                      [
+                        h.i([
+                          h.Class('fas fa-grip-vertical'),
+                          h.AriaHidden(true),
+                        ]),
+                      ],
+                    ),
                     h.div(
                       [h.Class('text-gray-300 text-xs w-4')],
                       [`${index + 1}`],

@@ -3,12 +3,20 @@ import {
   Duration,
   Effect,
   Option,
+  Queue,
   Random,
   Result,
   Schema,
   Stream,
 } from 'effect'
-import { AsyncData, Command, Dom, Mount, type Update } from 'foldkit'
+import {
+  AsyncData,
+  Command,
+  Dom,
+  Mount,
+  Subscription,
+  type Update,
+} from 'foldkit'
 import { defineMessageUnion } from 'foldkit/message'
 import { modifyFields } from 'foldkit/struct'
 
@@ -273,6 +281,78 @@ export const MountPlayer = Mount.defineStream('MountPlayer', {
       Stream.map(event => Message.ReceivedPlayerEvent({ playId, event })),
     ),
 })
+
+// SUBSCRIPTION
+
+const QUEUE_INDEX_ATTRIBUTE = 'data-queue-index'
+
+const queueSlotAt = (clientX: number, clientY: number): Option.Option<number> =>
+  Option.map(
+    Option.fromNullishOr(
+      document
+        .elementFromPoint(clientX, clientY)
+        ?.closest(`[${QUEUE_INDEX_ATTRIBUTE}]`)
+        ?.getAttribute(QUEUE_INDEX_ATTRIBUTE),
+    ),
+    Number,
+  )
+
+const queueDragStream = Stream.callback<Message>(queue =>
+  Effect.acquireRelease(
+    Effect.sync(() => {
+      const state = { maybeOver: Option.none<number>() }
+      const onMove = (event: PointerEvent) => {
+        const maybeSlot = queueSlotAt(event.clientX, event.clientY)
+        if (
+          Option.isSome(maybeSlot) &&
+          !Option.contains(state.maybeOver, maybeSlot.value)
+        ) {
+          state.maybeOver = maybeSlot
+          Queue.offerUnsafe(
+            queue,
+            Message.DraggedOverQueueSlot({ index: maybeSlot.value }),
+          )
+        }
+      }
+      const onUp = (event: PointerEvent) => {
+        Queue.offerUnsafe(
+          queue,
+          Option.match(queueSlotAt(event.clientX, event.clientY), {
+            onNone: () => Message.EndedQueueDrag(),
+            onSome: index => Message.DroppedQueueSong({ index }),
+          }),
+        )
+      }
+      const onCancel = () => Queue.offerUnsafe(queue, Message.EndedQueueDrag())
+      window.addEventListener('pointermove', onMove)
+      window.addEventListener('pointerup', onUp)
+      window.addEventListener('pointercancel', onCancel)
+      return { onMove, onUp, onCancel }
+    }),
+    ({ onMove, onUp, onCancel }) =>
+      Effect.sync(() => {
+        window.removeEventListener('pointermove', onMove)
+        window.removeEventListener('pointerup', onUp)
+        window.removeEventListener('pointercancel', onCancel)
+      }),
+  ).pipe(Effect.flatMap(() => Effect.never)),
+)
+
+export const subscriptions = Subscription.make<Model, Message>()(entry => ({
+  queueDrag: entry(
+    { isDragging: Schema.Boolean },
+    {
+      modelToDependencies: model => ({
+        isDragging: Option.isSome(model.maybeQueueDrag),
+      }),
+      dependenciesToStream: ({ isDragging }) =>
+        Stream.when(
+          queueDragStream,
+          Effect.sync(() => isDragging),
+        ),
+    },
+  ),
+}))
 
 // INIT
 
