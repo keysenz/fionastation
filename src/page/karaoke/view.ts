@@ -251,76 +251,99 @@ const videoListItemView = (
   h: HtmlBuilder<Message>,
 ): Html => {
   const hasCurrent = holdsCurrent(group, playback)
+  const maybePlayOnTap =
+    totalSongs === 1 && !group.isGone
+      ? Array.head(group.songs)
+      : Option.none<PlayableSong>()
+  const rowClass = twMerge(
+    'rounded-xl border transition-colors',
+    isSelected
+      ? 'bg-black/60 border-transparent md:bg-[#2f5675] md:border-sky-300/50 md:shadow-lg'
+      : 'bg-black/60 border-transparent hover:bg-black/75',
+    hasCurrent && 'border-sky-500/40',
+  )
+  const rowChildren = [
+    videoListThumbnailView(group, hasCurrent, playback.isPlaying, h),
+    h.div(
+      [h.Class('flex-1 min-w-0')],
+      [
+        h.p(
+          [
+            h.Class(
+              twMerge(
+                'text-sm font-semibold leading-snug line-clamp-2 break-words',
+                hasCurrent ? 'text-sky-200' : 'text-white',
+                isSelected && hasCurrent && 'md:text-white',
+                group.isGone && 'text-gray-200',
+              ),
+            ),
+          ],
+          [group.title],
+        ),
+        h.p(
+          [h.Class('mt-1 flex flex-wrap items-center gap-1.5 text-xs')],
+          [
+            isSearching
+              ? h.span(
+                  [
+                    h.Class(
+                      'px-2 py-0.5 rounded-full bg-sky-500/25 text-white font-semibold whitespace-nowrap',
+                    ),
+                  ],
+                  [
+                    `${group.songs.length} ${group.songs.length === 1 ? 'match' : 'matches'}`,
+                  ],
+                )
+              : h.empty,
+            group.kind === 'karaoke'
+              ? h.span(
+                  [h.Class('text-gray-200 whitespace-nowrap')],
+                  [songCountText(totalSongs)],
+                )
+              : kindPillView(group.kind, h),
+            group.isGone ? goneBadgeView(h) : h.empty,
+          ],
+        ),
+      ],
+    ),
+  ]
   return h.keyed('li')(
     group.videoId,
-    [],
-    [
-      h.button(
-        [
-          h.Type('button'),
-          h.AriaCurrent(isSelected ? 'true' : 'false'),
-          h.OnClick(Message.ClickedVideo({ videoId: group.videoId })),
-          h.Class(
-            twMerge(
-              'flex items-center gap-3 w-full p-2 rounded-xl text-left border transition-colors',
-              isSelected
-                ? 'bg-black/60 border-transparent md:bg-[#2f5675] md:border-sky-300/50 md:shadow-lg'
-                : 'bg-black/60 border-transparent hover:bg-black/75',
-              hasCurrent && 'border-sky-500/40',
+    Option.isSome(maybePlayOnTap)
+      ? [h.Class(twMerge('flex items-center gap-1 pr-2', rowClass))]
+      : [],
+    Option.match(maybePlayOnTap, {
+      onNone: () => [
+        h.button(
+          [
+            h.Type('button'),
+            h.AriaCurrent(isSelected ? 'true' : 'false'),
+            h.OnClick(Message.ClickedVideo({ videoId: group.videoId })),
+            h.Class(
+              twMerge('flex items-center gap-3 w-full p-2 text-left', rowClass),
             ),
-          ),
-        ],
-        [
-          videoListThumbnailView(group, hasCurrent, playback.isPlaying, h),
-          h.div(
-            [h.Class('flex-1 min-w-0')],
-            [
-              h.p(
-                [
-                  h.Class(
-                    twMerge(
-                      'text-sm font-semibold leading-snug line-clamp-2 break-words',
-                      hasCurrent ? 'text-sky-200' : 'text-white',
-                      isSelected && hasCurrent && 'md:text-white',
-                      group.isGone && 'text-gray-200',
-                    ),
-                  ),
-                ],
-                [group.title],
-              ),
-              h.p(
-                [h.Class('mt-1 flex flex-wrap items-center gap-1.5 text-xs')],
-                [
-                  isSearching
-                    ? h.span(
-                        [
-                          h.Class(
-                            'px-2 py-0.5 rounded-full bg-sky-500/25 text-white font-semibold whitespace-nowrap',
-                          ),
-                        ],
-                        [
-                          `${group.songs.length} ${group.songs.length === 1 ? 'match' : 'matches'}`,
-                        ],
-                      )
-                    : h.empty,
-                  group.kind === 'karaoke'
-                    ? h.span(
-                        [h.Class('text-gray-200 whitespace-nowrap')],
-                        [songCountText(totalSongs)],
-                      )
-                    : kindPillView(group.kind, h),
-                  group.isGone ? goneBadgeView(h) : h.empty,
-                ],
-              ),
-            ],
-          ),
-          h.i([
-            h.Class('fas fa-chevron-right md:hidden text-gray-300 text-xs'),
-            h.AriaHidden(true),
-          ]),
-        ],
-      ),
-    ],
+          ],
+          [
+            ...rowChildren,
+            h.i([
+              h.Class('fas fa-chevron-right md:hidden text-gray-300 text-xs'),
+              h.AriaHidden(true),
+            ]),
+          ],
+        ),
+      ],
+      onSome: song => [
+        h.button(
+          [
+            h.Type('button'),
+            h.OnClick(Message.ClickedSong({ song })),
+            h.Class('flex flex-1 min-w-0 items-center gap-3 p-2 text-left'),
+          ],
+          rowChildren,
+        ),
+        addToQueueButtonView(song, h),
+      ],
+    }),
   )
 }
 
@@ -809,36 +832,59 @@ const queueDrawerView = (model: Model, h: HtmlBuilder<Message>): Html => {
                       [h.Class('text-gray-300 text-xs w-4')],
                       [`${index + 1}`],
                     ),
-                    h.div(
+                    h.button(
                       [
+                        h.Type('button'),
+                        h.AriaLabel(`Play "${song.song_title}" now`),
+                        h.OnClick(Message.ClickedQueuedSong({ index })),
                         h.Class(
-                          'w-10 h-10 bg-slate-800 rounded flex-shrink-0 overflow-hidden shadow-sm',
+                          'flex flex-1 min-w-0 items-center space-x-3 min-h-10 text-left',
                         ),
                       ],
                       [
-                        h.img([
-                          h.Src(thumbnailUrl(song.video_url)),
-                          h.Alt('art'),
-                          h.Class('w-full h-full object-cover opacity-80'),
-                        ]),
-                      ],
-                    ),
-                    h.div(
-                      [h.Class('flex-1 min-w-0')],
-                      [
-                        h.p(
+                        h.div(
                           [
                             h.Class(
-                              'text-sm font-medium truncate group-hover:text-sky-300 cursor-pointer text-white drop-shadow-sm',
+                              'w-10 h-10 bg-slate-800 rounded flex-shrink-0 overflow-hidden shadow-sm',
                             ),
                           ],
-                          [song.song_title],
+                          [
+                            h.img([
+                              h.Src(thumbnailUrl(song.video_url)),
+                              h.Alt('art'),
+                              h.Class('w-full h-full object-cover opacity-80'),
+                            ]),
+                          ],
                         ),
-                        h.p(
-                          [h.Class('text-xs text-gray-300 truncate')],
-                          [kindLabel(song.kind)],
+                        h.div(
+                          [h.Class('flex-1 min-w-0')],
+                          [
+                            h.p(
+                              [
+                                h.Class(
+                                  'text-sm font-medium truncate group-hover:text-sky-300 text-white drop-shadow-sm',
+                                ),
+                              ],
+                              [song.song_title],
+                            ),
+                            h.p(
+                              [h.Class('text-xs text-gray-300 truncate')],
+                              [kindLabel(song.kind)],
+                            ),
+                          ],
                         ),
                       ],
+                    ),
+                    h.button(
+                      [
+                        h.Type('button'),
+                        h.AriaLabel(`Remove "${song.song_title}" from queue`),
+                        h.OnClick(Message.ClickedRemoveFromQueue({ index })),
+                        h.Class(
+                          'flex items-center justify-center min-h-10 min-w-10 shrink-0 rounded-full text-gray-300 hover:text-white hover:bg-white/10 active:scale-95 transition',
+                        ),
+                      ],
+                      [h.i([h.Class('fas fa-times'), h.AriaHidden(true)])],
                     ),
                   ],
                 ),
@@ -860,10 +906,13 @@ const queueDrawerView = (model: Model, h: HtmlBuilder<Message>): Html => {
                   ],
                 ),
                 ...history.map(song =>
-                  h.div(
+                  h.button(
                     [
+                      h.Type('button'),
+                      h.AriaLabel(`Play "${song.song_title}" again`),
+                      h.OnClick(Message.ClickedSong({ song })),
                       h.Class(
-                        'flex items-center space-x-3 opacity-80 hover:opacity-100 transition-opacity p-2 rounded hover:bg-white/5',
+                        'flex w-full items-center space-x-3 min-h-10 text-left opacity-80 hover:opacity-100 transition-opacity p-2 rounded hover:bg-white/5',
                       ),
                     ],
                     [
@@ -1031,7 +1080,11 @@ const playerBarView = (
         ],
       ),
       h.div(
-        [h.Class('flex items-center space-x-4 w-1/3')],
+        [
+          h.Class(
+            'relative flex items-center space-x-3 sm:space-x-4 flex-1 min-w-0 sm:flex-none sm:w-1/3',
+          ),
+        ],
         [
           h.div(
             [
@@ -1091,19 +1144,26 @@ const playerBarView = (
               ),
             ],
           ),
+          h.button([
+            h.Type('button'),
+            h.Disabled(!isPlayerReady),
+            h.AriaLabel(model.isExpanded ? 'Collapse player' : 'Expand player'),
+            h.OnClick(Message.ClickedToggleExpanded()),
+            h.Class('absolute inset-0 sm:hidden'),
+          ]),
         ],
       ),
       h.div(
-        [h.Class('flex flex-col items-center justify-center w-1/3')],
+        [h.Class('flex flex-col items-center justify-center sm:w-1/3')],
         [
           h.div(
-            [h.Class('flex items-center space-x-6')],
+            [h.Class('flex items-center space-x-1 sm:space-x-6')],
             [
               h.button(
                 [
                   h.OnClick(Message.ClickedPrevious()),
                   h.Class(
-                    'text-gray-300 hover:text-white transition hover:scale-110 active:scale-95',
+                    'flex items-center justify-center min-h-10 min-w-10 text-gray-300 hover:text-white transition hover:scale-110 active:scale-95',
                   ),
                 ],
                 [h.i([h.Class('fas fa-step-backward fa-lg drop-shadow-md')])],
@@ -1129,7 +1189,7 @@ const playerBarView = (
                 [
                   h.OnClick(Message.ClickedNext()),
                   h.Class(
-                    'text-gray-300 hover:text-white transition hover:scale-110 active:scale-95',
+                    'flex items-center justify-center min-h-10 min-w-10 text-gray-300 hover:text-white transition hover:scale-110 active:scale-95',
                   ),
                 ],
                 [h.i([h.Class('fas fa-step-forward fa-lg drop-shadow-md')])],
@@ -1139,7 +1199,7 @@ const playerBarView = (
         ],
       ),
       h.div(
-        [h.Class('flex items-center justify-end space-x-2 w-1/3')],
+        [h.Class('flex items-center justify-end space-x-2 sm:w-1/3')],
         [
           autoplaySwitchView(model.isAutoplay, h),
           h.button(
@@ -1158,7 +1218,7 @@ const playerBarView = (
               ),
               h.OnClick(Message.ClickedToggleExpanded()),
               h.Class(
-                'text-gray-300 hover:text-white transition hover:rotate-90 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-gray-300 disabled:hover:rotate-0',
+                'hidden sm:block text-gray-300 hover:text-white transition hover:rotate-90 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-gray-300 disabled:hover:rotate-0',
               ),
             ],
             [
