@@ -765,16 +765,22 @@ const queueDrawerView = (model: Model, h: HtmlBuilder<Message>): Html => {
         ],
         [
           h.h2([h.Class('text-lg font-bold drop-shadow-md')], ['Up Next']),
-          h.button(
+          h.div(
+            [h.Class('flex items-center gap-2')],
             [
-              h.Type('button'),
-              h.AriaLabel('Close queue'),
-              h.OnClick(Message.ClickedQueueHandle()),
-              h.Class(
-                'flex items-center justify-center min-h-10 min-w-10 rounded-full bg-white/10 text-white hover:bg-white/20 active:scale-95 transition',
+              autoplaySwitchView(model.isAutoplay, '', h),
+              h.button(
+                [
+                  h.Type('button'),
+                  h.AriaLabel('Close queue'),
+                  h.OnClick(Message.ClickedQueueHandle()),
+                  h.Class(
+                    'flex items-center justify-center min-h-10 min-w-10 rounded-full bg-white/10 text-white hover:bg-white/20 active:scale-95 transition',
+                  ),
+                ],
+                [h.i([h.Class('fas fa-times'), h.AriaHidden(true)])],
               ),
             ],
-            [h.i([h.Class('fas fa-times'), h.AriaHidden(true)])],
           ),
         ],
       ),
@@ -1034,6 +1040,7 @@ const queuePanelView = (model: Model, h: HtmlBuilder<Message>): Html =>
 
 const autoplaySwitchView = (
   isAutoplay: boolean,
+  labelClass: string,
   h: HtmlBuilder<Message>,
 ): Html =>
   h.button(
@@ -1084,7 +1091,7 @@ const autoplaySwitchView = (
           ),
         ],
       ),
-      h.span([h.Class('hidden md:inline')], ['Autoplay']),
+      h.span([h.Class(labelClass)], ['Autoplay']),
     ],
   )
 
@@ -1128,7 +1135,11 @@ const volumeSliderView = (
   ])
 }
 
-const repeatButtonView = (repeat: Repeat, h: HtmlBuilder<Message>): Html =>
+const repeatButtonView = (
+  repeat: Repeat,
+  sizeClass: string,
+  h: HtmlBuilder<Message>,
+): Html =>
   h.button(
     [
       h.Type('button'),
@@ -1138,6 +1149,7 @@ const repeatButtonView = (repeat: Repeat, h: HtmlBuilder<Message>): Html =>
       h.Class(
         twMerge(
           'relative flex items-center justify-center min-h-10 min-w-10 shrink-0 rounded-full transition active:scale-95',
+          sizeClass,
           repeat === 'Off'
             ? 'text-gray-300 hover:text-white'
             : 'text-sky-300 bg-sky-500/20 hover:text-sky-200',
@@ -1168,8 +1180,12 @@ const playerBarView = (
   const isPlayerReady = nowPlaying.player === 'Ready'
   return h.div(
     [
+      h.DataAttribute('player-bar', ''),
       h.Class(
-        'fixed bottom-0 left-0 right-0 bg-black/80 backdrop-blur-xl border-t border-white/10 text-white z-[55] h-20 flex items-center px-1.5 sm:px-4 shadow-2xl transition-all duration-300',
+        twMerge(
+          'fixed bottom-0 left-0 right-0 bg-black/80 backdrop-blur-xl border-t border-white/10 text-white z-[55] h-20 items-center px-1.5 sm:px-4 shadow-2xl transition-all duration-300',
+          model.isExpanded ? 'hidden sm:flex' : 'flex',
+        ),
       ),
     ],
     [
@@ -1245,7 +1261,7 @@ const playerBarView = (
             ],
           ),
           h.div(
-            [h.Class('min-w-0')],
+            [h.Class('min-w-0 flex-1')],
             [
               h.h3(
                 [h.Class('font-bold text-sm truncate drop-shadow-sm')],
@@ -1266,7 +1282,7 @@ const playerBarView = (
             h.Disabled(!isPlayerReady),
             h.AriaLabel(model.isExpanded ? 'Collapse player' : 'Expand player'),
             h.OnClick(Message.ClickedToggleExpanded()),
-            h.Class('absolute inset-0 sm:hidden'),
+            h.Class('absolute inset-0 !ml-0 sm:hidden'),
           ]),
         ],
       ),
@@ -1280,7 +1296,7 @@ const playerBarView = (
                 [
                   h.OnClick(Message.ClickedPrevious()),
                   h.Class(
-                    'flex items-center justify-center min-h-10 min-w-10 text-gray-300 hover:text-white transition hover:scale-110 active:scale-95',
+                    'hidden sm:flex items-center justify-center min-h-10 min-w-10 text-gray-300 hover:text-white transition hover:scale-110 active:scale-95',
                   ),
                 ],
                 [h.i([h.Class('fas fa-step-backward fa-lg drop-shadow-md')])],
@@ -1318,19 +1334,19 @@ const playerBarView = (
       h.div(
         [
           h.Class(
-            'flex flex-col items-end justify-center sm:flex-row sm:items-center sm:justify-end sm:space-x-2 sm:w-1/3',
+            'hidden sm:flex sm:flex-row sm:items-center sm:justify-end sm:space-x-2 sm:w-1/3',
           ),
         ],
         [
           h.div(
             [h.Class('flex items-center sm:contents')],
             [
-              repeatButtonView(model.repeat, h),
+              repeatButtonView(model.repeat, '', h),
               muteButtonView(model.volume, h),
               volumeSliderView(model.volume, 'hidden sm:block w-24', h),
             ],
           ),
-          autoplaySwitchView(model.isAutoplay, h),
+          autoplaySwitchView(model.isAutoplay, 'hidden md:inline', h),
           h.button(
             [
               h.Type('button'),
@@ -1371,7 +1387,7 @@ const upNextPreviewView = (
   h.div(
     [
       h.Class(
-        'bg-white/5 backdrop-blur-md rounded-xl p-6 border border-white/10',
+        'hidden sm:block bg-white/5 backdrop-blur-md rounded-xl p-6 border border-white/10',
       ),
     ],
     [
@@ -1403,6 +1419,150 @@ const upNextPreviewView = (
     ],
   )
 
+const emptyQueueText = (model: Model): string =>
+  model.repeat !== 'Off'
+    ? 'Queue is empty. Repeat is on, so this song plays again'
+    : model.isAutoplay
+      ? 'Queue is empty. When this song ends, autoplay continues with the next song in this video, then a random other video'
+      : 'Playback stops after this song'
+
+const phoneQueueRowView = (
+  song: PlayableSong,
+  index: number,
+  h: HtmlBuilder<Message>,
+): Html =>
+  h.div(
+    [h.Class('flex items-center gap-1 rounded hover:bg-white/10')],
+    [
+      h.button(
+        [
+          h.Type('button'),
+          h.AriaLabel(`Play "${song.song_title}" now`),
+          h.OnClick(Message.ClickedQueuedSong({ index })),
+          h.Class(
+            'flex flex-1 min-w-0 items-center gap-3 min-h-12 p-1 text-left',
+          ),
+        ],
+        [
+          h.div(
+            [
+              h.Class(
+                'w-10 h-10 bg-slate-800 rounded flex-shrink-0 overflow-hidden',
+              ),
+            ],
+            [
+              h.img([
+                h.Src(thumbnailUrl(song.video_url)),
+                h.Alt('art'),
+                h.Class('w-full h-full object-cover'),
+              ]),
+            ],
+          ),
+          h.div(
+            [h.Class('flex-1 min-w-0')],
+            [
+              h.p(
+                [h.Class('text-sm font-medium truncate text-white')],
+                [song.song_title],
+              ),
+              h.p(
+                [h.Class('text-xs text-gray-300 truncate')],
+                [kindLabel(song.kind)],
+              ),
+            ],
+          ),
+        ],
+      ),
+      h.button(
+        [
+          h.Type('button'),
+          h.AriaLabel(`Remove "${song.song_title}" from queue`),
+          h.OnClick(Message.ClickedRemoveFromQueue({ index })),
+          h.Class(
+            'flex items-center justify-center min-h-10 min-w-10 shrink-0 rounded-full text-gray-300 hover:text-white hover:bg-white/10 active:scale-95 transition',
+          ),
+        ],
+        [h.i([h.Class('fas fa-times'), h.AriaHidden(true)])],
+      ),
+    ],
+  )
+
+const phoneUpNextView = (model: Model, h: HtmlBuilder<Message>): Html =>
+  h.div(
+    [h.Class('sm:hidden mt-2')],
+    [
+      h.div(
+        [h.Class('flex items-center justify-between mb-2')],
+        [
+          h.h3([h.Class('text-base font-bold')], ['Up next']),
+          autoplaySwitchView(model.isAutoplay, '', h),
+        ],
+      ),
+      Array.match(model.setlist.queue, {
+        onEmpty: () =>
+          h.p([h.Class('text-sm text-gray-300 py-4')], [emptyQueueText(model)]),
+        onNonEmpty: songs =>
+          h.div(
+            [h.Class('space-y-1')],
+            songs.map((song, index) => phoneQueueRowView(song, index, h)),
+          ),
+      }),
+    ],
+  )
+
+const phoneControlsView = (
+  nowPlaying: NowPlaying,
+  model: Model,
+  h: HtmlBuilder<Message>,
+): Html => {
+  const sideButtonClass =
+    'flex items-center justify-center min-h-12 min-w-12 rounded-full text-gray-200 hover:text-white active:scale-95 transition'
+  return h.div(
+    [h.Class('sm:hidden flex items-center justify-center gap-4 mb-2')],
+    [
+      repeatButtonView(model.repeat, 'min-h-12 min-w-12', h),
+      h.button(
+        [
+          h.Type('button'),
+          h.AriaLabel('Previous song'),
+          h.OnClick(Message.ClickedPrevious()),
+          h.Class(sideButtonClass),
+        ],
+        [h.i([h.Class('fas fa-step-backward fa-lg'), h.AriaHidden(true)])],
+      ),
+      h.button(
+        [
+          h.Type('button'),
+          h.AriaLabel(nowPlaying.status === 'Playing' ? 'Pause' : 'Play'),
+          h.OnClick(Message.ClickedPlayPause()),
+          h.Class(
+            'w-16 h-16 rounded-full bg-white text-black flex items-center justify-center text-2xl active:scale-95 transition shadow-lg',
+          ),
+        ],
+        [
+          h.i([
+            h.Class(
+              nowPlaying.status === 'Playing'
+                ? 'fas fa-pause'
+                : 'fas fa-play pl-1',
+            ),
+            h.AriaHidden(true),
+          ]),
+        ],
+      ),
+      h.button(
+        [
+          h.Type('button'),
+          h.AriaLabel('Next song'),
+          h.OnClick(Message.ClickedNext()),
+          h.Class(sideButtonClass),
+        ],
+        [h.i([h.Class('fas fa-step-forward fa-lg'), h.AriaHidden(true)])],
+      ),
+    ],
+  )
+}
+
 // NOTE: this stays one element at one place in the tree, because expanding must not reload the video.
 const playerView = (
   nowPlaying: NowPlaying,
@@ -1420,19 +1580,21 @@ const playerView = (
       h.div(
         [
           h.Class(
-            `relative w-full ${isExpanded ? 'h-full flex flex-col' : 'h-1'}`,
+            `relative w-full ${isExpanded ? 'min-h-full sm:h-full flex flex-col' : 'h-1'}`,
           ),
         ],
         [
           h.div(
             [
               h.Class(
-                `${isExpanded ? 'flex' : 'hidden'} justify-between p-4 absolute top-0 left-0 right-0 z-10 bg-gradient-to-b from-black/80 to-transparent`,
+                `${isExpanded ? 'flex' : 'hidden'} justify-between p-2 sm:p-4 sm:absolute sm:top-0 sm:left-0 sm:right-0 z-10 sm:bg-gradient-to-b from-black/80 to-transparent`,
               ),
             ],
             [
               h.button(
                 [
+                  h.Type('button'),
+                  h.AriaLabel('Collapse player'),
                   h.OnClick(Message.ClickedCollapse()),
                   h.Class('text-white hover:text-[#446e92] p-2'),
                 ],
@@ -1443,7 +1605,7 @@ const playerView = (
           h.div(
             [
               h.Class(
-                `flex items-center justify-center bg-transparent ${isExpanded ? 'flex-1' : ''}`,
+                `flex items-center justify-center bg-transparent ${isExpanded ? 'sm:flex-1' : ''}`,
               ),
             ],
             [
@@ -1475,14 +1637,14 @@ const playerView = (
           h.div(
             [
               h.Class(
-                `${isExpanded ? 'block' : 'hidden'} p-8 pb-32 w-full max-w-4xl mx-auto`,
+                `${isExpanded ? 'block' : 'hidden'} p-4 pb-6 sm:p-8 sm:pb-32 w-full max-w-4xl mx-auto`,
               ),
             ],
             [
               h.h1(
                 [
                   h.Class(
-                    'text-2xl md:text-3xl font-bold text-center mb-2 drop-shadow-lg',
+                    'text-xl sm:text-2xl md:text-3xl font-bold text-center mb-1 sm:mb-2 drop-shadow-lg',
                   ),
                 ],
                 [nowPlaying.song.song_title],
@@ -1491,14 +1653,20 @@ const playerView = (
                 [h.Class('text-center text-gray-400 mb-4')],
                 [nowPlaying.song.title_text],
               ),
+              isExpanded ? phoneControlsView(nowPlaying, model, h) : h.empty,
               h.div(
-                [h.Class('flex items-center justify-center gap-2 mb-8')],
+                [
+                  h.Class(
+                    'flex items-center justify-center gap-2 mb-4 sm:mb-8',
+                  ),
+                ],
                 [
                   muteButtonView(model.volume, h),
                   volumeSliderView(model.volume, 'w-full max-w-xs', h),
                 ],
               ),
               upNextPreviewView(model.setlist.queue, h),
+              isExpanded ? phoneUpNextView(model, h) : h.empty,
             ],
           ),
         ],

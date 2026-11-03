@@ -47,15 +47,15 @@ const showList = async (page) => {
 };
 const queueDrawerOf = (page) => page.getByRole('heading', { name: 'Up Next' }).locator('xpath=../..');
 const queueHandle = (page) => page.getByRole('button', { name: 'Queue', exact: true });
-const autoplaySwitch = (page) => page.getByRole('switch', { name: 'Autoplay' });
+const autoplaySwitch = (page) => page.locator('[data-player-bar]').getByRole('switch', { name: 'Autoplay' });
 const switchBecomes = (page, checked, message) =>
   page
-    .locator(`[role="switch"][aria-label="Autoplay"][aria-checked="${checked}"]`)
+    .locator(`[data-player-bar] [role="switch"][aria-label="Autoplay"][aria-checked="${checked}"]`)
     .waitFor({ timeout: 5000 })
     .catch(() => {
       throw new Error(message);
     });
-const barButton = (page, icon) => page.locator(`.fixed.bottom-0 button:has(i.${icon})`);
+const barButton = (page, icon) => page.locator(`[data-player-bar] button:not([role="switch"]):has(i.${icon})`);
 const playerSrc = (page) => page.locator('iframe[src*="youtube"]').first().getAttribute('src', { timeout: 30000 });
 
 const step = async (feature, name, action) => {
@@ -344,7 +344,7 @@ const journeys = {
 
     const coverRow = await songRowOf(page, videos, { ...cover.karaoke_song[0], video_url: cover.video_url });
     await coverRow.click();
-    const bar = page.locator('.fixed.bottom-0');
+    const bar = page.locator('[data-player-bar]');
     await bar.getByRole('heading', { name: cover.karaoke_song[0].song_title }).waitFor();
     await bar.getByText('Cover', { exact: true }).waitFor();
     const src = await playerSrc(page);
@@ -445,7 +445,7 @@ const journeys = {
 
     const rowA = await songRowOf(page, videos, a);
     await rowA.click();
-    const bar = page.locator('.fixed.bottom-0');
+    const bar = page.locator('[data-player-bar]');
     await bar.getByRole('heading', { name: a.song_title }).waitFor();
     const src = await playerSrc(page);
     check('karaoke', 'play opens the player at the song timestamp', src.includes(`/embed/${a.video_url}?`) && src.includes('start='), src.slice(0, 90));
@@ -551,7 +551,7 @@ const journeys = {
     await page.goto(BASE + '/');
     await videoRows(page).first().waitFor();
     await (await songRowOf(page, videos, rows[start])).click();
-    const bar = page.locator('.fixed.bottom-0');
+    const bar = page.locator('[data-player-bar]');
     await bar.getByRole('heading', { name: rows[start].song_title }).waitFor();
     await step('player', 'the expand button is disabled until the player has loaded', async () => {
       if (!(await barButton(page, 'fa-expand').isDisabled())) throw new Error('expand is clickable while the player loads');
@@ -561,7 +561,7 @@ const journeys = {
       releaseApi();
       await page.unroute('**/iframe_api*');
       await playerReady(page);
-      await page.waitForFunction(() => !document.querySelector('.fixed.bottom-0 button:has(i.fa-expand)').disabled);
+      await page.waitForFunction(() => !document.querySelector('[data-player-bar] button:has(i.fa-expand)').disabled);
     });
     releaseApi();
     await playerReady(page);
@@ -573,15 +573,24 @@ const journeys = {
       await autoplaySwitch(page).waitFor();
       if ((await autoplaySwitch(page).getAttribute('aria-checked')) !== 'true') throw new Error('the switch is not on');
     });
-    await step('player', 'the autoplay switch fits a 375px bar with a 40px touch target', async () => {
+    await step('player', 'on a phone the bar hides the switch, and the full player has it as a 40px target clear of repeat', async () => {
       await page.setViewportSize({ width: 375, height: 667 });
-      const box = await autoplaySwitch(page).boundingBox();
-      const expandHidden = !(await barButton(page, 'fa-expand').isVisible());
-      const repeat = await page.getByRole('button', { name: /^Repeat: / }).boundingBox();
-      await page.setViewportSize({ width: 1280, height: 800 });
-      if (!box || box.height < 40 || box.x < 0 || box.x + box.width > 375) throw new Error(`switch box ${JSON.stringify(box)}`);
-      if (!expandHidden) throw new Error('the separate expand button still shows on a phone');
-      if (!repeat || (repeat.x < box.x + box.width && box.x < repeat.x + repeat.width && repeat.y < box.y + box.height && box.y < repeat.y + repeat.height)) throw new Error('the switch overlaps the repeat button');
+      try {
+        if (await autoplaySwitch(page).isVisible()) throw new Error('the switch still shows in the phone bar');
+        if (await barButton(page, 'fa-expand').isVisible()) throw new Error('the separate expand button still shows on a phone');
+        await page.getByRole('button', { name: 'Expand player' }).first().click();
+        const full = page.locator('.fixed.z-50.inset-0');
+        const toggle = full.getByRole('switch', { name: 'Autoplay' });
+        await toggle.waitFor({ state: 'visible' });
+        await page.waitForTimeout(700);
+        const box = await toggle.boundingBox();
+        const repeat = await full.getByRole('button', { name: /^Repeat: / }).boundingBox();
+        if (!box || box.height < 40 || box.x < 0 || box.x + box.width > 375) throw new Error(`switch box ${JSON.stringify(box)}`);
+        if (!repeat || (repeat.x < box.x + box.width && box.x < repeat.x + repeat.width && repeat.y < box.y + box.height && box.y < repeat.y + repeat.height)) throw new Error('the switch overlaps the repeat button');
+        await page.getByRole('button', { name: 'Collapse player' }).first().click();
+      } finally {
+        await page.setViewportSize({ width: 1280, height: 800 });
+      }
     });
     await step('player', 'expand keeps the same video element', async () => {
       await barButton(page, 'fa-expand').click();
@@ -609,20 +618,20 @@ const journeys = {
     await step('player', 'the pause button pauses the real video', async () => {
       await playVideo(page);
       await playerState(page, 1);
-      await bar.locator('i.fa-pause').waitFor();
+      await bar.locator('button:not([role="switch"]) i.fa-pause').waitFor();
       await barButton(page, 'fa-pause').click();
       await playerState(page, 2);
     });
     await step('player', 'a play started inside the player reaches the bar', async () => {
       await playVideo(page);
-      await bar.locator('i.fa-pause').waitFor({ timeout: 15000 });
+      await bar.locator('button:not([role="switch"]) i.fa-pause').waitFor({ timeout: 15000 });
     });
     await step('player', 'a pause started inside the player reaches the bar', async () => {
       await page.evaluate(() => {
         const f = document.querySelector('iframe[src*="youtube"]');
         window.YT.get(f.id).pauseVideo();
       });
-      await bar.locator('i.fa-play').waitFor({ timeout: 15000 });
+      await bar.locator('button:not([role="switch"]) i.fa-play').waitFor({ timeout: 15000 });
     });
     await step('player', 'video end moves on to the next song of the same video', async () => {
       await playVideo(page);
@@ -679,7 +688,7 @@ const journeys = {
       await playVideo(page);
       await playerState(page, 1);
       await seekNearEnd(page);
-      await bar.locator('i.fa-play').waitFor({ timeout: 40000 });
+      await bar.locator('button:not([role="switch"]) i.fa-play').waitFor({ timeout: 40000 });
       await bar.getByRole('heading', { name: nextRow.song_title }).waitFor();
       if (!(await page.evaluate(() => window.__frame === document.querySelector('iframe[src*="youtube"]')))) throw new Error('a new iframe was created');
       if ((await page.locator('iframe[src*="youtube"]').count()) !== 1) throw new Error('more than one player');
@@ -738,7 +747,7 @@ const journeys = {
     const liveIndex = rows.findIndex((r) => !r.is_gone);
     const live = rows[liveIndex];
     const liveFirsts = rows.filter((r, i) => !r.is_gone && r.video_url !== gone.video_url && rows.findIndex((x) => x.video_url === r.video_url) === i);
-    const bar = page.locator('.fixed.bottom-0');
+    const bar = page.locator('[data-player-bar]');
     const stepForward = barButton(page, 'fa-step-forward');
 
     await page.goto(BASE + '/');
@@ -873,7 +882,7 @@ const journeys = {
       const blockedRows = songRows(blockedVideos);
       await videoRows(blockedTab).first().waitFor();
       await (await songRowOf(blockedTab, blockedVideos, blockedRows[await findRowIndex(blockedRows, isPublic)])).click();
-      await blockedTab.locator('.fixed.bottom-0 h3').first().waitFor();
+      await blockedTab.locator('[data-player-bar] h3').first().waitFor();
     });
     await blockedTab.close();
 
@@ -1018,13 +1027,13 @@ const journeys = {
       const { body: videos } = await api('/api/get-karaoke');
       const rows = songRows(videos);
       await (await songRowOf(page, videos, rows[await findRowIndex(rows, isPublic)])).click();
-      await page.locator('.fixed.bottom-0 h3').first().waitFor();
+      await page.locator('[data-player-bar] h3').first().waitFor();
       await infoButton.click();
       await dialog.waitFor();
       const barOnTop = await page.evaluate(() => {
-        const bar = document.querySelector('.fixed.bottom-0').getBoundingClientRect();
+        const bar = document.querySelector('[data-player-bar]').getBoundingClientRect();
         const hit = document.elementFromPoint(bar.left + bar.width / 2, bar.top + bar.height / 2);
-        return hit?.closest('.fixed.bottom-0') ? `${hit.tagName}.${hit.className}`.slice(0, 120) : '';
+        return hit?.closest('[data-player-bar]') ? `${hit.tagName}.${hit.className}`.slice(0, 120) : '';
       });
       if (barOnTop) throw new Error(`the player bar is above the panel overlay: ${barOnTop}`);
       await page.keyboard.press('Escape');
@@ -1116,19 +1125,145 @@ const journeys = {
       await volumeBecomes([60, true]);
       if ((await slider.inputValue()) !== '0') throw new Error('a muted slider should read 0');
     });
-    await step('volume', 'on a phone the bar has only the mute button, and the expanded player has the slider', async () => {
+    await step('volume', 'on a phone the bar has no volume controls, and the expanded player has the slider and mute', async () => {
       await page.setViewportSize({ width: 375, height: 667 });
       if (await slider.count()) throw new Error('the slider shows in the phone bar');
-      const mute = page.getByRole('button', { name: 'Unmute', exact: true });
-      const box = await mute.boundingBox();
-      if (!box || box.width < 40 || box.height < 40) throw new Error(`mute ${JSON.stringify(box)}`);
-      const title = await page.locator('.fixed.bottom-0.h-20 h3').boundingBox();
+      if (await page.getByRole('button', { name: 'Unmute', exact: true }).count()) throw new Error('mute shows before the player opens');
+      const title = await page.locator('[data-player-bar] h3').boundingBox();
       if (title.width < 100) throw new Error(`the bar title is ${title.width}px`);
       await page.screenshot({ path: join(out, 'volume-phone-bar.png') });
       await page.getByRole('button', { name: 'Expand player' }).first().click();
       await page.waitForTimeout(800);
       await slider.waitFor();
+      const box = await page.getByRole('button', { name: 'Unmute', exact: true }).boundingBox();
+      if (!box || box.width < 40 || box.height < 40) throw new Error(`mute ${JSON.stringify(box)}`);
       await page.screenshot({ path: join(out, 'volume-phone-expanded.png') });
+    });
+  },
+
+  async mobilePlayer(page) {
+    await page.setViewportSize({ width: 375, height: 667 });
+    const { body: videos } = await api('/api/get-karaoke');
+    const singles = [];
+    for (const v of videos) {
+      if (isSingleSong(videos, v.video_url) && !singles.some((s) => s.karaoke_song[0].song_title === v.karaoke_song[0].song_title)) singles.push(v);
+    }
+    if (singles.length < 4) throw new Error('need four single-song videos');
+    const titleOf = (video) => video.karaoke_song[0].song_title;
+    const bar = page.locator('[data-player-bar]');
+    const full = page.locator('.fixed.z-50.inset-0');
+    const queued = singles.slice(1, 4);
+    await page.goto(BASE + '/');
+    await videoRows(page).first().waitFor();
+    await videoRow(page, videos, singles[0].video_url).locator('button').first().click();
+    await bar.getByRole('heading', { name: titleOf(singles[0]) }).waitFor({ timeout: 10000 });
+    for (const video of queued) {
+      await videoRow(page, videos, video.video_url).getByRole('button', { name: 'Add to Queue', exact: true }).click();
+    }
+    await playerReady(page);
+    await page.evaluate(() => {
+      window.__frame = document.querySelector('iframe[src*="youtube"]');
+      window.__frameSrc = window.__frame.src;
+    });
+
+    await step('mobilePlayer', 'the mini bar holds the title area, play/pause and next, with a title at least 180px wide', async () => {
+      const buttons = bar.locator('button:visible');
+      const icons = await buttons.evaluateAll((els) => els.map((el) => el.querySelector('i')?.className ?? 'overlay'));
+      if (icons.length !== 3) throw new Error(`visible bar buttons ${JSON.stringify(icons)}`);
+      if (!icons.some((c) => /fa-(pause|play)/.test(c)) || !icons.some((c) => c.includes('fa-step-forward'))) throw new Error(`icons ${JSON.stringify(icons)}`);
+      for (const [selector, what] of [
+        ['i.fa-step-backward', 'previous'],
+        ['[role="switch"]', 'the autoplay switch'],
+        ['input[aria-label="Volume"]', 'the volume slider'],
+        ['button[aria-label^="Repeat"]', 'repeat'],
+        ['button[aria-label="Mute"], button[aria-label="Unmute"]', 'mute'],
+      ]) {
+        if (await bar.locator(selector).locator('visible=true').count()) throw new Error(`${what} shows in the mini bar`);
+      }
+      const title = await bar.locator('h3').boundingBox();
+      if (!title || title.width < 180) throw new Error(`title is ${title?.width}px wide`);
+      for (const icon of ['fa-step-forward', 'fa-pause, i.fa-play']) {
+        const box = await bar.locator(`button:has(i.${icon})`).first().boundingBox();
+        if (!box || box.width < 40 || box.height < 40) throw new Error(`${icon} target ${JSON.stringify(box)}`);
+      }
+      await page.screenshot({ path: join(out, 'mobile-player-mini-bar.png') });
+    });
+    await step('mobilePlayer', 'tapping the bar opens the full player and hides the mini bar', async () => {
+      const title = await bar.locator('h3').boundingBox();
+      await page.mouse.click(title.x + title.width / 2, title.y + title.height + 12);
+      await full.getByRole('button', { name: /^Repeat: / }).waitFor({ state: 'visible' });
+      await page.waitForTimeout(700);
+      if (await bar.isVisible()) throw new Error('the mini bar still shows');
+    });
+    await step('mobilePlayer', 'the full player shows repeat, previous, play/pause, next, volume and an Up next header with a labeled Autoplay switch', async () => {
+      for (const name of [/^Repeat: /, 'Previous song', /^(Play|Pause)$/, 'Next song']) {
+        const box = await full.getByRole('button', { name }).boundingBox();
+        if (!box || box.width < 48 || box.height < 48) throw new Error(`${name} target ${JSON.stringify(box)}`);
+      }
+      await full.locator('input[aria-label="Volume"]').waitFor({ state: 'visible' });
+      await full.getByRole('heading', { name: 'Up next' }).waitFor({ state: 'visible' });
+      const label = full.getByText('Autoplay', { exact: true });
+      if (!(await label.isVisible())) throw new Error('the Autoplay text is not visible');
+      const toggle = full.getByRole('switch', { name: 'Autoplay' });
+      const before = await toggle.getAttribute('aria-checked');
+      const flipped = before === 'true' ? 'false' : 'true';
+      await toggle.click();
+      await full.locator(`[role="switch"][aria-checked="${flipped}"]`).waitFor({ timeout: 5000 }).catch(() => {
+        throw new Error(`aria-checked stayed ${before}`);
+      });
+      await toggle.click();
+      await full.locator(`[role="switch"][aria-checked="${before}"]`).waitFor({ timeout: 5000 }).catch(() => {
+        throw new Error('the switch did not toggle back');
+      });
+    });
+    await step('mobilePlayer', 'the whole queue is listed, and the screenshot shows it', async () => {
+      const rows = full.locator('button[aria-label^="Play "][aria-label$=" now"]');
+      if ((await rows.count()) !== 3) throw new Error(`${await rows.count()} queued rows`);
+      await page.screenshot({ path: join(out, 'mobile-player-full-queue.png') });
+    });
+    await step('mobilePlayer', 'collapsing brings the mini bar back and keeps the same video element', async () => {
+      await full.locator('button:has(i.fa-chevron-down)').click();
+      await bar.waitFor({ state: 'visible' });
+      await page.waitForTimeout(600);
+      const same = await page.evaluate(() => {
+        const frame = document.querySelector('iframe[src*="youtube"]');
+        return { sameElement: frame === window.__frame, sameSrc: frame.src === window.__frameSrc, count: document.querySelectorAll('iframe[src*="youtube"]').length };
+      });
+      if (!same.sameElement || !same.sameSrc || same.count !== 1) throw new Error(JSON.stringify(same));
+    });
+    await step('mobilePlayer', 'tapping a queued row in the full player plays it now', async () => {
+      const title = await bar.locator('h3').boundingBox();
+      await page.mouse.click(title.x + title.width / 2, title.y + title.height / 2);
+      await full.getByRole('heading', { name: 'Up next' }).waitFor({ state: 'visible' });
+      await full.getByRole('button', { name: `Play "${titleOf(queued[1])}" now` }).click();
+      await full.getByRole('heading', { level: 1, name: titleOf(queued[1]) }).waitFor({ timeout: 10000 });
+      const left = await full.locator('button[aria-label^="Play "][aria-label$=" now"]').evaluateAll((els) => els.map((el) => el.getAttribute('aria-label')));
+      if (left.length !== 2 || left.some((l) => l.includes(titleOf(queued[1])))) throw new Error(`queue after play ${JSON.stringify(left)}`);
+    });
+    await step('mobilePlayer', 'an empty queue says what happens next, matching the autoplay switch', async () => {
+      for (const title of [titleOf(queued[0]), titleOf(queued[2])]) {
+        await full.getByRole('button', { name: `Remove "${title}" from queue` }).click();
+      }
+      const toggle = full.getByRole('switch', { name: 'Autoplay' });
+      if ((await toggle.getAttribute('aria-checked')) !== 'true') await toggle.click();
+      await full.getByText('Queue is empty. When this song ends, autoplay continues with the next song in this video', { exact: false }).waitFor({ timeout: 5000 });
+      await page.screenshot({ path: join(out, 'mobile-player-full-empty.png') });
+      await toggle.click();
+      await full.getByText('Playback stops after this song').waitFor({ timeout: 5000 });
+      await toggle.click();
+    });
+    await step('mobilePlayer', 'the queue drawer header has the labeled Autoplay switch at 375px', async () => {
+      await full.locator('button:has(i.fa-chevron-down)').click();
+      await bar.waitFor({ state: 'visible' });
+      await queueHandle(page).click();
+      await page.waitForTimeout(500);
+      const toggle = queueDrawerOf(page).getByRole('switch', { name: 'Autoplay' });
+      if (!(await queueDrawerOf(page).getByText('Autoplay', { exact: true }).isVisible())) throw new Error('no visible label');
+      const before = await toggle.getAttribute('aria-checked');
+      await toggle.click();
+      await queueDrawerOf(page).locator(`[role="switch"][aria-checked="${before === 'true' ? 'false' : 'true'}"]`).waitFor({ timeout: 5000 });
+      await toggle.click();
+      await page.getByRole('button', { name: 'Close queue' }).click();
     });
   },
 
@@ -1215,7 +1350,7 @@ const journeys = {
       if (isSingleSong(videos, v.video_url) && !singles.some((s) => s.karaoke_song[0].song_title === v.karaoke_song[0].song_title)) singles.push(v);
     }
     const multi = videos.find((v) => !v.is_gone && v.karaoke_song.length > 1);
-    const barTitle = () => page.locator('.fixed.bottom-0.h-20 h3');
+    const barTitle = () => page.locator('[data-player-bar] h3');
     const queuedTitles = () => queueDrawerOf(page).locator('button[aria-label^="Play "][aria-label$=" now"]').evaluateAll((els) => els.map((el) => el.getAttribute('aria-label')));
     const rowOfVideo = (video) => videoRow(page, videos, video.video_url);
     await page.goto(BASE + '/');
@@ -1266,7 +1401,7 @@ const journeys = {
     });
     await step('mobile', 'the player bar title is not cut to a stub and tapping it expands the player', async () => {
       const box = await barTitle().boundingBox();
-      if (!box || box.width < 110) throw new Error(`title is ${box?.width}px wide`);
+      if (!box || box.width < 180) throw new Error(`title is ${box?.width}px wide`);
       await page.screenshot({ path: join(out, 'mobile-player-bar.png') });
       await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
       await page.getByRole('button', { name: 'Collapse player' }).first().waitFor({ state: 'visible' });
@@ -1277,6 +1412,7 @@ const journeys = {
     });
     await step('mobile', 'the repeat button cycles Off, All, One and the mode survives a reload', async () => {
       const repeat = (mode) => page.getByRole('button', { name: `Repeat: ${mode}`, exact: true });
+      await page.getByRole('button', { name: 'Expand player' }).first().click();
       const box = await repeat('Off').boundingBox();
       if (!box || box.width < 40 || box.height < 40) throw new Error(`repeat button ${JSON.stringify(box)}`);
       await repeat('Off').click();
@@ -1286,9 +1422,12 @@ const journeys = {
       await page.reload();
       await videoRows(page).first().waitFor();
       await rowOfVideo(singles[0]).locator('button').first().click();
+      await page.getByRole('button', { name: 'Expand player' }).first().click();
       await page.getByRole('button', { name: 'Repeat: One', exact: true }).waitFor({ timeout: 10000 });
       await page.getByRole('button', { name: 'Repeat: One', exact: true }).click();
       await page.getByRole('button', { name: 'Repeat: Off', exact: true }).waitFor();
+      await page.getByRole('button', { name: 'Collapse player' }).first().click();
+      await page.getByRole('button', { name: 'Expand player' }).first().waitFor({ state: 'visible' });
     });
     await step('mobile', 'Back from a setlist lands on the video list, still on the site', async () => {
       await showList(page);
