@@ -7,6 +7,7 @@ import { PlayerEvent } from '../../youtube'
 import {
   ApplyPlayback,
   FetchSongs,
+  FocusQueueHandle,
   LoadAutoplay,
   LoadSavedSetlist,
   Message,
@@ -749,5 +750,80 @@ test('a search scrolls the list back to its first video, and clearing it does no
     Command.resolve(ScrollSetlistToTop, Message.CompletedScrollSetlistToTop()),
     message(Message.UpdatedSearch({ value: '' })),
     Command.expectNone(),
+  )
+})
+
+const queueOf = (current: Model) => current.setlist.queue.map(song => song.id)
+
+const withQueue = [
+  message(Message.SucceededFetchSongs({ songs: [a, b, c], goneVideoIds: [] })),
+  message(Message.ClickedAddToQueue({ song: a })),
+  saved,
+  message(Message.ClickedAddToQueue({ song: b })),
+  saved,
+  message(Message.ClickedAddToQueue({ song: c })),
+  saved,
+]
+
+test('dropping the first queued song on the third slot reorders and saves', () => {
+  story(
+    update,
+    given(init()),
+    ...withQueue,
+    message(Message.StartedQueueDrag({ index: 0 })),
+    message(Message.DraggedOverQueueSlot({ index: 2 })),
+    model(current => {
+      expect(current.maybeQueueDrag).toEqual(Option.some({ from: 0, over: 2 }))
+    }),
+    message(Message.DroppedQueueSong({ index: 2 })),
+    saved,
+    model(current => {
+      expect(queueOf(current)).toEqual(['b', 'c', 'a'])
+      expect(current.maybeQueueDrag).toEqual(Option.none())
+    }),
+  )
+})
+
+test('moving the last queued song down and the first up change nothing', () => {
+  story(
+    update,
+    given(init()),
+    ...withQueue,
+    message(Message.PressedQueueMoveKey({ index: 2, by: 1 })),
+    message(Message.PressedQueueMoveKey({ index: 0, by: -1 })),
+    model(current => {
+      expect(queueOf(current)).toEqual(['a', 'b', 'c'])
+    }),
+  )
+})
+
+test('the move key moves a queued song one place and saves', () => {
+  story(
+    update,
+    given(init()),
+    ...withQueue,
+    message(Message.PressedQueueMoveKey({ index: 2, by: -1 })),
+    Command.resolveAll(
+      [SaveSetlist, Message.CompletedSaveSetlist()],
+      [FocusQueueHandle, Message.CompletedFocusQueueHandle()],
+    ),
+    model(current => {
+      expect(queueOf(current)).toEqual(['a', 'c', 'b'])
+    }),
+  )
+})
+
+test('ending a drag without a drop leaves the queue unchanged', () => {
+  story(
+    update,
+    given(init()),
+    ...withQueue,
+    message(Message.StartedQueueDrag({ index: 0 })),
+    message(Message.DraggedOverQueueSlot({ index: 2 })),
+    message(Message.EndedQueueDrag()),
+    model(current => {
+      expect(queueOf(current)).toEqual(['a', 'b', 'c'])
+      expect(current.maybeQueueDrag).toEqual(Option.none())
+    }),
   )
 })

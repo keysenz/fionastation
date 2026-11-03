@@ -31,6 +31,7 @@ import {
   enqueue,
   failLoad,
   markPlayerReady,
+  moveInQueue,
   planAdvance,
   planSkip,
   play,
@@ -61,6 +62,15 @@ export const SkipToast = Schema.Struct({
 })
 export type SkipToast = typeof SkipToast.Type
 
+export const QueueDrag = Schema.Struct({
+  from: Schema.Number,
+  over: Schema.Number,
+})
+export type QueueDrag = typeof QueueDrag.Type
+
+export const queueHandleId = (index: number): string =>
+  `karaoke-queue-handle-${index}`
+
 export const Model = Schema.Struct({
   songs: SongsData.schema,
   search: Schema.String,
@@ -71,6 +81,7 @@ export const Model = Schema.Struct({
   goneVideoIds: Schema.Array(Schema.String),
   isAutoplay: Schema.Boolean,
   maybeSelectedVideoId: Schema.Option(Schema.String),
+  maybeQueueDrag: Schema.Option(QueueDrag),
 })
 export type Model = typeof Model.Type
 
@@ -96,6 +107,14 @@ export const Message = defineMessageUnion({
   ClickedQueueHandle: {},
   ClickedDismissToast: {},
   ClickedToggleAutoplay: {},
+  StartedQueueDrag: { index: Schema.Number },
+  DraggedOverQueueSlot: { index: Schema.Number },
+  DroppedQueueSong: { index: Schema.Number },
+  EndedQueueDrag: {},
+  PressedQueueMoveKey: {
+    index: Schema.Number,
+    by: Schema.Literals([-1, 1]),
+  },
   ReceivedPlayerEvent: { playId: Schema.Number, event: PlayerEvent },
   CompletedLoadSavedSetlist: { maybeJson: Schema.Option(Schema.String) },
   CompletedApplyPlayback: {},
@@ -104,6 +123,7 @@ export const Message = defineMessageUnion({
   CompletedSaveAutoplay: {},
   CompletedScrollListToTop: {},
   CompletedScrollSetlistToTop: {},
+  CompletedFocusQueueHandle: {},
   CompletedPickRandomVideo: {
     playId: Schema.Number,
     song: PlayableSong,
@@ -186,6 +206,16 @@ export const ScrollSetlistToTop = Command.define('ScrollSetlistToTop', {
   }).pipe(Effect.ignore, Effect.as(Message.CompletedScrollSetlistToTop())),
 })
 
+export const FocusQueueHandle = Command.define('FocusQueueHandle', {
+  args: { index: Schema.Number },
+  messages: [Message.CompletedFocusQueueHandle],
+  execute: ({ index }) =>
+    Dom.focus(`#${queueHandleId(index)}`).pipe(
+      Effect.ignore,
+      Effect.as(Message.CompletedFocusQueueHandle()),
+    ),
+})
+
 export const SaveAutoplay = Command.define('SaveAutoplay', {
   args: { isAutoplay: Schema.Boolean },
   messages: [Message.CompletedSaveAutoplay],
@@ -256,6 +286,7 @@ export const init = (): Model => ({
   goneVideoIds: [],
   isAutoplay: true,
   maybeSelectedVideoId: Option.none(),
+  maybeQueueDrag: Option.none(),
 })
 
 export type UpdateReturn = Update.Return<Model, Message>
@@ -401,6 +432,52 @@ export const update = (model: Model, message: Message) =>
 
     ClickedAddToQueue: ({ song }) =>
       changeSetlist(model, enqueue(model.setlist, song)),
+
+    StartedQueueDrag: ({ index }) => ({
+      model: modifyFields(model, {
+        maybeQueueDrag: () => Option.some({ from: index, over: index }),
+      }),
+    }),
+
+    DraggedOverQueueSlot: ({ index }) => ({
+      model: modifyFields(model, {
+        maybeQueueDrag: maybeDrag =>
+          Option.map(maybeDrag, drag => ({ ...drag, over: index })),
+      }),
+    }),
+
+    DroppedQueueSong: ({ index }) =>
+      Option.match(model.maybeQueueDrag, {
+        onNone: () => ({ model }),
+        onSome: ({ from }) => {
+          const cleared = modifyFields(model, {
+            maybeQueueDrag: () => Option.none(),
+          })
+          const moved = moveInQueue(model.setlist, from, index)
+          return moved === model.setlist
+            ? { model: cleared }
+            : changeSetlist(cleared, moved)
+        },
+      }),
+
+    EndedQueueDrag: () => ({
+      model: modifyFields(model, { maybeQueueDrag: () => Option.none() }),
+    }),
+
+    PressedQueueMoveKey: ({ index, by }) => {
+      const moved = moveInQueue(model.setlist, index, index + by)
+      if (moved === model.setlist) {
+        return { model }
+      }
+      const changed = changeSetlist(model, moved)
+      return {
+        model: changed.model,
+        commands: [
+          ...(changed.commands ?? []),
+          FocusQueueHandle({ index: index + by }),
+        ],
+      }
+    },
 
     ClickedPlayPause: () => changeSetlist(model, togglePlaying(model.setlist)),
     ClickedNext: () => changeSetlist(model, playNext(model.setlist)),
@@ -589,4 +666,5 @@ export const update = (model: Model, message: Message) =>
     CompletedSaveAutoplay: () => ({ model }),
     CompletedScrollListToTop: () => ({ model }),
     CompletedScrollSetlistToTop: () => ({ model }),
+    CompletedFocusQueueHandle: () => ({ model }),
   })

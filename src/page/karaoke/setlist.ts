@@ -80,6 +80,23 @@ export const play = (setlist: Setlist, song: PlayableSong): Setlist =>
 export const enqueue = (setlist: Setlist, song: PlayableSong): Setlist =>
   modifyFields(setlist, { queue: queue => [...queue, song] })
 
+export const moveInQueue = (
+  setlist: Setlist,
+  from: number,
+  to: number,
+): Setlist => {
+  const { queue } = setlist
+  const isInRange = (index: number) =>
+    Number.isInteger(index) && index >= 0 && index < queue.length
+  if (from === to || !isInRange(from) || !isInRange(to)) {
+    return setlist
+  }
+  const without = queue.filter((_, index) => index !== from)
+  return modifyFields(setlist, {
+    queue: () => [...without.slice(0, to), queue[from]!, ...without.slice(to)],
+  })
+}
+
 const modifyNowPlaying = (
   setlist: Setlist,
   change: (nowPlaying: NowPlaying) => NowPlaying,
