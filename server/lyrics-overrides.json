@@ -1,4 +1,21 @@
 {
-  "titles": {},
+  "titles": {
+    "betelgeuse": {
+      "artist": "Yuuri",
+      "note": "Studio recording by Yuuri"
+    },
+    "idol": {
+      "hide": true,
+      "note": "LRCLIB's Idol entries are the English translation. The Japanese original is filed as アイドル and has not been checked against Fiona's cover."
+    },
+    "loser": {
+      "lrclibId": 32366238,
+      "note": "Kenshi Yonezu, Japanese lyrics, not the Rotfront or Beck songs"
+    },
+    "pretender": {
+      "lrclibId": 3821917,
+      "note": "Official HIGE DANdism, 5:26, not the Madonna song"
+    }
+  },
   "songs": {}
 }

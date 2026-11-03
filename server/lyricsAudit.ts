@@ -19,7 +19,7 @@ import {
 } from './lyricsMatch.ts'
 
 const PAUSE_MS = 1_000
-const RETRY_PAUSE_MS = 60_000
+const RETRY_PAUSE_MS = 5_000
 const MAX_ATTEMPTS = 3
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
@@ -60,7 +60,7 @@ async function searchWithRetry(plan: SearchPlan): Promise<LrclibTrack[]> {
       if (!(error instanceof LrclibUnavailable) || attempt === MAX_ATTEMPTS) {
         throw error
       }
-      console.error(`LRCLIB unavailable (${error.message}), pausing 60 s`)
+      console.error(`LRCLIB unavailable (${error.message}), pausing 5 s`)
       await sleep(RETRY_PAUSE_MS)
     }
   }

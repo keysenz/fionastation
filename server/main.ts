@@ -5,7 +5,8 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { extname, join, resolve, sep } from 'node:path'
 import { gzipSync } from 'node:zlib'
 
-import { listKaraokeVideos } from './db.ts'
+import { findSongForLyrics, listKaraokeVideos, listSongIds } from './db.ts'
+import { loadOverrides, lookupLyrics, warnAboutUnknownSongs } from './lyrics.ts'
 import { isGone, startRefreshing } from './videoStatus.ts'
 
 const ROOT = resolve(import.meta.dirname, '../dist')
@@ -42,12 +43,60 @@ const MOVED_PAGE_PATHS = new Set([
   '/credits',
 ])
 
-const API_ROUTES: Record<string, () => unknown> = {
-  '/api/get-karaoke': () =>
-    listKaraokeVideos().map(video => ({
+type ApiReply = Readonly<{
+  status: number
+  body: unknown
+  cacheControl: string
+}>
+
+const NO_CACHE = 'no-cache'
+// NOTE: the Vercel CDN keeps lyrics for an hour, so a fix to the overrides file shows up within the hour.
+const LYRICS_CACHE = 'public, max-age=3600, s-maxage=3600'
+
+// NOTE: an invalid file throws here on purpose. A broken file could bring back lyrics a `hide` entry held back.
+const lyricsOverrides = loadOverrides(
+  join(import.meta.dirname, 'lyrics-overrides.json'),
+)
+
+const lyricsRoute = async (songId: string | null): Promise<ApiReply> => {
+  if (!songId) {
+    return {
+      status: 400,
+      body: { error: 'Missing song' },
+      cacheControl: NO_CACHE,
+    }
+  }
+  const song = findSongForLyrics(songId)
+  if (!song) {
+    return {
+      status: 404,
+      body: { error: 'Unknown song' },
+      cacheControl: NO_CACHE,
+    }
+  }
+  const lookup = await lookupLyrics(song, lyricsOverrides)
+  return lookup.kind === 'Answered'
+    ? { status: 200, body: lookup.lyrics, cacheControl: LYRICS_CACHE }
+    : {
+        status: 503,
+        body: { error: 'Lyrics are unavailable right now' },
+        cacheControl: 'no-store',
+      }
+}
+
+const API_ROUTES: Record<
+  string,
+  (query: URLSearchParams) => ApiReply | Promise<ApiReply>
+> = {
+  '/api/get-karaoke': () => ({
+    status: 200,
+    body: listKaraokeVideos().map(video => ({
       ...video,
       is_gone: isGone(video.video_url),
     })),
+    cacheControl: NO_CACHE,
+  }),
+  '/api/get-lyrics': query => lyricsRoute(query.get('song')),
 }
 
 const SECURITY_HEADERS = {
@@ -143,8 +192,8 @@ const handle = async (req: IncomingMessage, res: ServerResponse) => {
     res.end(gzip ? gzipSync(body) : body)
   }
 
-  const replyJson = (status: number, value: unknown) =>
-    reply(status, JSON_TYPE, Buffer.from(JSON.stringify(value)))
+  const replyJson = (status: number, value: unknown, cacheControl?: string) =>
+    reply(status, JSON_TYPE, Buffer.from(JSON.stringify(value)), cacheControl)
 
   const replyShell = async (status: number) =>
     reply(status, HTML, await readFile(join(ROOT, 'index.html')))
@@ -182,7 +231,10 @@ const handle = async (req: IncomingMessage, res: ServerResponse) => {
       return replyJson(405, { error: 'Method Not Allowed' })
     }
     try {
-      return replyJson(200, apiRoute())
+      const { status, body, cacheControl } = await apiRoute(
+        new URL(req.url ?? '/', 'http://localhost').searchParams,
+      )
+      return replyJson(status, body, cacheControl)
     } catch (error) {
       console.error(`Error serving ${pathname}:`, error)
       return replyJson(500, { error: 'Could not read data' })
@@ -233,6 +285,12 @@ server.listen(PORT, process.env.HOSTNAME ?? '0.0.0.0', () => {
 })
 
 startRefreshing(() => listKaraokeVideos().map(video => video.video_url))
+
+try {
+  warnAboutUnknownSongs(lyricsOverrides, listSongIds())
+} catch (error) {
+  console.warn('Could not check lyrics overrides against the database:', error)
+}
 
 // NOTE: Node runs as PID 1 in the container, where a signal with no handler is ignored.
 for (const signal of ['SIGTERM', 'SIGINT']) {

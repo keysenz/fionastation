@@ -265,6 +265,14 @@ const picked = (group: ReadonlyArray<Candidate>): Verdict => {
     : { kind: 'Missing', reason: 'NotFound' }
 }
 
+/** A track a maintainer named by id. It skips the title and artist checks, and keeps only the lines check. */
+export function verdictForChosenTrack(track: LrclibTrack): Verdict {
+  const lines = track.syncedLyrics ? parseLrc(track.syncedLyrics) : []
+  return isNonEmpty(lines)
+    ? { kind: 'Picked', track, lines }
+    : { kind: 'Missing', reason: 'NotFound' }
+}
+
 const UNSURE: Verdict = { kind: 'Missing', reason: 'Unsure' }
 const NOT_FOUND: Verdict = { kind: 'Missing', reason: 'NotFound' }
 
