@@ -18,8 +18,14 @@ import {
   SONG_LIST_ID,
   type SkipToast,
   allSongs,
+  nowSingingOf,
   queueHandleId,
 } from './karaoke'
+import {
+  currentLineOf,
+  lyricsColumnView,
+  lyricsWindowView,
+} from './lyricsView.ts'
 import {
   type NowPlaying,
   type Repeat,
@@ -1178,6 +1184,10 @@ const playerBarView = (
   h: HtmlBuilder<Message>,
 ): Html => {
   const isPlayerReady = nowPlaying.player === 'Ready'
+  const maybeLine = Option.flatMap(nowSingingOf(model), currentLineOf)
+  const subline = Option.getOrElse(nowPlaying.maybeLoadError, () =>
+    kindLabel(nowPlaying.song.kind),
+  )
   return h.div(
     [
       h.DataAttribute('player-bar', ''),
@@ -1268,11 +1278,15 @@ const playerBarView = (
                 [nowPlaying.song.song_title],
               ),
               h.p(
-                [h.Class('text-xs text-gray-300 truncate')],
+                [h.Class('hidden sm:block text-xs text-gray-300 truncate')],
+                [subline],
+              ),
+              h.p(
+                [h.Class('sm:hidden text-xs text-gray-300 truncate')],
                 [
-                  Option.getOrElse(nowPlaying.maybeLoadError, () =>
-                    kindLabel(nowPlaying.song.kind),
-                  ),
+                  Option.isSome(nowPlaying.maybeLoadError)
+                    ? subline
+                    : Option.getOrElse(maybeLine, () => subline),
                 ],
               ),
             ],
@@ -1329,6 +1343,20 @@ const playerBarView = (
               ),
             ],
           ),
+          model.isExpanded
+            ? h.empty
+            : Option.match(maybeLine, {
+                onNone: () => h.empty,
+                onSome: line =>
+                  h.p(
+                    [
+                      h.Class(
+                        'hidden sm:block max-w-full truncate text-xs text-sky-200',
+                      ),
+                    ],
+                    [line],
+                  ),
+              }),
         ],
       ),
       h.div(
@@ -1570,6 +1598,7 @@ const playerView = (
   h: HtmlBuilder<Message>,
 ): Html => {
   const { isExpanded } = model
+  const maybeSinging = nowSingingOf(model)
   return h.div(
     [
       h.Class(
@@ -1605,7 +1634,7 @@ const playerView = (
           h.div(
             [
               h.Class(
-                `flex items-center justify-center bg-transparent ${isExpanded ? 'sm:flex-1' : ''}`,
+                `flex items-center justify-center bg-transparent ${isExpanded ? 'sm:flex-1 sm:gap-6 sm:px-6' : ''}`,
               ),
             ],
             [
@@ -1632,6 +1661,13 @@ const playerView = (
                   ]),
                 ],
               ),
+              isExpanded
+                ? Option.match(maybeSinging, {
+                    onNone: () => h.empty,
+                    onSome: singing =>
+                      lyricsColumnView(singing, nowPlaying.song.id, h),
+                  })
+                : h.empty,
             ],
           ),
           h.div(
@@ -1653,6 +1689,13 @@ const playerView = (
                 [h.Class('text-center text-gray-400 mb-4')],
                 [nowPlaying.song.title_text],
               ),
+              isExpanded
+                ? Option.match(maybeSinging, {
+                    onNone: () => h.empty,
+                    onSome: singing =>
+                      lyricsWindowView(singing, nowPlaying.song.id, h),
+                  })
+                : h.empty,
               isExpanded ? phoneControlsView(nowPlaying, model, h) : h.empty,
               h.div(
                 [

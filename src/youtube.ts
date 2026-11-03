@@ -1,4 +1,13 @@
-import { Effect, Option, Queue, Schema, Stream } from 'effect'
+import {
+  Deferred,
+  Duration,
+  Effect,
+  Option,
+  Queue,
+  Schedule,
+  Schema,
+  Stream,
+} from 'effect'
 import { defineTaggedUnion } from 'foldkit/schema'
 
 type YouTubePlayer = Readonly<{
@@ -7,6 +16,7 @@ type YouTubePlayer = Readonly<{
   setVolume: (level: number) => void
   mute: () => void
   unMute: () => void
+  getCurrentTime: () => number
   destroy: () => void
 }>
 
@@ -50,8 +60,12 @@ export const PlayerEvent = defineTaggedUnion({
   Ended: {},
   VideoFailed: { reason: Schema.String },
   PlayerFailed: { reason: Schema.String },
+  Progressed: { seconds: Schema.Number },
 })
 export type PlayerEvent = typeof PlayerEvent.Type
+
+const PROGRESS_INTERVAL = Duration.millis(250)
+const PROGRESS_EPSILON_SECONDS = 0.05
 
 const VIDEO_UNAVAILABLE = 'This video is not available on YouTube'
 const PLAYER_UNAVAILABLE = 'Could not load the YouTube player'
@@ -108,6 +122,19 @@ export const playerEvents = (
   Stream.callback<PlayerEvent>(queue =>
     Effect.gen(function* () {
       const api = yield* loadApi
+      const ready = yield* Deferred.make<YouTubePlayer>()
+      const lastSeen = { seconds: Number.NEGATIVE_INFINITY }
+      const offerProgress = (player: YouTubePlayer, isForced: boolean) => {
+        const seconds = player.getCurrentTime()
+        if (
+          Number.isFinite(seconds) &&
+          (isForced ||
+            Math.abs(seconds - lastSeen.seconds) >= PROGRESS_EPSILON_SECONDS)
+        ) {
+          lastSeen.seconds = seconds
+          Queue.offerUnsafe(queue, PlayerEvent.Progressed({ seconds }))
+        }
+      }
       yield* Effect.acquireRelease(
         Effect.sync(() => {
           const target = document.createElement('div')
@@ -120,9 +147,12 @@ export const playerEvents = (
             events: {
               onReady: () => {
                 playersByHostId.set(options.hostId, player)
+                Deferred.doneUnsafe(ready, Effect.succeed(player))
                 Queue.offerUnsafe(queue, PlayerEvent.Ready())
               },
               onStateChange: ({ data }) => {
+                // NOTE: a seek made with YouTube's own controls changes the state, so this reports it before the next tick.
+                offerProgress(player, true)
                 Option.match(stateChangeToEvent(data), {
                   onNone: () => false,
                   onSome: event => Queue.offerUnsafe(queue, event),
@@ -145,6 +175,15 @@ export const playerEvents = (
             }
             player.destroy()
           }),
+      )
+      yield* Effect.forkScoped(
+        Deferred.await(ready).pipe(
+          Effect.flatMap(player =>
+            Effect.sync(() => offerProgress(player, false)).pipe(
+              Effect.repeat(Schedule.spaced(PROGRESS_INTERVAL)),
+            ),
+          ),
+        ),
       )
       return yield* Effect.never
     }).pipe(
