@@ -5,14 +5,22 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { extname, join, resolve, sep } from 'node:path'
 import { gzipSync } from 'node:zlib'
 
-import { listCovers, listKaraokeVideos } from './db.ts'
+import { listKaraokeVideos } from './db.ts'
 import { isGone, startRefreshing } from './videoStatus.ts'
 
 const ROOT = resolve(import.meta.dirname, '../dist')
 const PORT = Number(process.env.PORT ?? 3000)
 
 // NOTE: keep in step with src/route.ts. Any other path gets the 404 status with the app's own 404 page.
-const PAGE_PATHS = new Set(['/', '/about', '/radio', '/cover', '/credits'])
+const PAGE_PATHS = new Set(['/'])
+
+const MOVED_PAGE_PATHS = new Set([
+  '/radio',
+  '/karaoke',
+  '/cover',
+  '/about',
+  '/credits',
+])
 
 const API_ROUTES: Record<string, () => unknown> = {
   '/api/get-karaoke': () =>
@@ -20,7 +28,6 @@ const API_ROUTES: Record<string, () => unknown> = {
       ...video,
       is_gone: isGone(video.video_url),
     })),
-  '/api/get-cover': listCovers,
 }
 
 const SECURITY_HEADERS = {
@@ -137,11 +144,11 @@ const handle = async (req: IncomingMessage, res: ServerResponse) => {
   }
 
   if (
-    pathname === '/karaoke' &&
+    MOVED_PAGE_PATHS.has(pathname) &&
     (req.method === 'GET' || req.method === 'HEAD')
   ) {
     const { search } = new URL(req.url ?? '/', 'http://localhost')
-    res.writeHead(301, { ...SECURITY_HEADERS, Location: `/radio${search}` })
+    res.writeHead(301, { ...SECURITY_HEADERS, Location: `/${search}` })
     res.end()
     return
   }

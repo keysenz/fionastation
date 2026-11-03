@@ -1,13 +1,14 @@
 # Fiona Station
 
-A fan site for browsing Fiona Clearesta's karaoke archive and covers. The frontend is a [Foldkit](https://foldkit.dev) app in TypeScript. A small Node server in `server/` serves the built app and two read-only JSON routes.
+Fio Radio is a one-page fan site for browsing and playing Fiona Clearesta's karaoke, covers and originals. The frontend is a [Foldkit](https://foldkit.dev) app in TypeScript. A small Node server in `server/` serves the built app and one read-only JSON route.
 
 The site reads song data from the SQLite database that the [discord bot](https://github.com/alwinihza/discord-bot) owns. The bot is the only writer and owns the schema. To add or change songs, use the bot's `/setlist` command.
 
 | Page or route | Data |
 | --- | --- |
-| `/radio`, `/api/get-karaoke` | every `karaoke_video` row (karaoke, cover, original) and its songs. `/karaoke` redirects to `/radio` |
-| `/cover`, `/api/get-cover` | `karaoke_video` rows with `kind` of `cover` or `original` |
+| `/`, `/api/get-karaoke` | every `karaoke_video` row (karaoke, cover, original) and its songs |
+
+`/radio`, `/karaoke`, `/cover`, `/about` and `/credits` are old page paths. They answer 301 to `/` and keep the query string.
 
 The server also asks YouTube's oEmbed endpoint about every video at startup and then hourly (`server/videoStatus.ts`). `/api/get-karaoke` adds `is_gone: true` to a video that YouTube answers with 401, 403 or 404. The flag lives in memory only. An unclear answer or a network error keeps the previous one.
 

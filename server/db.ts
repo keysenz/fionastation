@@ -1,11 +1,6 @@
 import { DatabaseSync } from 'node:sqlite'
 
-import type {
-  Cover,
-  KaraokeSong,
-  KaraokeVideo,
-  VideoKind,
-} from '../src/domain.ts'
+import type { KaraokeSong, KaraokeVideo, VideoKind } from '../src/domain.ts'
 
 interface VideoRow {
   id: string
@@ -61,15 +56,4 @@ export function listKaraokeVideos(): Omit<KaraokeVideo, 'is_gone'>[] {
       }),
     ),
   }))
-}
-
-export function listCovers(): Cover[] {
-  return db()
-    .prepare(
-      `SELECT id, video_title AS title, video_url AS video_id, published_at
-       FROM karaoke_video
-       WHERE kind IN ('cover', 'original')
-       ORDER BY published_at DESC`,
-    )
-    .all() as unknown as Cover[]
 }

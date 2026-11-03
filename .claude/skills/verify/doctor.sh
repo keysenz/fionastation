@@ -8,4 +8,3 @@ if [ -z "${BASE_URL:-}" ]; then
 fi
 echo "foldkit installed: $(grep -m1 '"version"' node_modules/foldkit/package.json | tr -d ' ,')"
 printf 'songs api: '; curl -s --max-time 30 "$BASE/api/get-karaoke" | grep -o song_title | wc -l
-printf 'covers api: '; curl -s --max-time 30 "$BASE/api/get-cover" | grep -o video_id | wc -l

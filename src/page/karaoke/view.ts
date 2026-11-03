@@ -8,7 +8,6 @@ import {
   type VideoKind,
   timestampToSeconds,
 } from '../../domain.ts'
-import { homeRouter } from '../../route'
 import { thumbnailUrl } from '../../youtube'
 import {
   Message,
@@ -664,13 +663,6 @@ const headerView = (model: Model, h: HtmlBuilder<Message>): Html =>
           h.div(
             [h.Class('flex items-center space-x-3')],
             [
-              h.a(
-                [
-                  h.Href(homeRouter()),
-                  h.Class('text-gray-200 hover:text-white drop-shadow-md'),
-                ],
-                [h.i([h.Class('fas fa-arrow-left fa-lg')])],
-              ),
               h.h1(
                 [
                   h.Class(

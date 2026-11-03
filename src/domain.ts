@@ -22,14 +22,6 @@ export const KaraokeVideo = Schema.Struct({
 })
 export type KaraokeVideo = typeof KaraokeVideo.Type
 
-export const Cover = Schema.Struct({
-  id: Schema.String,
-  title: Schema.String,
-  video_id: Schema.String,
-  published_at: Schema.NullOr(Schema.String),
-})
-export type Cover = typeof Cover.Type
-
 export const PlayableSong = Schema.Struct({
   ...KaraokeSong.fields,
   video_url: Schema.String,
