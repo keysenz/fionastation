@@ -267,6 +267,14 @@ export function verdictForChosenTrack(track: LrclibTrack): Verdict {
 const UNSURE: Verdict = { kind: 'Missing', reason: 'Unsure' }
 const NOT_FOUND: Verdict = { kind: 'Missing', reason: 'NotFound' }
 
+export const isExactSyncedTitle = (
+  track: LrclibTrack,
+  titleKey: string,
+): boolean =>
+  track.syncedLyrics !== null && normalizeTitle(track.trackName) === titleKey
+
+const MIN_AGREEING_ENTRIES = 2
+
 export function judgeCandidates(
   plan: SearchPlan,
   tracks: ReadonlyArray<LrclibTrack>,
@@ -274,7 +282,7 @@ export function judgeCandidates(
 ): Verdict {
   const titleKey = normalizeTitle(plan.title)
   const candidates = tracks
-    .filter(track => normalizeTitle(track.trackName) === titleKey)
+    .filter(track => isExactSyncedTitle(track, titleKey))
     .flatMap(track => toCandidate(track, spanSeconds) ?? [])
   if (candidates.length === 0) return NOT_FOUND
 
@@ -290,7 +298,9 @@ export function judgeCandidates(
 
   const groups = groupByArtist(candidates)
   const [only] = groups
-  return groups.length === 1 && only !== undefined && only.length >= 2
+  return groups.length === 1 &&
+    only !== undefined &&
+    only.length >= MIN_AGREEING_ENTRIES
     ? picked(only)
     : UNSURE
 }

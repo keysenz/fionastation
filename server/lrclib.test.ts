@@ -120,3 +120,21 @@ test('a 429 without Retry-After pauses for a minute', async () => {
   const error = await searchTracks(plan).catch((caught: unknown) => caught)
   expect(pauseMsFor(error as LrclibUnavailable)).toBe(60_000)
 })
+
+test('a 503 with Retry-After waits that long, capped at three seconds', async () => {
+  const fetchMock = stubFetch(
+    () => reply(503, {}, { 'Retry-After': '1' }),
+    () => reply(503, {}, { 'Retry-After': '30' }),
+    () => reply(200, [track]),
+  )
+  const found = searchTracks(plan)
+  await vi.advanceTimersByTimeAsync(999)
+  expect(fetchMock).toHaveBeenCalledTimes(1)
+  await vi.advanceTimersByTimeAsync(1)
+  expect(fetchMock).toHaveBeenCalledTimes(2)
+  await vi.advanceTimersByTimeAsync(2_999)
+  expect(fetchMock).toHaveBeenCalledTimes(2)
+  await vi.advanceTimersByTimeAsync(1)
+  expect(await found).toHaveLength(1)
+  expect(fetchMock).toHaveBeenCalledTimes(3)
+})

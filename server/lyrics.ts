@@ -8,6 +8,7 @@ import {
   type Overrides,
   type SongForLyrics,
   type Verdict,
+  isExactSyncedTitle,
   judgeCandidates,
   normalizeTitle,
   parseOverrides,
@@ -90,17 +91,14 @@ async function fetchTracks(
   if (plan.kind === 'Search') {
     const key = normalizeTitle(plan.title)
     const tracks = await searchTracks(plan)
-    return tracks.filter(
-      track =>
-        track.syncedLyrics !== null && normalizeTitle(track.trackName) === key,
-    )
+    return tracks.filter(track => isExactSyncedTitle(track, key))
   }
   return []
 }
 
 export const pauseMsFor = (error: LrclibUnavailable): number | undefined =>
-  error.isRateLimited
-    ? (error.retryAfterSeconds ?? DEFAULT_PAUSE_MS / 1000) * 1000
+  error.failure.kind === 'RateLimited'
+    ? (error.failure.retryAfterSeconds ?? DEFAULT_PAUSE_MS / 1000) * 1000
     : undefined
 
 async function tracksFor(

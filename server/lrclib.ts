@@ -1,6 +1,7 @@
 import {
   type LrclibTrack,
   type SearchPlan,
+  isExactSyncedTitle,
   normalizeTitle,
 } from './lyricsMatch.ts'
 
@@ -12,23 +13,19 @@ const USER_AGENT =
 
 const RETRY_DELAYS_MS = [400, 1_200]
 
-export class LrclibUnavailable extends Error {
-  readonly isRateLimited: boolean
-  readonly isRetryable: boolean
-  readonly retryAfterSeconds: number | undefined
+const MAX_BUSY_WAIT_SECONDS = 3
 
-  constructor(
-    message: string,
-    options: {
-      isRateLimited?: boolean
-      isRetryable?: boolean
-      retryAfterSeconds?: number | undefined
-    } = {},
-  ) {
+export type LrclibFailure =
+  | Readonly<{ kind: 'RateLimited'; retryAfterSeconds?: number | undefined }>
+  | Readonly<{ kind: 'Transient'; retryAfterSeconds?: number | undefined }>
+  | Readonly<{ kind: 'Rejected' }>
+
+export class LrclibUnavailable extends Error {
+  readonly failure: LrclibFailure
+
+  constructor(message: string, failure: LrclibFailure = { kind: 'Transient' }) {
     super(message)
-    this.isRateLimited = options.isRateLimited ?? false
-    this.isRetryable = options.isRetryable ?? true
-    this.retryAfterSeconds = options.retryAfterSeconds
+    this.failure = failure
   }
 }
 
@@ -109,16 +106,35 @@ async function attempt(path: string, expectArray: boolean): Promise<unknown> {
   if (status === 'Miss') return undefined
   if (status === 'RateLimited') {
     throw new LrclibUnavailable('LRCLIB answered 429', {
-      isRateLimited: true,
-      isRetryable: false,
+      kind: 'RateLimited',
       retryAfterSeconds: parseRetryAfterSeconds(
         response.headers.get('Retry-After'),
       ),
     })
   }
-  throw new LrclibUnavailable(`LRCLIB answered ${response.status}`, {
-    isRetryable: status === 'Transient',
-  })
+  throw new LrclibUnavailable(
+    `LRCLIB answered ${response.status}`,
+    status === 'Transient'
+      ? {
+          kind: 'Transient',
+          retryAfterSeconds:
+            response.status === 503
+              ? parseRetryAfterSeconds(response.headers.get('Retry-After'))
+              : undefined,
+        }
+      : { kind: 'Rejected' },
+  )
+}
+
+const retryDelayMs = (error: unknown, tries: number): number | undefined => {
+  if (!(error instanceof LrclibUnavailable)) return undefined
+  const { failure } = error
+  if (failure.kind !== 'Transient') return undefined
+  const fixed = RETRY_DELAYS_MS[tries]
+  if (fixed === undefined) return undefined
+  return failure.retryAfterSeconds === undefined
+    ? fixed
+    : Math.min(failure.retryAfterSeconds, MAX_BUSY_WAIT_SECONDS) * 1000
 }
 
 async function request(path: string, expectArray = false): Promise<unknown> {
@@ -126,14 +142,8 @@ async function request(path: string, expectArray = false): Promise<unknown> {
     try {
       return await attempt(path, expectArray)
     } catch (error) {
-      const delay = RETRY_DELAYS_MS[tries]
-      if (
-        !(error instanceof LrclibUnavailable) ||
-        !error.isRetryable ||
-        delay === undefined
-      ) {
-        throw error
-      }
+      const delay = retryDelayMs(error, tries)
+      if (delay === undefined) throw error
       await new Promise(resolve => setTimeout(resolve, delay))
     }
   }
@@ -150,10 +160,7 @@ const hasExactSyncedTitle = (
   tracks: ReadonlyArray<LrclibTrack>,
 ): boolean => {
   const key = normalizeTitle(title)
-  return tracks.some(
-    track =>
-      track.syncedLyrics !== null && normalizeTitle(track.trackName) === key,
-  )
+  return tracks.some(track => isExactSyncedTitle(track, key))
 }
 
 export async function searchTracks(plan: SearchPlan): Promise<LrclibTrack[]> {
