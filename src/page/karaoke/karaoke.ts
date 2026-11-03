@@ -58,6 +58,8 @@ export const STREAM_GONE = 'This stream is gone'
 const PLAYER_HOST_ID = 'karaoke'
 export const SONG_LIST_ID = 'karaoke-song-list'
 export const SETLIST_PANE_ID = 'karaoke-setlist-pane'
+export const INFO_PANEL_ID = 'karaoke-info-panel'
+export const INFO_BUTTON_ID = 'karaoke-info-button'
 
 // MODEL
 
@@ -87,6 +89,7 @@ export const Model = Schema.Struct({
   setlist: Setlist,
   isExpanded: Schema.Boolean,
   isQueueOpen: Schema.Boolean,
+  isInfoOpen: Schema.Boolean,
   maybeSkipToast: Schema.Option(SkipToast),
   goneVideoIds: Schema.Array(Schema.String),
   isAutoplay: Schema.Boolean,
@@ -115,6 +118,8 @@ export const Message = defineMessageUnion({
   ClickedToggleExpanded: {},
   ClickedCollapse: {},
   ClickedQueueHandle: {},
+  ClickedToggleInfo: {},
+  ClickedCloseInfo: {},
   ClickedDismissToast: {},
   ClickedToggleAutoplay: {},
   StartedQueueDrag: { index: Schema.Number },
@@ -134,6 +139,8 @@ export const Message = defineMessageUnion({
   CompletedScrollListToTop: {},
   CompletedScrollSetlistToTop: {},
   CompletedFocusQueueHandle: {},
+  CompletedFocusInfoPanel: {},
+  CompletedFocusInfoButton: {},
   CompletedPickRandomVideo: {
     playId: Schema.Number,
     song: PlayableSong,
@@ -224,6 +231,22 @@ export const FocusQueueHandle = Command.define('FocusQueueHandle', {
       Effect.ignore,
       Effect.as(Message.CompletedFocusQueueHandle()),
     ),
+})
+
+export const FocusInfoPanel = Command.define('FocusInfoPanel', {
+  messages: [Message.CompletedFocusInfoPanel],
+  execute: Dom.focus(`#${INFO_PANEL_ID}`).pipe(
+    Effect.ignore,
+    Effect.as(Message.CompletedFocusInfoPanel()),
+  ),
+})
+
+export const FocusInfoButton = Command.define('FocusInfoButton', {
+  messages: [Message.CompletedFocusInfoButton],
+  execute: Dom.focus(`#${INFO_BUTTON_ID}`).pipe(
+    Effect.ignore,
+    Effect.as(Message.CompletedFocusInfoButton()),
+  ),
 })
 
 export const SaveAutoplay = Command.define('SaveAutoplay', {
@@ -364,6 +387,7 @@ export const init = (): Model => ({
   setlist: emptySetlist,
   isExpanded: false,
   isQueueOpen: false,
+  isInfoOpen: false,
   maybeSkipToast: Option.none(),
   goneVideoIds: [],
   isAutoplay: true,
@@ -586,6 +610,23 @@ export const update = (model: Model, message: Message) =>
     ClickedQueueHandle: () => ({
       model: modifyFields(model, { isQueueOpen: isOpen => !isOpen }),
     }),
+    ClickedToggleInfo: () =>
+      model.isInfoOpen
+        ? {
+            model: modifyFields(model, { isInfoOpen: () => false }),
+            commands: [FocusInfoButton()],
+          }
+        : {
+            model: modifyFields(model, { isInfoOpen: () => true }),
+            commands: [FocusInfoPanel()],
+          },
+    ClickedCloseInfo: () =>
+      model.isInfoOpen
+        ? {
+            model: modifyFields(model, { isInfoOpen: () => false }),
+            commands: [FocusInfoButton()],
+          }
+        : { model },
 
     // NOTE: a replaced player can still have events on their way, and acting on a late end would skip a song.
     ReceivedPlayerEvent: ({ playId, event }) =>
@@ -761,4 +802,6 @@ export const update = (model: Model, message: Message) =>
     CompletedScrollListToTop: () => ({ model }),
     CompletedScrollSetlistToTop: () => ({ model }),
     CompletedFocusQueueHandle: () => ({ model }),
+    CompletedFocusInfoPanel: () => ({ model }),
+    CompletedFocusInfoButton: () => ({ model }),
   })

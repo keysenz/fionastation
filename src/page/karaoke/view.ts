@@ -9,6 +9,7 @@ import {
   timestampToSeconds,
 } from '../../domain.ts'
 import { thumbnailUrl } from '../../youtube'
+import { infoButtonView, infoPanelView } from './info.ts'
 import {
   Message,
   type Model,
@@ -663,6 +664,7 @@ const headerView = (model: Model, h: HtmlBuilder<Message>): Html =>
           h.div(
             [h.Class('flex items-center space-x-3')],
             [
+              infoButtonView(model.isInfoOpen, h),
               h.h1(
                 [
                   h.Class(
@@ -1391,6 +1393,7 @@ export const view = Submodel.defineView<Model, Message>((model, h): Html =>
         onNone: () => h.empty,
         onSome: toast => skipToastView(toast, h),
       }),
+      model.isInfoOpen ? infoPanelView(h) : h.empty,
     ],
   ),
 )

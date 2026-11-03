@@ -7,6 +7,8 @@ import { PlayerEvent } from '../../youtube'
 import {
   ApplyPlayback,
   FetchSongs,
+  FocusInfoButton,
+  FocusInfoPanel,
   FocusQueueHandle,
   LoadAutoplay,
   LoadSavedSetlist,
@@ -898,6 +900,55 @@ test('ending a drag without a drop leaves the queue unchanged', () => {
     model(current => {
       expect(queueOf(current)).toEqual(['a', 'b', 'c'])
       expect(current.maybeQueueDrag).toEqual(Option.none())
+    }),
+  )
+})
+
+test('the info button opens the panel and moves focus into it', () => {
+  story(
+    update,
+    given(init()),
+    message(Message.ClickedToggleInfo()),
+    Command.resolve(FocusInfoPanel, Message.CompletedFocusInfoPanel()),
+    model(current => {
+      expect(current.isInfoOpen).toBe(true)
+    }),
+  )
+})
+
+test('the info button closes the panel and returns focus to itself', () => {
+  story(
+    update,
+    given(init()),
+    message(Message.ClickedToggleInfo()),
+    Command.resolve(FocusInfoPanel, Message.CompletedFocusInfoPanel()),
+    message(Message.ClickedToggleInfo()),
+    Command.resolve(FocusInfoButton, Message.CompletedFocusInfoButton()),
+    model(current => {
+      expect(current.isInfoOpen).toBe(false)
+    }),
+  )
+})
+
+test('the close message, sent by Escape, the Close button and the backdrop, closes the panel and refocuses the button', () => {
+  story(
+    update,
+    given({ ...init(), isInfoOpen: true }),
+    message(Message.ClickedCloseInfo()),
+    Command.resolve(FocusInfoButton, Message.CompletedFocusInfoButton()),
+    model(current => {
+      expect(current.isInfoOpen).toBe(false)
+    }),
+  )
+})
+
+test('closing an already closed panel issues no focus Command', () => {
+  story(
+    update,
+    given(init()),
+    message(Message.ClickedCloseInfo()),
+    model(current => {
+      expect(current.isInfoOpen).toBe(false)
     }),
   )
 })
