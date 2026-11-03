@@ -960,6 +960,25 @@ const journeys = {
         if (!links.some((l) => l.href === href)) throw new Error(`no link to ${href}`);
       }
     });
+    await step('info', 'each credit shows what it is for, and the artwork images load', async () => {
+      await dialog.locator('img').evaluateAll((imgs) =>
+        Promise.all(imgs.map((img) => (img.complete ? null : new Promise((resolve) => { img.onload = img.onerror = resolve; })))),
+      );
+      const rows = await dialog.locator('ul > li:has(> div:first-child)').evaluateAll((els) =>
+        els.map((li) => ({
+          name: li.innerText.trim().split(/\s{2,}|\n/)[0],
+          icon: !!li.querySelector('i.fas'),
+          images: [...li.querySelectorAll('img')].map((img) => ({ src: img.getAttribute('src'), loaded: img.complete && img.naturalWidth > 0 })),
+        })),
+      );
+      if (rows.length !== 7) throw new Error(`expected 7 credit rows, got ${rows.length}`);
+      const bare = rows.filter((r) => !r.icon && !r.images.length);
+      if (bare.length) throw new Error(`no mark for ${bare.map((r) => r.name)}`);
+      const broken = rows.flatMap((r) => r.images).filter((i) => !i.loaded);
+      if (broken.length) throw new Error(`images did not load ${JSON.stringify(broken)}`);
+      const emoticons = rows.find((r) => r.name.includes('handryaraart'))?.images.length;
+      if (emoticons !== 4) throw new Error(`handryaraart shows ${emoticons} emoticons`);
+    });
     await page.waitForTimeout(300);
     await page.screenshot({ path: join(out, 'info-desktop.png') });
     await step('info', 'Escape closes the panel and returns focus to the info button', async () => {

@@ -33,10 +33,60 @@ const sectionHeading = (text: string, h: HtmlBuilder<Message>): Html =>
     [text],
   )
 
-const creditRow = (name: string, role: string, h: HtmlBuilder<Message>): Html =>
+const creditRow = (
+  name: string,
+  role: string,
+  icon: string,
+  artwork: ReadonlyArray<string>,
+  h: HtmlBuilder<Message>,
+): Html =>
   h.li(
-    [h.Class('flex')],
-    [name, h.span([h.Class('w-4 flex-grow')]), ` ${role}`],
+    [h.Class('space-y-2')],
+    [
+      h.div(
+        [h.Class('flex items-center gap-3')],
+        [
+          h.span(
+            [
+              h.Class(
+                'flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/10 text-sky-300',
+              ),
+            ],
+            [h.i([h.Class(`fas ${icon}`), h.AriaHidden(true)])],
+          ),
+          h.div(
+            [
+              h.Class(
+                'flex min-w-0 flex-1 flex-col sm:flex-row sm:items-center sm:justify-between sm:gap-4',
+              ),
+            ],
+            [
+              h.span([h.Class('break-words')], [name]),
+              h.span(
+                [h.Class('text-xs text-gray-300 sm:text-sm sm:text-white')],
+                [role],
+              ),
+            ],
+          ),
+        ],
+      ),
+      ...(artwork.length
+        ? [
+            h.div(
+              [h.Class('flex flex-wrap gap-2 pl-11')],
+              artwork.map(src =>
+                h.img([
+                  h.Src(src),
+                  h.Alt(''),
+                  h.Class(
+                    'h-12 rounded-lg border border-white/20 bg-white object-cover',
+                  ),
+                ]),
+              ),
+            ),
+          ]
+        : []),
+    ],
   )
 
 const whoIsFionaView = (h: HtmlBuilder<Message>): Html =>
@@ -158,13 +208,13 @@ const creditsView = (h: HtmlBuilder<Message>): Html =>
         ],
       ),
       h.ul(
-        [h.Class('rounded-lg bg-black/30 p-4 space-y-1')],
+        [h.Class('rounded-lg bg-black/30 p-4 space-y-2')],
         [
-          creditRow('Keysenz', 'Website', h),
-          creditRow('SuryaA', 'Karaoke Timestamp', h),
-          creditRow('Bembot', 'Karaoke Timestamp', h),
-          creditRow('Bang Nugs', 'Karaoke Timestamp', h),
-          creditRow('ヤミアクマ', 'Karaoke Timestamp', h),
+          creditRow('Keysenz', 'Website', 'fa-code', [], h),
+          creditRow('SuryaA', 'Karaoke Timestamp', 'fa-clock', [], h),
+          creditRow('Bembot', 'Karaoke Timestamp', 'fa-clock', [], h),
+          creditRow('Bang Nugs', 'Karaoke Timestamp', 'fa-clock', [], h),
+          creditRow('ヤミアクマ', 'Karaoke Timestamp', 'fa-clock', [], h),
           h.li(
             [
               h.Class(
@@ -173,8 +223,25 @@ const creditsView = (h: HtmlBuilder<Message>): Html =>
             ],
             ['Artwork'],
           ),
-          creditRow('MaroonR19', 'Website Background', h),
-          creditRow('handryaraart', 'Menu Emoticon', h),
+          creditRow(
+            'MaroonR19',
+            'Website Background',
+            'fa-image',
+            ['/pio_karaoke.webp'],
+            h,
+          ),
+          creditRow(
+            'handryaraart',
+            'Menu Emoticon',
+            'fa-face-smile',
+            [
+              '/FioLove.webp',
+              '/FioWah.webp',
+              '/FioManteb.webp',
+              '/fionawave.webp',
+            ],
+            h,
+          ),
           h.li(
             [h.Class('pt-3 text-center text-lg')],
             ['HELP ME TO FILL THIS CREDITS LIST WITH YOUR NAME :)'],
