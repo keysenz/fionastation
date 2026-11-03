@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto'
+import { createHash, timingSafeEqual } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import type { IncomingMessage, ServerResponse } from 'node:http'
@@ -10,6 +10,26 @@ import { isGone, startRefreshing } from './videoStatus.ts'
 
 const ROOT = resolve(import.meta.dirname, '../dist')
 const PORT = Number(process.env.PORT ?? 3000)
+
+// NOTE: unset in local dev. In production compose requires it, and only the Vercel proxy knows it.
+const PROXY_SECRET = process.env.PROXY_SECRET
+  ? Buffer.from(process.env.PROXY_SECRET)
+  : undefined
+
+const hasProxySecret = (req: IncomingMessage) => {
+  if (!PROXY_SECRET) {
+    return true
+  }
+  const sent = req.headers['x-proxy-secret']
+  if (typeof sent !== 'string') {
+    return false
+  }
+  const sentBytes = Buffer.from(sent)
+  return (
+    sentBytes.length === PROXY_SECRET.length &&
+    timingSafeEqual(sentBytes, PROXY_SECRET)
+  )
+}
 
 // NOTE: keep in step with src/route.ts. Any other path gets the 404 status with the app's own 404 page.
 const PAGE_PATHS = new Set(['/'])
@@ -155,6 +175,9 @@ const handle = async (req: IncomingMessage, res: ServerResponse) => {
 
   const apiRoute = API_ROUTES[pathname]
   if (apiRoute) {
+    if (!hasProxySecret(req)) {
+      return replyJson(403, { error: 'Forbidden' })
+    }
     if (req.method !== 'GET') {
       return replyJson(405, { error: 'Method Not Allowed' })
     }

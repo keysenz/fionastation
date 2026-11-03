@@ -13,7 +13,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://devbox.tailcde2c4.ts.net/api/:path*"
+      "destination": "/api/proxy?path=:path*"
     }
   ]
 }

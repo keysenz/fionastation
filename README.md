@@ -58,3 +58,12 @@ The site runs next to the bot and mounts the bot's `discord-bot_botdata` volume.
 rsync -a --delete --exclude-from=.dockerignore ./ devbox:project/fionastation/
 ssh devbox 'cd ~/project/fionastation && docker compose up -d --build'
 ```
+
+## Deploy on Vercel
+
+Vercel serves the static build and sends `/api/*` to `api/proxy.ts`, which forwards it to the devbox. Set two environment variables in the Vercel project:
+
+- `API_ORIGIN` is the devbox origin, such as `https://<host>.ts.net`, with no trailing slash.
+- `PROXY_SECRET` is a long random string, such as the output of `openssl rand -hex 32`.
+
+Put the same `PROXY_SECRET` in `~/project/fionastation/.env` on the devbox. Compose refuses to start without it, and the server answers 403 to any `/api` request that lacks it.
