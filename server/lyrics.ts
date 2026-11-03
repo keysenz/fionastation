@@ -22,7 +22,7 @@ export type LyricsLookup =
   | Readonly<{ kind: 'Unavailable' }>
 
 const MAX_IN_FLIGHT = 2
-const PAUSE_AFTER_FAILURE_MS = 60_000
+const DEFAULT_PAUSE_MS = 60_000
 const CACHE_TTL_MS = 24 * 3600_000
 
 /** Throws with a JSON path, so a broken fix file stops the server instead of silently
@@ -101,8 +101,14 @@ async function fetchTracks(
   return []
 }
 
-/** Cache, then single-flight, then at most two requests at once. A failure pauses
- *  every lookup for a minute and is never cached. */
+/** Only a rate limit pauses every lookup. Other failures are random and already retried. */
+export const pauseMsFor = (error: LrclibUnavailable): number | undefined =>
+  error.isRateLimited
+    ? (error.retryAfterSeconds ?? DEFAULT_PAUSE_MS / 1000) * 1000
+    : undefined
+
+/** Cache, then single-flight, then at most two requests at once. A failure is never
+ *  cached, and a rate limit pauses every lookup. */
 async function tracksFor(
   plan: LookupPlan,
 ): Promise<ReadonlyArray<LrclibTrack>> {
@@ -111,18 +117,23 @@ async function tracksFor(
   if (cached && cached.expiresAt > Date.now()) return cached.tracks
   const pending = inFlight.get(key)
   if (pending) return pending
-  if (isPaused()) throw new LrclibUnavailable('paused after a failure')
+  if (isPaused()) throw new LrclibUnavailable('paused after a rate limit')
 
   const request = withSlot(async () => {
-    if (isPaused()) throw new LrclibUnavailable('paused after a failure')
+    if (isPaused()) throw new LrclibUnavailable('paused after a rate limit')
     try {
       const tracks = await fetchTracks(plan)
       cache.set(key, { tracks, expiresAt: Date.now() + CACHE_TTL_MS })
       return tracks
     } catch (error) {
       if (error instanceof LrclibUnavailable) {
-        pausedUntil = Date.now() + PAUSE_AFTER_FAILURE_MS
-        console.warn(`LRCLIB paused for 60 s: ${error.message}`)
+        const pauseMs = pauseMsFor(error)
+        if (pauseMs !== undefined) {
+          pausedUntil = Date.now() + pauseMs
+          console.warn(
+            `LRCLIB paused for ${pauseMs / 1000} s: ${error.message}`,
+          )
+        }
       }
       throw error
     }

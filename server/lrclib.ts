@@ -10,8 +10,51 @@ const REQUEST_TIMEOUT_MS = 8_000
 const USER_AGENT =
   'fionastation (https://github.com/keysenz/fionastation, synced lyrics for a fan radio page)'
 
-/** LRCLIB is rate limiting, failing or slow. The caller backs off and does not cache. */
-export class LrclibUnavailable extends Error {}
+const RETRY_DELAYS_MS = [400, 1_200]
+
+/** LRCLIB is rate limiting, failing or slow. The caller does not cache. Only a rate limit
+ *  carries `retryAfterSeconds`, and only a rate limit should make the caller back off. */
+export class LrclibUnavailable extends Error {
+  readonly isRateLimited: boolean
+  readonly isRetryable: boolean
+  readonly retryAfterSeconds: number | undefined
+
+  constructor(
+    message: string,
+    options: {
+      isRateLimited?: boolean
+      isRetryable?: boolean
+      retryAfterSeconds?: number | undefined
+    } = {},
+  ) {
+    super(message)
+    this.isRateLimited = options.isRateLimited ?? false
+    this.isRetryable = options.isRetryable ?? true
+    this.retryAfterSeconds = options.retryAfterSeconds
+  }
+}
+
+export type StatusClass =
+  | 'Ok'
+  | 'Miss'
+  | 'RateLimited'
+  | 'Transient'
+  | 'Rejected'
+
+/** 5xx is LRCLIB flaking at random, so a retry is worth it. Other 4xx will not change. */
+export const classifyStatus = (status: number): StatusClass => {
+  if (status >= 200 && status < 300) return 'Ok'
+  if (status === 404) return 'Miss'
+  if (status === 429) return 'RateLimited'
+  return status >= 500 ? 'Transient' : 'Rejected'
+}
+
+export const parseRetryAfterSeconds = (
+  header: string | null,
+): number | undefined => {
+  const seconds = header === null ? NaN : Number(header)
+  return Number.isFinite(seconds) && seconds >= 0 ? seconds : undefined
+}
 
 const toTrack = (value: unknown): LrclibTrack | undefined => {
   if (typeof value !== 'object' || value === null) return undefined
@@ -41,7 +84,7 @@ const toTrack = (value: unknown): LrclibTrack | undefined => {
   }
 }
 
-async function request(path: string): Promise<unknown> {
+async function attempt(path: string, expectArray: boolean): Promise<unknown> {
   let response: Response
   try {
     response = await fetch(`${LRCLIB}${path}`, {
@@ -51,27 +94,58 @@ async function request(path: string): Promise<unknown> {
   } catch {
     throw new LrclibUnavailable('LRCLIB did not answer')
   }
-  if (response.status === 404) {
-    await response.body?.cancel()
-    return undefined
+  const status = classifyStatus(response.status)
+  if (status === 'Ok') {
+    let body: unknown
+    try {
+      body = await response.json()
+    } catch {
+      throw new LrclibUnavailable('LRCLIB sent something unreadable')
+    }
+    // NOTE: under rate limiting LRCLIB has answered 200 with an object instead of an array.
+    if (expectArray && !Array.isArray(body)) {
+      throw new LrclibUnavailable('LRCLIB sent a non-array search result')
+    }
+    return body
   }
-  if (!response.ok) {
-    await response.body?.cancel()
-    throw new LrclibUnavailable(`LRCLIB answered ${response.status}`)
+  await response.body?.cancel()
+  if (status === 'Miss') return undefined
+  if (status === 'RateLimited') {
+    throw new LrclibUnavailable('LRCLIB answered 429', {
+      isRateLimited: true,
+      isRetryable: false,
+      retryAfterSeconds: parseRetryAfterSeconds(
+        response.headers.get('Retry-After'),
+      ),
+    })
   }
-  try {
-    return await response.json()
-  } catch {
-    throw new LrclibUnavailable('LRCLIB sent something unreadable')
+  throw new LrclibUnavailable(`LRCLIB answered ${response.status}`, {
+    isRetryable: status === 'Transient',
+  })
+}
+
+/** LRCLIB answers 503 on a random share of identical requests, so one failure says little. */
+async function request(path: string, expectArray = false): Promise<unknown> {
+  for (let tries = 0; ; tries++) {
+    try {
+      return await attempt(path, expectArray)
+    } catch (error) {
+      const delay = RETRY_DELAYS_MS[tries]
+      if (
+        !(error instanceof LrclibUnavailable) ||
+        !error.isRetryable ||
+        delay === undefined
+      ) {
+        throw error
+      }
+      await new Promise(resolve => setTimeout(resolve, delay))
+    }
   }
 }
 
 async function searchOnce(query: URLSearchParams): Promise<LrclibTrack[]> {
-  const body = await request(`/search?${query}`)
-  // NOTE: under rate limiting LRCLIB has answered 200 with an object instead of an array.
-  if (!Array.isArray(body)) {
-    throw new LrclibUnavailable('LRCLIB sent a non-array search result')
-  }
+  const body = await request(`/search?${query}`, true)
+  if (!Array.isArray(body)) return []
   return body.flatMap(item => toTrack(item) ?? [])
 }
 
