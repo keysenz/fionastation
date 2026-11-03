@@ -922,8 +922,9 @@ const playerBarView = (
   nowPlaying: NowPlaying,
   model: Model,
   h: HtmlBuilder<Message>,
-): Html =>
-  h.div(
+): Html => {
+  const isPlayerReady = nowPlaying.player === 'Ready'
+  return h.div(
     [
       h.Class(
         'fixed bottom-0 left-0 right-0 bg-black/80 backdrop-blur-xl border-t border-white/10 text-white z-[55] h-20 flex items-center px-4 shadow-2xl transition-all duration-300',
@@ -958,8 +959,15 @@ const playerBarView = (
         [
           h.div(
             [
-              h.Class('relative group cursor-pointer'),
-              h.OnClick(Message.ClickedToggleExpanded()),
+              h.Class(
+                twMerge(
+                  'relative group',
+                  isPlayerReady ? 'cursor-pointer' : 'cursor-default',
+                ),
+              ),
+              ...(isPlayerReady
+                ? [h.OnClick(Message.ClickedToggleExpanded())]
+                : []),
             ],
             [
               h.div(
@@ -1061,9 +1069,21 @@ const playerBarView = (
           autoplaySwitchView(model.isAutoplay, h),
           h.button(
             [
+              h.Type('button'),
+              h.Disabled(!isPlayerReady),
+              h.AriaLabel(
+                model.isExpanded ? 'Collapse player' : 'Expand player',
+              ),
+              h.Title(
+                isPlayerReady
+                  ? model.isExpanded
+                    ? 'Collapse player'
+                    : 'Expand player'
+                  : 'Player is loading',
+              ),
               h.OnClick(Message.ClickedToggleExpanded()),
               h.Class(
-                'text-gray-300 hover:text-white transition hover:rotate-90',
+                'text-gray-300 hover:text-white transition hover:rotate-90 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-gray-300 disabled:hover:rotate-0',
               ),
             ],
             [
@@ -1078,6 +1098,7 @@ const playerBarView = (
       ),
     ],
   )
+}
 
 const upNextPreviewView = (
   queue: ReadonlyArray<PlayableSong>,

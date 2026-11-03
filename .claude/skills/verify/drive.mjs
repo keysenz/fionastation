@@ -419,11 +419,28 @@ const journeys = {
     const otherFirsts = rows.filter((r, i) => !r.is_gone && r.video_url !== lastRow.video_url && rows.findIndex((x) => x.video_url === r.video_url) === i);
     if (!otherFirsts.length) throw new Error('no other live video to pick');
 
+    let releaseApi;
+    const apiHeld = new Promise((resolve) => (releaseApi = resolve));
+    await page.route('**/iframe_api*', async (route) => {
+      await apiHeld;
+      await route.continue();
+    });
     await page.goto(BASE + '/karaoke');
     await videoRows(page).first().waitFor();
     await (await songRowOf(page, videos, rows[start])).click();
     const bar = page.locator('.fixed.bottom-0');
     await bar.getByRole('heading', { name: rows[start].song_title }).waitFor();
+    await step('player', 'the expand button is disabled until the player has loaded', async () => {
+      if (!(await barButton(page, 'fa-expand').isDisabled())) throw new Error('expand is clickable while the player loads');
+      await bar.locator('img[alt="art"]').locator('..').click();
+      await page.waitForTimeout(400);
+      if (await page.locator('.fixed.z-50.inset-0').count()) throw new Error('the thumbnail expanded a loading player');
+      releaseApi();
+      await page.unroute('**/iframe_api*');
+      await playerReady(page);
+      await page.waitForFunction(() => !document.querySelector('.fixed.bottom-0 button:has(i.fa-expand)').disabled);
+    });
+    releaseApi();
     await playerReady(page);
     await page.evaluate(() => {
       window.__frame = document.querySelector('iframe[src*="youtube"]');

@@ -9,6 +9,9 @@ const HISTORY_LIMIT = 50
 export const PlaybackStatus = Schema.Literals(['Playing', 'Paused'])
 export type PlaybackStatus = typeof PlaybackStatus.Type
 
+export const PlayerState = Schema.Literals(['Loading', 'Ready'])
+export type PlayerState = typeof PlayerState.Type
+
 const PLAYING: PlaybackStatus = 'Playing'
 const PAUSED: PlaybackStatus = 'Paused'
 
@@ -17,6 +20,7 @@ export const NowPlaying = Schema.Struct({
   // NOTE: tells two plays of one song apart, so replaying it still gets a new player.
   playId: Schema.Number,
   status: PlaybackStatus,
+  player: PlayerState,
   maybeLoadError: Schema.Option(Schema.String),
 })
 export type NowPlaying = typeof NowPlaying.Type
@@ -54,6 +58,7 @@ const startPlay = (setlist: Setlist, song: PlayableSong): Setlist =>
         song,
         playId: setlist.playCount + 1,
         status: PLAYING,
+        player: 'Loading',
         maybeLoadError: Option.none(),
       }),
     playCount: count => count + 1,
@@ -86,6 +91,11 @@ const modifyNowPlaying = (
 export const setStatus = (setlist: Setlist, status: PlaybackStatus): Setlist =>
   modifyNowPlaying(setlist, nowPlaying =>
     modifyFields(nowPlaying, { status: () => status }),
+  )
+
+export const markPlayerReady = (setlist: Setlist): Setlist =>
+  modifyNowPlaying(setlist, nowPlaying =>
+    modifyFields(nowPlaying, { player: () => 'Ready' }),
   )
 
 export const failLoad = (setlist: Setlist, reason: string): Setlist =>

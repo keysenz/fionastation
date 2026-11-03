@@ -30,6 +30,7 @@ import {
   emptySetlist,
   enqueue,
   failLoad,
+  markPlayerReady,
   planAdvance,
   planSkip,
   play,
@@ -427,7 +428,9 @@ export const update = (model: Model, message: Message) =>
           onSome: ({ status, song: nowPlayingSong }) =>
             PlayerEvent.match<UpdateReturn>(event, {
               Ready: () => ({
-                model,
+                model: modifyFields(model, {
+                  setlist: markPlayerReady,
+                }),
                 commands: [ApplyPlayback({ isPlaying: status === 'Playing' })],
               }),
               Playing: () =>
