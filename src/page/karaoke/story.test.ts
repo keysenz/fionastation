@@ -773,7 +773,9 @@ test('dropping the first queued song on the third slot reorders and saves', () =
     message(Message.StartedQueueDrag({ index: 0 })),
     message(Message.DraggedOverQueueSlot({ index: 2 })),
     model(current => {
-      expect(current.maybeQueueDrag).toEqual(Option.some({ from: 0, over: 2 }))
+      expect(current.maybeQueueDrag).toEqual(
+        Option.some({ from: 0, over: 2, startQueueIds: ['a', 'b', 'c'] }),
+      )
     }),
     message(Message.DroppedQueueSong({ index: 2 })),
     saved,
@@ -809,6 +811,23 @@ test('the move key moves a queued song one place and saves', () => {
     ),
     model(current => {
       expect(queueOf(current)).toEqual(['a', 'c', 'b'])
+    }),
+  )
+})
+
+test('a drop after the queue changed under the drag moves nothing', () => {
+  story(
+    update,
+    given(init()),
+    ...withQueue,
+    message(Message.StartedQueueDrag({ index: 0 })),
+    message(Message.DraggedOverQueueSlot({ index: 1 })),
+    message(Message.ClickedNext()),
+    saved,
+    message(Message.DroppedQueueSong({ index: 1 })),
+    model(current => {
+      expect(queueOf(current)).toEqual(['b', 'c'])
+      expect(current.maybeQueueDrag).toEqual(Option.none())
     }),
   )
 })

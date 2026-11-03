@@ -73,6 +73,8 @@ export type SkipToast = typeof SkipToast.Type
 export const QueueDrag = Schema.Struct({
   from: Schema.Number,
   over: Schema.Number,
+  // NOTE: a song can end mid-drag and shift the queue, and the indices would then name another song.
+  startQueueIds: Schema.Array(Schema.String),
 })
 export type QueueDrag = typeof QueueDrag.Type
 
@@ -371,6 +373,9 @@ export const init = (): Model => ({
 
 export type UpdateReturn = Update.Return<Model, Message>
 
+const queueIds = (model: Model): ReadonlyArray<string> =>
+  model.setlist.queue.map(song => song.id)
+
 const fetchIfNeeded = (model: Model): UpdateReturn =>
   Option.match(AsyncData.revalidateOrLoad(model.songs), {
     onNone: () => ({ model }),
@@ -515,7 +520,12 @@ export const update = (model: Model, message: Message) =>
 
     StartedQueueDrag: ({ index }) => ({
       model: modifyFields(model, {
-        maybeQueueDrag: () => Option.some({ from: index, over: index }),
+        maybeQueueDrag: () =>
+          Option.some({
+            from: index,
+            over: index,
+            startQueueIds: queueIds(model),
+          }),
       }),
     }),
 
@@ -529,11 +539,15 @@ export const update = (model: Model, message: Message) =>
     DroppedQueueSong: ({ index }) =>
       Option.match(model.maybeQueueDrag, {
         onNone: () => ({ model }),
-        onSome: ({ from }) => {
+        onSome: ({ from, startQueueIds }) => {
           const cleared = modifyFields(model, {
             maybeQueueDrag: () => Option.none(),
           })
-          const moved = moveInQueue(model.setlist, from, index)
+          const moved = Array.makeEquivalence(
+            (x: string, y: string) => x === y,
+          )(startQueueIds, queueIds(model))
+            ? moveInQueue(model.setlist, from, index)
+            : model.setlist
           return moved === model.setlist
             ? { model: cleared }
             : changeSetlist(cleared, moved)
