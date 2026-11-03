@@ -1,12 +1,13 @@
-import { Option } from 'effect'
+import { Option, Schema } from 'effect'
 import { expect, test } from 'vitest'
 
 import type { PlayableSong } from './domain.ts'
 import {
+  LaterNudgeSteps,
   LyricCursor,
   type LyricLine,
   NUDGE_LIMIT,
-  NudgeSteps,
+  Nudges,
   cursorAt,
   msIntoLyrics,
   nextSegmentSong,
@@ -135,11 +136,11 @@ test('the cursor matches a linear scan for random sorted lines and times', () =>
 
 test('a positive nudge moves the lyrics later and an offset likewise', () => {
   const segment = Option.getOrThrow(segmentAt(archive, first, 100))
-  const none = NudgeSteps.make(0)
+  const none = LaterNudgeSteps.make(0)
   expect(msIntoLyrics(70, segment, 0, none)).toBe(10000)
   expect(msIntoLyrics(70, segment, 800, none)).toBe(9200)
-  expect(msIntoLyrics(70, segment, 0, NudgeSteps.make(3))).toBe(8500)
-  expect(msIntoLyrics(70, segment, 0, NudgeSteps.make(-2))).toBe(11000)
+  expect(msIntoLyrics(70, segment, 0, LaterNudgeSteps.make(3))).toBe(8500)
+  expect(msIntoLyrics(70, segment, 0, LaterNudgeSteps.make(-2))).toBe(11000)
 })
 
 test('nudging steps by half a second, clamps, and drops an entry that returns to zero', () => {
@@ -169,4 +170,11 @@ test('garbage nudge data gives none, and a corrupt entry is dropped without losi
       ),
     ),
   ).toEqual({ a: 3, f: NUDGE_LIMIT, g: -NUDGE_LIMIT, h: -2 })
+})
+
+test('the nudge schemas reject a zero entry and a step past the limit', () => {
+  const decode = Schema.decodeUnknownOption(Nudges)
+  expect(Option.isSome(decode({ a: 3 }))).toBe(true)
+  expect(Option.isNone(decode({ a: 0 }))).toBe(true)
+  expect(Option.isNone(decode({ a: NUDGE_LIMIT + 1 }))).toBe(true)
 })

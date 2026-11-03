@@ -29,9 +29,9 @@ import {
   toPlayableSongs,
 } from '../../domain.ts'
 import {
+  type LaterNudgeSteps,
   LyricCursor,
   Lyrics,
-  type NudgeSteps,
   Nudges,
   Playhead,
   type Segment,
@@ -138,7 +138,7 @@ export const Model = Schema.Struct({
   maybeQueueDrag: Schema.Option(QueueDrag),
   maybePlayhead: Schema.Option(Playhead),
   lyricsBySongId: Schema.Record(Schema.String, LyricsData.schema),
-  lyricsAutoRetries: Schema.Record(Schema.String, Schema.Number),
+  autoRetriesSpentBySongId: Schema.Record(Schema.String, Schema.Number),
   lyricNudges: Nudges,
 })
 export type Model = typeof Model.Type
@@ -591,7 +591,7 @@ export const init = (): Model => ({
   maybeQueueDrag: Option.none(),
   maybePlayhead: Option.none(),
   lyricsBySongId: {},
-  lyricsAutoRetries: {},
+  autoRetriesSpentBySongId: {},
   lyricNudges: {},
 })
 
@@ -633,8 +633,8 @@ export const allSongs = (model: Model): ReadonlyArray<PlayableSong> =>
 export type NowSinging = Readonly<{
   segment: Segment
   maybeLyrics: Option.Option<AsyncData.AsyncData<Lyrics, string>>
-  nudge: NudgeSteps
-  cursor: LyricCursor
+  nudge: LaterNudgeSteps
+  maybeCursor: Option.Option<LyricCursor>
 }>
 
 export const nowSingingOf = (model: Model): Option.Option<NowSinging> =>
@@ -653,22 +653,21 @@ export const nowSingingOf = (model: Model): Option.Option<NowSinging> =>
       model.lyricsBySongId[segment.song.id],
     )
     const nudgeSteps = nudgeOf(model.lyricNudges, segment.song.id)
-    const cursor = Option.match(
+    const maybeCursor = Option.flatMap(
       Option.flatMap(maybeLyrics, AsyncData.getData),
-      {
-        onNone: () => LyricCursor.Before(),
-        onSome: lyrics =>
-          Lyrics.match(lyrics, {
-            Synced: ({ lines, offsetMs }) =>
+      lyrics =>
+        Lyrics.match(lyrics, {
+          Synced: ({ lines, offsetMs }) =>
+            Option.some(
               cursorAt(
                 lines,
                 msIntoLyrics(playhead.seconds, segment, offsetMs, nudgeSteps),
               ),
-            Missing: () => LyricCursor.Before(),
-          }),
-      },
+            ),
+          Missing: () => Option.none(),
+        }),
     )
-    return { segment, maybeLyrics, nudge: nudgeSteps, cursor }
+    return { segment, maybeLyrics, nudge: nudgeSteps, maybeCursor }
   })
 
 const ensureLyrics = (
@@ -1174,7 +1173,7 @@ const updateModel = (model: Model, message: Message) =>
         }),
       }),
       commands:
-        (model.lyricsAutoRetries[songId] ?? 0) < MAX_AUTO_LYRICS_RETRIES
+        (model.autoRetriesSpentBySongId[songId] ?? 0) < MAX_AUTO_LYRICS_RETRIES
           ? [WaitBeforeRetryLyrics({ songId })]
           : [],
     }),
@@ -1190,7 +1189,7 @@ const updateModel = (model: Model, message: Message) =>
                 ...known,
                 [songId]: AsyncData.Loading(),
               }),
-              lyricsAutoRetries: known => ({
+              autoRetriesSpentBySongId: known => ({
                 ...known,
                 [songId]: (known[songId] ?? 0) + 1,
               }),
@@ -1210,7 +1209,7 @@ const updateModel = (model: Model, message: Message) =>
                 ...known,
                 [songId]: AsyncData.Loading(),
               }),
-              lyricsAutoRetries: known => Record.remove(known, songId),
+              autoRetriesSpentBySongId: known => Record.remove(known, songId),
             }),
             commands: [FetchLyrics({ songId })],
           }

@@ -1424,7 +1424,7 @@ const singingId = (current: Model) =>
   Option.map(nowSingingOf(current), ({ segment }) => segment.song.id)
 
 const cursorOf = (current: Model) =>
-  Option.map(nowSingingOf(current), ({ cursor }) => cursor)
+  Option.flatMap(nowSingingOf(current), ({ maybeCursor }) => maybeCursor)
 
 const threeLines: Lyrics = {
   _tag: 'Synced',
@@ -1468,8 +1468,10 @@ test('crossing a timestamp switches the song being sung', () => {
 })
 
 test('lyrics that arrive put the cursor on the line being sung, and a nudge moves it', () => {
+  const beforeLyrics = tick(playingStream(), 72).model
+  expect(cursorOf(beforeLyrics)).toEqual(Option.none())
   const received = update(
-    tick(playingStream(), 72).model,
+    beforeLyrics,
     Message.SucceededFetchLyrics({ songId: 'early', lyrics: threeLines }),
   ).model
   expect(cursorOf(received)).toEqual(

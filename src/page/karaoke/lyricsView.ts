@@ -13,6 +13,7 @@ import {
 import { Message, type NowSinging } from './karaoke'
 
 const ROW_REM = 3.25
+const WINDOW_ROWS = 5
 
 const MISSING_TEXT: Record<MissingReason, string> = {
   NotFound: 'No synced lyrics for this song',
@@ -34,15 +35,17 @@ const syncedOf = (singing: NowSinging): Option.Option<SyncedLyrics> =>
 
 export const currentLineOf = (singing: NowSinging): Option.Option<string> =>
   Option.flatMap(syncedOf(singing), ({ lines }) =>
-    LyricCursor.match(singing.cursor, {
-      Before: () => Option.none(),
-      After: () => Option.none(),
-      OnLine: ({ index }) =>
-        Option.filter(
-          Option.map(Array.get(lines, index), ({ text }) => text),
-          text => text !== '',
-        ),
-    }),
+    Option.flatMap(singing.maybeCursor, cursor =>
+      LyricCursor.match(cursor, {
+        Before: () => Option.none(),
+        After: () => Option.none(),
+        OnLine: ({ index }) =>
+          Option.filter(
+            Option.map(Array.get(lines, index), ({ text }) => text),
+            text => text !== '',
+          ),
+      }),
+    ),
   )
 
 export const hasLyricsPanel = (singing: NowSinging): boolean =>
@@ -56,10 +59,14 @@ export const hasLyricsPanel = (singing: NowSinging): boolean =>
   })
 
 const activeIndexOf = (singing: NowSinging, lineCount: number): number =>
-  LyricCursor.match(singing.cursor, {
-    Before: () => -1,
-    OnLine: ({ index }) => index,
-    After: () => lineCount,
+  Option.match(singing.maybeCursor, {
+    onNone: () => -1,
+    onSome: cursor =>
+      LyricCursor.match(cursor, {
+        Before: () => -1,
+        OnLine: ({ index }) => index,
+        After: () => lineCount,
+      }),
   })
 
 const formatNudge = (steps: number): string => {
@@ -221,7 +228,7 @@ const captionView = (
 
 const lyricsBodyView = (
   singing: NowSinging,
-  boxClass: string,
+  maybeHeightRem: Option.Option<number>,
   h: HtmlBuilder<Message>,
 ): Html =>
   h.div(
@@ -229,8 +236,14 @@ const lyricsBodyView = (
       h.Class(
         twMerge(
           'relative overflow-hidden [mask-image:linear-gradient(to_bottom,transparent,black_18%,black_82%,transparent)]',
-          boxClass,
+          Option.isNone(maybeHeightRem) && 'flex-1',
         ),
+      ),
+      h.Style(
+        Option.match(maybeHeightRem, {
+          onNone: () => ({}),
+          onSome: heightRem => ({ height: `${heightRem}rem` }),
+        }),
       ),
     ],
     [
@@ -263,7 +276,7 @@ export const lyricsColumnView = (
         [h.Class('hidden sm:flex flex-col shrink-0 w-80 lg:w-96 self-stretch')],
         [
           captionView(singing, clickedSongId, h),
-          lyricsBodyView(singing, 'flex-1', h),
+          lyricsBodyView(singing, Option.none(), h),
           Option.match(creditOf(singing), {
             onNone: () => h.empty,
             onSome: credit => nudgeControlsView(singing, credit, h),
@@ -282,7 +295,7 @@ export const lyricsWindowView = (
         [h.Class('sm:hidden mb-4')],
         [
           captionView(singing, clickedSongId, h),
-          lyricsBodyView(singing, 'h-[16.25rem]', h),
+          lyricsBodyView(singing, Option.some(WINDOW_ROWS * ROW_REM), h),
           Option.match(creditOf(singing), {
             onNone: () => h.empty,
             onSome: credit => nudgeControlsView(singing, credit, h),

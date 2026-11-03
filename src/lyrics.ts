@@ -40,18 +40,26 @@ export type Playhead = typeof Playhead.Type
 export const NUDGE_LIMIT = 40
 export const NUDGE_STEP_MS = 500
 
-export const NudgeSteps = Schema.Int.pipe(Schema.brand('NudgeSteps'))
-export type NudgeSteps = typeof NudgeSteps.Type
+/** Half-second steps by which a viewer shifts a song's lyrics. Positive means the lyrics come later. */
+export const LaterNudgeSteps = Schema.Int.check(
+  Schema.isBetween({ minimum: -NUDGE_LIMIT, maximum: NUDGE_LIMIT }),
+).pipe(Schema.brand('LaterNudgeSteps'))
+export type LaterNudgeSteps = typeof LaterNudgeSteps.Type
 
-export const noNudge = NudgeSteps.make(0)
+export const noNudge = LaterNudgeSteps.make(0)
 
-const toSteps = (steps: number): NudgeSteps =>
-  NudgeSteps.make(Math.max(-NUDGE_LIMIT, Math.min(NUDGE_LIMIT, steps)))
+const toSteps = (steps: number): LaterNudgeSteps =>
+  LaterNudgeSteps.make(Math.max(-NUDGE_LIMIT, Math.min(NUDGE_LIMIT, steps)))
 
-export const Nudges = Schema.Record(Schema.String, NudgeSteps)
+const NonZero = Schema.makeFilter<number>(steps => steps !== 0)
+
+export const Nudges = Schema.Record(
+  Schema.String,
+  LaterNudgeSteps.check(NonZero),
+)
 export type Nudges = typeof Nudges.Type
 
-export const nudgeOf = (nudges: Nudges, songId: string): NudgeSteps =>
+export const nudgeOf = (nudges: Nudges, songId: string): LaterNudgeSteps =>
   Option.getOrElse(Record.get(nudges, songId), () => noNudge)
 
 export const nudge = (nudges: Nudges, songId: string, by: -1 | 1): Nudges => {
@@ -91,10 +99,10 @@ export type Segment = Readonly<{
 
 const spansOf = (
   archive: ReadonlyArray<PlayableSong>,
-  playing: PlayableSong,
+  clicked: PlayableSong,
 ): ReadonlyArray<Segment> => {
-  const inVideo = archive.filter(song => song.video_url === playing.video_url)
-  const songs = inVideo.length === 0 ? [playing] : inVideo
+  const inVideo = archive.filter(song => song.video_url === clicked.video_url)
+  const songs = inVideo.length === 0 ? [clicked] : inVideo
   const sorted = songs.toSorted(
     (a, b) => timestampToSeconds(a.timestamp) - timestampToSeconds(b.timestamp),
   )
@@ -109,11 +117,11 @@ const spansOf = (
 
 export const segmentAt = (
   archive: ReadonlyArray<PlayableSong>,
-  playing: PlayableSong,
+  clicked: PlayableSong,
   seconds: number,
 ): Option.Option<Segment> =>
   Array.findLast(
-    spansOf(archive, playing),
+    spansOf(archive, clicked),
     segment => segment.startSeconds <= seconds,
   )
 
@@ -135,7 +143,7 @@ export const msIntoLyrics = (
   playheadSeconds: number,
   segment: Segment,
   offsetMs: number,
-  steps: NudgeSteps,
+  steps: LaterNudgeSteps,
 ): number =>
   (playheadSeconds - segment.startSeconds) * 1000 -
   offsetMs -
