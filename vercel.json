@@ -1,0 +1,19 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "redirects": [
+    {
+      "source": "/:page(radio|karaoke|cover|about|credits)",
+      "destination": "/",
+      "permanent": true
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://devbox.tailcde2c4.ts.net/api/:path*"
+    }
+  ]
+}
