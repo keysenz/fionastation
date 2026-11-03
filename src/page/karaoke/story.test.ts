@@ -24,9 +24,13 @@ import {
   init,
   update,
 } from './karaoke'
-import { emptySetlist, restoreSaved } from './setlist.ts'
+import { emptySetlist, restoreSaved, toPersistedJson } from './setlist.ts'
 
-const makeSong = (id: string, video = `video-${id}`): PlayableSong => ({
+const makeSong = (
+  id: string,
+  video = `video-${id}`,
+  kind: PlayableSong['kind'] = 'karaoke',
+): PlayableSong => ({
   id,
   song_title: `Song ${id}`,
   timestamp: '00:01:00',
@@ -34,6 +38,7 @@ const makeSong = (id: string, video = `video-${id}`): PlayableSong => ({
   video_url: video,
   title_text: 'Stream',
   membership: false,
+  kind,
 })
 const [a, b] = [makeSong('a'), makeSong('b')]
 const a2 = makeSong('a2', a.video_url)
@@ -236,6 +241,27 @@ test('a queue saved by the Next site still loads', () => {
   const restored = restoreSaved(emptySetlist, Option.some(nextSiteSave))
   expect(restored.queue).toEqual([a])
   expect(restored.history).toEqual([b])
+})
+
+test('a queue saved before songs had a kind restores as karaoke', () => {
+  const { kind: _kind, ...withoutKind } = a
+  const oldSave = JSON.stringify({
+    state: { queue: [withoutKind], history: [] },
+    version: 0,
+  })
+  const restored = restoreSaved(emptySetlist, Option.some(oldSave))
+  expect(restored.queue).toEqual([{ ...withoutKind, kind: 'karaoke' }])
+})
+
+test('a saved cover keeps its kind', () => {
+  const cover = makeSong('cover', 'cover-video', 'cover')
+  const restored = restoreSaved(
+    emptySetlist,
+    Option.some(
+      toPersistedJson({ ...emptySetlist, queue: [cover], history: [] }),
+    ),
+  )
+  expect(restored.queue).toEqual([cover])
 })
 
 test('corrupt saved data changes nothing', () => {
@@ -574,6 +600,35 @@ test('the end of a video asks for a random video, among the first songs of other
     PickRandomVideo.name,
   ])
   expect(ended.commands?.[0]?.args?.['candidates']).toEqual([b, c])
+})
+
+test('a cover ending with autoplay on plays the queue, or else asks for a random video that may be a cover', () => {
+  const cover = makeSong('cover', 'cover-video', 'cover')
+  const original = makeSong('original', 'original-video', 'original')
+  const withCover = (...messages: ReadonlyArray<Message>) =>
+    [
+      Message.SucceededFetchSongs({
+        songs: [cover, original, a],
+        goneVideoIds: [],
+      }),
+      Message.ClickedSong({ song: cover }),
+      ...messages,
+    ].reduce<UpdateReturn>((previous, next) => update(previous.model, next), {
+      model: init(),
+    })
+  const ended = Message.ReceivedPlayerEvent({
+    playId: 1,
+    event: PlayerEvent.Ended(),
+  })
+
+  const random = withCover(ended)
+  expect(random.commands?.map(({ name }) => name)).toEqual([
+    PickRandomVideo.name,
+  ])
+  expect(random.commands?.[0]?.args?.['candidates']).toEqual([original, a])
+
+  const queued = withCover(Message.ClickedAddToQueue({ song: b }), ended)
+  expect(currentIdOf(queued.model)).toEqual(Option.some('b'))
 })
 
 test('the random pick leaves out a gone video', () => {

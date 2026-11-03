@@ -6,7 +6,7 @@ The site reads song data from the SQLite database that the [discord bot](https:/
 
 | Page or route | Data |
 | --- | --- |
-| `/karaoke`, `/api/get-karaoke` | `karaoke_video` rows with `kind = 'karaoke'` and their songs |
+| `/karaoke`, `/api/get-karaoke` | `karaoke_video` rows with every kind, with `kind` and their songs |
 | `/cover`, `/api/get-cover` | `karaoke_video` rows with `kind` of `cover` or `original` |
 
 The server also asks YouTube's oEmbed endpoint about every karaoke video at startup and then hourly (`server/videoStatus.ts`). `/api/get-karaoke` adds `is_gone: true` to a video that YouTube answers with 401, 403 or 404. The flag lives in memory only. An unclear answer or a network error keeps the previous one.

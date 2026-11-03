@@ -1,4 +1,7 @@
-import { Schema } from 'effect'
+import { Effect, Schema } from 'effect'
+
+export const VideoKind = Schema.Literals(['karaoke', 'cover', 'original'])
+export type VideoKind = typeof VideoKind.Type
 
 export const KaraokeSong = Schema.Struct({
   id: Schema.String,
@@ -14,6 +17,7 @@ export const KaraokeVideo = Schema.Struct({
   video_url: Schema.String,
   membership: Schema.Boolean,
   is_gone: Schema.Boolean,
+  kind: VideoKind,
   karaoke_song: Schema.Array(KaraokeSong),
 })
 export type KaraokeVideo = typeof KaraokeVideo.Type
@@ -31,6 +35,9 @@ export const PlayableSong = Schema.Struct({
   video_url: Schema.String,
   title_text: Schema.String,
   membership: Schema.Boolean,
+  kind: VideoKind.pipe(
+    Schema.withDecodingDefaultTypeKey(Effect.succeed('karaoke' as const)),
+  ),
 })
 export type PlayableSong = typeof PlayableSong.Type
 
@@ -43,6 +50,7 @@ export const toPlayableSongs = (
       video_url: video.video_url,
       title_text: video.video_title,
       membership: video.membership,
+      kind: video.kind,
     })),
   )
 

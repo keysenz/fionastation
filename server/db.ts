@@ -1,12 +1,18 @@
 import { DatabaseSync } from 'node:sqlite'
 
-import type { Cover, KaraokeSong, KaraokeVideo } from '../src/domain.ts'
+import type {
+  Cover,
+  KaraokeSong,
+  KaraokeVideo,
+  VideoKind,
+} from '../src/domain.ts'
 
 interface VideoRow {
   id: string
   video_title: string
   video_url: string
   membership: number
+  kind: VideoKind
 }
 
 interface SongRow extends KaraokeSong {
@@ -27,9 +33,8 @@ function db(): DatabaseSync {
 export function listKaraokeVideos(): Omit<KaraokeVideo, 'is_gone'>[] {
   const videos = db()
     .prepare(
-      `SELECT id, video_title, video_url, membership
+      `SELECT id, video_title, video_url, membership, kind
        FROM karaoke_video
-       WHERE kind = 'karaoke'
        ORDER BY published_at DESC`,
     )
     .all() as unknown as VideoRow[]
@@ -38,8 +43,6 @@ export function listKaraokeVideos(): Omit<KaraokeVideo, 'is_gone'>[] {
     .prepare(
       `SELECT s.id, s.song_title, s.timestamp, s.created_at, s.video_id
        FROM karaoke_song s
-       JOIN karaoke_video v ON v.id = s.video_id
-       WHERE v.kind = 'karaoke'
        ORDER BY s.timestamp ASC`,
     )
     .all() as unknown as SongRow[]

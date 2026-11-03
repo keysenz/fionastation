@@ -17,6 +17,7 @@ const song = (
   video_url: video,
   title_text: videoTitle,
   membership: false,
+  kind: 'karaoke',
 })
 
 const songs = [
