@@ -9,6 +9,7 @@ A visitor browses the karaoke streams in a master-detail layout, with the stream
 - `karaoke-play` opens the YouTube player for the chosen stream at the song's timestamp. Choosing the current song pauses or resumes it.
 - `karaoke-queue` adds songs with an always visible `Add to Queue` button, and Next plays them in order. On a screen at least `md` wide the open queue drawer reserves its width (22.5rem with its handle), so no `Add to Queue` hides behind it. On a phone the drawer covers the page and has a `Close queue` button.
 - `karaoke-previous` returns to the earlier song and puts the song it left first under Up Next.
+- `karaoke-queue-reorder` moves a queued song by dragging its grip handle with a mouse or a finger (pointer events, `touch-action: none` on the handle), or with ArrowUp and ArrowDown on the focused handle. The dragged row dims and a sky line marks the slot it will land in. The new order is saved.
 - `karaoke-reload` restores the queue and history.
 - `karaoke-gone` labels a gone stream `Stream gone`, requests no thumbnail, and lets it be chosen to show disabled rows.
 
@@ -28,10 +29,11 @@ Preconditions:
 - **Play.** The journey plays that title from the last stream that has it. The iframe `src` holds that stream's video ID and `start=`. A plain play of another song checks the same. A stream row that is not selected but holds the current song shows a `Now playing` icon.
 - **Queue.** `Add to Queue` is visible without hovering and at least 40px high and wide. The journey adds a song, then chooses the forward icon. The player bar shows that song. A second queued song appears under `Up Next` in the drawer. With the drawer open at 1280x800, every `Add to Queue` ends left of the drawer, is not covered, and can be clicked. The `scrollbar-color` computed on the stream list, the setlist and the drawer is the #446e92 thumb on a dark track.
 - **Previous.** The journey chooses the backward icon. The bar shows the earlier song and the song it left is first under `Up Next`. The forward icon then plays that song again.
+- **Reorder.** The `queueReorder` journey queues three songs of one stream, opens the drawer, and drags the first handle onto the third row with the mouse. It expects the order second, third, first, in the drawer and in `karaoke-storage`. Releasing outside the rows changes nothing. ArrowUp and ArrowDown move a song and keep focus on its handle. The order survives a reload. The `queueReorderTouch` journey repeats this in a 375x667 touch context, driving the finger with CDP `Input.dispatchTouchEvent`, and also expects the handle's `touch-action` to be `none` and the drawer not to scroll. Open `queue-reorder-mid-drag.png`, `queue-reorder-touch-mid-drag.png` and the `-dropped` pair.
 - **Reload.** The journey reloads the page. `karaoke-storage` in `localStorage` still holds the queue and history, the drawer lists the queued song, and no page error is logged.
 - **Gone.** The `unavailable` journey checks that gone streams come last with the `Stream gone` label and no thumbnail, show disabled rows without `Add to Queue` when chosen, do not play when a row is clicked, and appear after the live streams in a search.
 - **Phone.** The `mobile` journey sets 375px. Nothing overflows sideways, `Add to Queue` is icon only, at least 40px, and ends left of the queue handle, and a search keeps that. The setlist opens after choosing a stream and All streams returns to the list. The queue drawer has a `Close queue` button of at least 40px that slides it off screen.
-- **Proof.** Open `karaoke-list.png`, `karaoke-search.png`, `karaoke-list-375.png`, `karaoke-search-375.png`, `karaoke-setlist-375.png`, `karaoke-queue.png`, `karaoke-queue-open-wide.png`, `karaoke-queue-375.png` and `results.json` in the evidence folder.
+- **Proof.** Open `karaoke-list.png`, `karaoke-search.png`, `karaoke-list-375.png`, `karaoke-search-375.png`, `karaoke-setlist-375.png`, `karaoke-queue.png`, `karaoke-queue-open-wide.png`, `karaoke-queue-375.png`, the `queue-reorder*.png` files and `results.json` in the evidence folder.
 
 ## Gotchas
 

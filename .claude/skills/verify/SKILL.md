@@ -48,7 +48,7 @@ Require `server: ours`, the expected Foldkit version, and non-zero counts for so
 (cd .claude/skills/verify && node drive.mjs karaoke cover)   # chosen journeys
 ```
 
-The journeys are `site`, `karaoke`, `cover`, `player`, `unavailable`, `coverPlayer`, `fetchFailure`, `storage`, `navigation`, `paths`, `mobile`, and `api`. `features/README.md` maps each one to what it proves. The exit code is non-zero if any check fails.
+The journeys are `site`, `karaoke`, `cover`, `player`, `queueReorder`, `queueReorderTouch`, `unavailable`, `coverPlayer`, `fetchFailure`, `storage`, `navigation`, `paths`, `mobile`, and `api`. `features/README.md` maps each one to what it proves. The exit code is non-zero if any check fails.
 
 ## Evidence
 

@@ -22,7 +22,7 @@ This directory is the maintained source for verifying the user-facing behavior o
 
 ## Features
 
-- [Karaoke archive](./karaoke.md) covers the song list, search, player, queue, and reload.
+- [Karaoke archive](./karaoke.md) covers the song list, search, player, queue, queue reordering by mouse, touch and keyboard, and reload.
 - [Covers](./cover.md) covers the cover player, its controls, and playlist search.
 - [Site pages](./site.md) covers the home menu, background image, static pages, and security headers.
 - [Data API](./api.md) covers the read-only routes and the removed write routes.

@@ -188,6 +188,117 @@ const seekNearEnd = (page) =>
     p.seekTo(Math.max(0, p.getDuration() - 2), true);
   });
 
+const queueReorderJourney = async (page, feature, { touch }) => {
+  const { body: videos } = await api('/api/get-karaoke');
+  const picked = [];
+  const video = videos.find((v) => {
+    picked.length = 0;
+    if (v.is_gone) return false;
+    for (const song of songRows([v])) {
+      if (!picked.some((p) => p.song_title === song.song_title)) picked.push(song);
+    }
+    picked.splice(3);
+    return picked.length === 3;
+  });
+  if (!video) throw new Error('no live video with three songs of distinct titles');
+  const [a, b, c] = picked;
+  const grips = (drawer) => drawer.getByRole('button', { name: /^Move "/ });
+  const orderIs = async (drawer, expected) => {
+    const want = expected.map((r) => r.song_title).join('|');
+    let got = '';
+    for (const deadline = Date.now() + 3000; Date.now() < deadline; await page.waitForTimeout(100)) {
+      got = (await grips(drawer).evaluateAll((els) => els.map((el) => el.getAttribute('aria-label').slice(6, -1)))).join('|');
+      if (got === want) return;
+    }
+    throw new Error(`drawer order is ${got.split('|').join(' | ')}`);
+  };
+  const savedOrder = () => page.evaluate(() => JSON.parse(localStorage.getItem('karaoke-storage')).state.queue.map((s) => s.song_title));
+  const centerOf = async (locator) => {
+    const box = await locator.boundingBox();
+    return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  };
+  const cdp = touch ? await page.context().newCDPSession(page) : undefined;
+  const touchEvent = (type, point) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: point ? [{ x: point.x, y: point.y }] : [] });
+  const dragGrip = async (drawer, fromIndex, toIndex, shotName) => {
+    const start = await centerOf(grips(drawer).nth(fromIndex));
+    const end = await centerOf(grips(drawer).nth(toIndex).locator('xpath=..'));
+    const at = (t) => ({ x: start.x + (end.x - start.x) * t, y: start.y + (end.y - start.y) * t });
+    if (touch) await touchEvent('touchStart', start);
+    else {
+      await page.mouse.move(start.x, start.y);
+      await page.mouse.down();
+    }
+    for (let i = 1; i <= 8; i++) {
+      if (touch) await touchEvent('touchMove', at(i / 8));
+      else await page.mouse.move(at(i / 8).x, at(i / 8).y);
+    }
+    await page.waitForTimeout(150);
+    await page.screenshot({ path: join(out, shotName) });
+    if (touch) await touchEvent('touchEnd');
+    else await page.mouse.up();
+  };
+
+  await page.goto(BASE + '/karaoke');
+  await videoRows(page).first().waitFor();
+  const section = await openVideo(page, videos, video.video_url);
+  for (const row of [a, b, c]) {
+    await songRowsIn(section).nth(video.karaoke_song.findIndex((s) => s.id === row.id)).getByRole('button', { name: 'Add to Queue', exact: true }).click();
+  }
+  await queueHandle(page).click();
+  const drawer = queueDrawerOf(page);
+  await grips(drawer).nth(2).waitFor();
+  await page.waitForTimeout(400);
+  const scroller = drawer.locator('.overflow-y-auto');
+  await step(feature, 'the drawer lists the queued songs in the order they were added, each with a grip handle that blocks touch scrolling', async () => {
+    await orderIs(drawer, [a, b, c]);
+    const touchAction = await grips(drawer).first().evaluate((el) => getComputedStyle(el).touchAction);
+    if (touchAction !== 'none') throw new Error(`touch-action is ${touchAction}`);
+  });
+  await step(feature, `${touch ? 'a finger' : 'the mouse'} dragging the first handle onto the third row moves it to the end and saves the order`, async () => {
+    const scrollBefore = await scroller.evaluate((el) => el.scrollTop);
+    await dragGrip(drawer, 0, 2, touch ? 'queue-reorder-touch-mid-drag.png' : 'queue-reorder-mid-drag.png');
+    await orderIs(drawer, [b, c, a]);
+    const saved = await savedOrder();
+    if (saved.join('|') !== [b, c, a].map((r) => r.song_title).join('|')) throw new Error(`saved ${saved.join(' | ')}`);
+    if ((await scroller.evaluate((el) => el.scrollTop)) !== scrollBefore) throw new Error('the drawer scrolled during the drag');
+    await page.screenshot({ path: join(out, touch ? 'queue-reorder-touch-dropped.png' : 'queue-reorder-dropped.png') });
+  });
+  await step(feature, 'releasing a drag outside the rows leaves the order alone', async () => {
+    const start = await centerOf(grips(drawer).nth(0));
+    if (touch) {
+      await touchEvent('touchStart', start);
+      await touchEvent('touchMove', { x: start.x, y: 5 });
+      await touchEvent('touchEnd');
+    } else {
+      await page.mouse.move(start.x, start.y);
+      await page.mouse.down();
+      await page.mouse.move(start.x, 5, { steps: 4 });
+      await page.mouse.up();
+    }
+    await page.waitForTimeout(200);
+    await orderIs(drawer, [b, c, a]);
+  });
+  await step(feature, 'the grip handle moves a song with the arrow keys and keeps focus on it', async () => {
+    await grips(drawer).nth(1).focus();
+    await page.keyboard.press('ArrowUp');
+    await orderIs(drawer, [c, b, a]);
+    const focused = await page.evaluate(() => document.activeElement?.getAttribute('aria-label'));
+    if (focused !== `Move "${c.song_title}"`) throw new Error(`focus is on ${focused}`);
+    await page.keyboard.press('ArrowUp');
+    await orderIs(drawer, [c, b, a]);
+    await page.keyboard.press('ArrowDown');
+    await orderIs(drawer, [b, c, a]);
+  });
+  await step(feature, 'the new order survives a reload', async () => {
+    await page.reload();
+    await videoRows(page).first().waitFor();
+    await queueHandle(page).click();
+    await grips(queueDrawerOf(page)).nth(2).waitFor();
+    await orderIs(queueDrawerOf(page), [b, c, a]);
+  });
+};
+
+
 const journeys = {
   async site(page) {
     await page.goto(BASE + '/');
@@ -585,6 +696,23 @@ const journeys = {
       await switchBecomes(blockedTab, false, 'the switch does not toggle');
       await blockedTab.close();
     });
+  },
+
+  async queueReorder(page) {
+    await queueReorderJourney(page, 'queueReorder', { touch: false });
+  },
+
+  async queueReorderTouch(page) {
+    const context = await browser.newContext({ viewport: { width: 375, height: 667 }, hasTouch: true, isMobile: true });
+    const touchPage = await context.newPage();
+    try {
+      await queueReorderJourney(touchPage, 'queueReorderTouch', { touch: true });
+    } catch (e) {
+      await touchPage.screenshot({ path: join(out, 'queue-reorder-touch-state.png') }).catch(() => {});
+      throw e;
+    } finally {
+      await context.close();
+    }
   },
 
   async unavailable(page) {
