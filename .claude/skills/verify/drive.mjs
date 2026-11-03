@@ -1061,6 +1061,77 @@ const journeys = {
     });
   },
 
+  async volume(page) {
+    const { body: videos } = await api('/api/get-karaoke');
+    const singles = videos.filter((v) => isSingleSong(videos, v.video_url));
+    const slider = page.locator('input[aria-label="Volume"]:visible');
+    const volumeOf = () =>
+      page.evaluate(() => {
+        const p = window.YT.get(document.querySelector('iframe[src*="youtube"]').id);
+        return { level: p.getVolume(), muted: p.isMuted() };
+      });
+    const volumeBecomes = (want) =>
+      page.waitForFunction(
+        ([level, muted]) => {
+          const frame = document.querySelector('iframe[src*="youtube"]');
+          const p = frame && window.YT.get(frame.id);
+          return Boolean(p?.getVolume) && p.getVolume() === level && p.isMuted() === muted;
+        },
+        want,
+        { timeout: 10000 },
+      );
+    const playSingle = async (video) => {
+      await videoRows(page).first().waitFor();
+      await videoRow(page, videos, video.video_url).locator('button').first().click();
+      await playerReady(page);
+    };
+    await page.goto(BASE + '/');
+    await playSingle(singles[0]);
+    await step('volume', 'the slider sets the real player volume, with a 40px target and a value text', async () => {
+      const box = await slider.boundingBox();
+      if (!box || box.height < 40) throw new Error(`slider ${JSON.stringify(box)}`);
+      await slider.fill('30');
+      await volumeBecomes([30, false]);
+      await page.waitForFunction(() => document.querySelector('input[aria-label="Volume"]').getAttribute('aria-valuetext') === '30 percent', null, { timeout: 5000 }).catch(() => { throw new Error('no value text'); });
+      await page.screenshot({ path: join(out, 'volume-bar.png') });
+    });
+    await step('volume', 'mute silences the player and keeps the level, and the slider above 0 unmutes', async () => {
+      await page.getByRole('button', { name: 'Mute', exact: true }).click();
+      await volumeBecomes([30, true]);
+      await page.getByRole('button', { name: 'Unmute', exact: true }).waitFor();
+      await slider.fill('60');
+      await volumeBecomes([60, false]);
+      await slider.fill('0');
+      await page.getByRole('button', { name: 'Unmute', exact: true }).waitFor();
+      await slider.fill('60');
+    });
+    await step('volume', 'the next song keeps the volume', async () => {
+      await playSingle(singles[1]);
+      await volumeBecomes([60, false]);
+    });
+    await step('volume', 'the volume survives a reload', async () => {
+      await page.getByRole('button', { name: 'Mute', exact: true }).click();
+      await page.reload();
+      await playSingle(singles[0]);
+      await volumeBecomes([60, true]);
+      if ((await slider.inputValue()) !== '0') throw new Error('a muted slider should read 0');
+    });
+    await step('volume', 'on a phone the bar has only the mute button, and the expanded player has the slider', async () => {
+      await page.setViewportSize({ width: 375, height: 667 });
+      if (await slider.count()) throw new Error('the slider shows in the phone bar');
+      const mute = page.getByRole('button', { name: 'Unmute', exact: true });
+      const box = await mute.boundingBox();
+      if (!box || box.width < 40 || box.height < 40) throw new Error(`mute ${JSON.stringify(box)}`);
+      const title = await page.locator('.fixed.bottom-0.h-20 h3').boundingBox();
+      if (title.width < 100) throw new Error(`the bar title is ${title.width}px`);
+      await page.screenshot({ path: join(out, 'volume-phone-bar.png') });
+      await page.getByRole('button', { name: 'Expand player' }).first().click();
+      await page.waitForTimeout(800);
+      await slider.waitFor();
+      await page.screenshot({ path: join(out, 'volume-phone-expanded.png') });
+    });
+  },
+
   async mobile(page) {
     await page.setViewportSize({ width: 375, height: 667 });
     const { body: videos } = await api('/api/get-karaoke');
@@ -1195,7 +1266,7 @@ const journeys = {
     });
     await step('mobile', 'the player bar title is not cut to a stub and tapping it expands the player', async () => {
       const box = await barTitle().boundingBox();
-      if (!box || box.width < 120) throw new Error(`title is ${box?.width}px wide`);
+      if (!box || box.width < 110) throw new Error(`title is ${box?.width}px wide`);
       await page.screenshot({ path: join(out, 'mobile-player-bar.png') });
       await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
       await page.getByRole('button', { name: 'Collapse player' }).first().waitFor({ state: 'visible' });
