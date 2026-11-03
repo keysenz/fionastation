@@ -15,7 +15,7 @@ A visitor plays a video, and the page and the YouTube player stay in agreement.
 
 ## How to get to it (user POV)
 
-- Choose a song on `/karaoke`, or open `/cover`.
+- Choose a song on `/radio`, or open `/cover`.
 
 ## Driving it with drive.mjs
 

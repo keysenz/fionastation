@@ -25,7 +25,7 @@ const api = async (path, init) => {
   };
 };
 
-const STREAMS = 'nav[aria-label="Karaoke streams"]';
+const STREAMS = 'nav[aria-label="Videos"]';
 const SETLIST = 'section[aria-label^="Setlist of"]';
 const videoRows = (page) => page.locator(`${STREAMS} li`);
 const setlistOf = (page) => page.locator(SETLIST);
@@ -41,7 +41,7 @@ const scrollListToTop = (page) =>
   );
 const showList = async (page) => {
   if (!(await page.locator(STREAMS).isVisible())) {
-    await page.getByRole('button', { name: 'All streams' }).click();
+    await page.getByRole('button', { name: 'All videos' }).click();
     await page.locator(STREAMS).waitFor({ state: 'visible' });
   }
 };
@@ -105,7 +105,7 @@ const openVideo = async (page, videos, videoUrl) => {
   await showList(page);
   const button = videoRow(page, videos, videoUrl).locator('button');
   await button.click();
-  await button.and(page.locator('[aria-current="true"]')).waitFor();
+  await button.and(page.locator('[aria-current="true"]')).waitFor({ state: 'attached' });
   await setlistOf(page).waitFor({ state: 'visible' });
   return setlistOf(page);
 };
@@ -238,7 +238,7 @@ const queueReorderJourney = async (page, feature, { touch }) => {
     else await page.mouse.up();
   };
 
-  await page.goto(BASE + '/karaoke');
+  await page.goto(BASE + '/radio');
   await videoRows(page).first().waitFor();
   const section = await openVideo(page, videos, video.video_url);
   for (const row of [a, b, c]) {
@@ -314,6 +314,7 @@ const journeys = {
     for (const [label, heading] of [
       ['About', 'Fiona Clearesta'],
       ['Credits', 'Credits'],
+      ['Fio Radio', 'Fio Radio'],
     ]) {
       await page.goto(BASE + '/');
       await page.getByRole('link', { name: label }).click();
@@ -324,12 +325,52 @@ const journeys = {
     check('site', 'security headers are served', headers.get('x-frame-options') === 'SAMEORIGIN');
   },
 
+  async radio(page) {
+    const { body: videos } = await api('/api/get-karaoke');
+    const live = (kind) => videos.find((v) => v.kind === kind && !v.is_gone && v.karaoke_song.length === 1);
+    const cover = live('cover');
+    const original = live('original');
+    if (!cover || !original) throw new Error('the data has no live cover and original');
+
+    await page.goto(BASE + '/karaoke');
+    await page.waitForURL(BASE + '/radio');
+    check('radio', '/karaoke lands on /radio in the browser', true);
+    await page.getByRole('heading', { name: 'Fio Radio' }).waitFor();
+    await videoRows(page).first().waitFor();
+    check('radio', 'the badge counts every video', (await page.locator(`${STREAMS} > p`).first().innerText()).toLowerCase() === `${videos.length} videos`, `${videos.length} videos`);
+    const wanted = (kind) => videos.filter((v) => v.kind === kind).length;
+    for (const [kind, label] of [['cover', 'Cover'], ['original', 'Original']]) {
+      const pills = await videoRows(page).getByText(label, { exact: true }).count();
+      check('radio', `the list has a ${label} row for each ${kind} video`, pills === wanted(kind) && pills > 0, `${pills} rows`);
+    }
+    await page.screenshot({ path: join(out, 'radio-list.png') });
+
+    const coverRow = await songRowOf(page, videos, { ...cover.karaoke_song[0], video_url: cover.video_url });
+    await coverRow.click();
+    const bar = page.locator('.fixed.bottom-0');
+    await bar.getByRole('heading', { name: cover.karaoke_song[0].song_title }).waitFor();
+    await bar.getByText('Cover', { exact: true }).waitFor();
+    const src = await playerSrc(page);
+    check('radio', 'playing a cover shows Cover in the bar and loads its video', src.includes(cover.video_url), src.slice(0, 90));
+    await page.screenshot({ path: join(out, 'radio-cover-playing.png') });
+
+    const originalRow = await songRowOf(page, videos, { ...original.karaoke_song[0], video_url: original.video_url });
+    await originalRow.getByRole('button', { name: 'Add to Queue', exact: true }).click();
+    await queueHandle(page).click();
+    const drawer = queueDrawerOf(page);
+    await drawer.getByText(original.karaoke_song[0].song_title).first().waitFor();
+    await drawer.getByText('Original', { exact: true }).waitFor();
+    check('radio', 'queueing an original shows Original in the drawer', true);
+    await page.waitForTimeout(400);
+    await page.screenshot({ path: join(out, 'radio-queue.png') });
+  },
+
   async karaoke(page) {
     const { body: videos } = await api('/api/get-karaoke');
     const total = videos.reduce((n, v) => n + v.karaoke_song.length, 0);
     check('karaoke', 'api returns only karaoke streams with songs', total > 0, `${videos.length} videos, ${total} songs`);
 
-    await page.goto(BASE + '/karaoke');
+    await page.goto(BASE + '/radio');
     await videoRows(page).first().waitFor();
     check('karaoke', 'list shows one row per video', (await videoRows(page).count()) === videos.length, `${await videoRows(page).count()} rows`);
     const firstShown = displayOrder(videos)[0];
@@ -536,7 +577,7 @@ const journeys = {
       await apiHeld;
       await route.continue();
     });
-    await page.goto(BASE + '/karaoke');
+    await page.goto(BASE + '/radio');
     await videoRows(page).first().waitFor();
     await (await songRowOf(page, videos, rows[start])).click();
     const bar = page.locator('.fixed.bottom-0');
@@ -687,7 +728,7 @@ const journeys = {
           },
         });
       });
-      await blockedTab.goto(BASE + '/karaoke');
+      await blockedTab.goto(BASE + '/radio');
       await videoRows(blockedTab).first().waitFor();
       await (await songRowOf(blockedTab, videos, rows[start])).click();
       await autoplaySwitch(blockedTab).waitFor();
@@ -727,7 +768,7 @@ const journeys = {
     const bar = page.locator('.fixed.bottom-0');
     const stepForward = barButton(page, 'fa-step-forward');
 
-    await page.goto(BASE + '/karaoke');
+    await page.goto(BASE + '/radio');
     await videoRows(page).first().waitFor();
     const liveVideos = videos.filter((v) => !v.is_gone).length;
     const goneRow = videoRow(page, videos, gone.video_url);
@@ -840,8 +881,8 @@ const journeys = {
   async fetchFailure(page) {
     let blocked = true;
     await page.route('**/api/get-karaoke', (route) => (blocked ? route.fulfill({ status: 500, body: '{}' }) : route.continue()));
-    await page.goto(BASE + '/karaoke');
-    await step('fetchFailure', 'a failed fetch says so instead of showing an empty list', () => page.getByText('Could not load the karaoke archive').waitFor());
+    await page.goto(BASE + '/radio');
+    await step('fetchFailure', 'a failed fetch says so instead of showing an empty list', () => page.getByText('Could not load Fio Radio').waitFor());
     blocked = false;
     await step('fetchFailure', 'try again recovers without a reload', async () => {
       await page.getByRole('button', { name: 'Try again' }).click();
@@ -861,7 +902,7 @@ const journeys = {
   async storage(page, context) {
     await page.goto(BASE + '/');
     await page.evaluate(() => localStorage.setItem('karaoke-storage', 'not json'));
-    await page.goto(BASE + '/karaoke');
+    await page.goto(BASE + '/radio');
     await videoRows(page).first().waitFor();
     await step('storage', 'corrupt saved data starts with an empty queue', async () => {
       await page.getByRole('button', { name: 'Queue', exact: true }).click();
@@ -885,7 +926,7 @@ const journeys = {
       await blockedTab.goto(BASE + path);
       await step('storage', `${path} renders with storage blocked`, () => blockedTab.getByRole('heading', { name: text }).first().waitFor());
     }
-    await blockedTab.goto(BASE + '/karaoke');
+    await blockedTab.goto(BASE + '/radio');
     await step('storage', 'karaoke works with storage blocked', async () => {
       const { body: blockedVideos } = await api('/api/get-karaoke');
       const blockedRows = songRows(blockedVideos);
@@ -901,10 +942,10 @@ const journeys = {
     const otherIndex = rows.findIndex((s) => !s.is_gone && s.song_title !== rows[firstIndex].song_title);
     const tabB = await context.newPage();
     await page.goto(BASE + '/');
-    await tabB.goto(BASE + '/karaoke');
+    await tabB.goto(BASE + '/radio');
     await videoRows(tabB).first().waitFor();
     await (await songRowOf(tabB, videos, rows[firstIndex])).getByRole('button', { name: 'Add to Queue', exact: true }).click();
-    await page.getByRole('link', { name: 'Karaoke' }).click();
+    await page.getByRole('link', { name: 'Fio Radio' }).click();
     await videoRows(page).first().waitFor();
     await (await songRowOf(page, videos, rows[otherIndex])).getByRole('button', { name: 'Add to Queue', exact: true }).click();
     const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('karaoke-storage')).state.queue.length);
@@ -934,6 +975,8 @@ const journeys = {
   },
 
   async paths() {
+    const legacy = await rawRequest('/karaoke?x=1');
+    check('paths', '/karaoke redirects to /radio with its query', legacy.status === 301 && legacy.headers.location === '/radio?x=1', `${legacy.status} ${legacy.headers.location}`);
     const statusOf = async (path, init) => (await rawRequest(path, init)).status;
     for (const path of ['/nope', '/..%2f..%2fpackage.json', '/%E0%A4%A', '/%FF', '//', '/robots.txt/x.js', '/a%00.js']) {
       check('paths', `${path} answers 404`, (await statusOf(path)) === 404);
@@ -973,13 +1016,13 @@ const journeys = {
     const rows = songRows(videos);
     const noOverflow = () =>
       page.evaluate(() => {
-        const scroller = [...document.querySelectorAll('nav[aria-label="Karaoke streams"], section[aria-label^="Setlist of"]')].find((el) => el.offsetParent);
+        const scroller = [...document.querySelectorAll('nav[aria-label="Videos"], section[aria-label^="Setlist of"]')].find((el) => el.offsetParent);
         return {
           page: document.documentElement.scrollWidth,
           scroller: scroller.scrollWidth - scroller.clientWidth,
         };
       });
-    await page.goto(BASE + '/karaoke');
+    await page.goto(BASE + '/radio');
     await videoRows(page).first().waitFor();
     await page.waitForTimeout(400);
     await step('mobile', 'the karaoke list fits a 375px phone', async () => {
@@ -1029,7 +1072,7 @@ const journeys = {
         .getByText(/^\d+ of \d+ songs match$/)
         .waitFor();
       await page.screenshot({ path: join(out, 'karaoke-setlist-375.png') });
-      await page.getByRole('button', { name: 'All streams' }).click();
+      await page.getByRole('button', { name: 'All videos' }).click();
       await page.locator(STREAMS).waitFor({ state: 'visible' });
       await page.getByPlaceholder('Search songs...').fill('');
     });

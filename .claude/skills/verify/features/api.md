@@ -11,7 +11,7 @@ The pages read two JSON routes. The site never writes data, because the discord 
 
 ## How to get to it (user POV)
 
-- The karaoke and cover pages call these routes.
+- The Fio Radio (`/radio`) and cover pages call these routes. `/api/get-karaoke` returns every kind, each video with a `kind` of `karaoke`, `cover` or `original`.
 - Run `curl` against a route directly.
 
 ## Driving it with drive.mjs
