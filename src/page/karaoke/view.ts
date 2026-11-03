@@ -1042,7 +1042,7 @@ const autoplaySwitchView = (
       h.Role('switch'),
       h.AriaChecked(isAutoplay),
       h.AriaLabel('Autoplay'),
-      h.Title('Autoplay'),
+      h.Title(isAutoplay ? 'Autoplay is on' : 'Autoplay is off'),
       h.OnClick(Message.ClickedToggleAutoplay()),
       h.Class(
         'flex items-center gap-2 min-h-10 px-2 text-xs text-gray-300 hover:text-white transition-colors',
@@ -1059,14 +1059,29 @@ const autoplaySwitchView = (
           ),
         ],
         [
-          h.span([
-            h.Class(
-              twMerge(
-                'absolute -top-[3px] left-0 h-5 w-5 rounded-full shadow transition-all',
-                isAutoplay ? 'translate-x-4 bg-sky-400' : 'bg-gray-300',
+          h.span(
+            [
+              h.Class(
+                twMerge(
+                  'absolute -top-[3px] left-0 h-5 w-5 rounded-full shadow transition-all flex items-center justify-center',
+                  isAutoplay
+                    ? 'translate-x-4 bg-white text-black'
+                    : 'bg-gray-300 text-gray-700',
+                ),
               ),
-            ),
-          ]),
+            ],
+            [
+              h.i([
+                h.Class(
+                  twMerge(
+                    'fas text-[8px]',
+                    isAutoplay ? 'fa-play pl-px' : 'fa-pause',
+                  ),
+                ),
+                h.AriaHidden(true),
+              ]),
+            ],
+          ),
         ],
       ),
       h.span([h.Class('hidden md:inline')], ['Autoplay']),
