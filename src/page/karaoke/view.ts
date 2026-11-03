@@ -336,6 +336,7 @@ const videoListItemView = (
         h.button(
           [
             h.Type('button'),
+            h.AriaCurrent(isSelected ? 'true' : 'false'),
             h.OnClick(Message.ClickedSong({ song })),
             h.Class('flex flex-1 min-w-0 items-center gap-3 p-2 text-left'),
           ],
@@ -1108,7 +1109,7 @@ const playerBarView = (
   return h.div(
     [
       h.Class(
-        'fixed bottom-0 left-0 right-0 bg-black/80 backdrop-blur-xl border-t border-white/10 text-white z-[55] h-20 flex items-center px-4 shadow-2xl transition-all duration-300',
+        'fixed bottom-0 left-0 right-0 bg-black/80 backdrop-blur-xl border-t border-white/10 text-white z-[55] h-20 flex items-center px-2 sm:px-4 shadow-2xl transition-all duration-300',
       ),
     ],
     [
@@ -1138,7 +1139,7 @@ const playerBarView = (
       h.div(
         [
           h.Class(
-            'relative flex items-center space-x-3 sm:space-x-4 flex-1 min-w-0 sm:flex-none sm:w-1/3',
+            'relative flex items-center space-x-2 sm:space-x-4 flex-1 min-w-0 sm:flex-none sm:w-1/3',
           ),
         ],
         [
@@ -1158,7 +1159,7 @@ const playerBarView = (
               h.div(
                 [
                   h.Class(
-                    `transition-all duration-300 ${model.isExpanded ? 'w-0 h-0 opacity-0' : 'w-14 h-14 bg-gray-800 rounded overflow-hidden shadow-lg border border-white/10'}`,
+                    `transition-all duration-300 ${model.isExpanded ? 'w-0 h-0 opacity-0' : 'w-12 h-12 sm:w-14 sm:h-14 bg-gray-800 rounded overflow-hidden shadow-lg border border-white/10'}`,
                   ),
                 ],
                 [
@@ -1255,7 +1256,11 @@ const playerBarView = (
         ],
       ),
       h.div(
-        [h.Class('flex items-center justify-end space-x-2 sm:w-1/3')],
+        [
+          h.Class(
+            'flex flex-col items-end justify-center sm:flex-row sm:items-center sm:justify-end sm:space-x-2 sm:w-1/3',
+          ),
+        ],
         [
           repeatButtonView(model.repeat, h),
           autoplaySwitchView(model.isAutoplay, h),
