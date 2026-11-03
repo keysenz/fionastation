@@ -20,7 +20,12 @@ import {
   allSongs,
   queueHandleId,
 } from './karaoke'
-import type { NowPlaying, Repeat } from './setlist.ts'
+import {
+  type NowPlaying,
+  type Repeat,
+  type Volume,
+  isSilent,
+} from './setlist.ts'
 import {
   type VideoGroup,
   groupByVideo,
@@ -1068,6 +1073,46 @@ const autoplaySwitchView = (
     ],
   )
 
+const muteButtonView = (volume: Volume, h: HtmlBuilder<Message>): Html => {
+  const isSilentNow = isSilent(volume)
+  const icon = isSilentNow
+    ? 'fa-volume-xmark'
+    : volume.level < 50
+      ? 'fa-volume-low'
+      : 'fa-volume-high'
+  return h.button(
+    [
+      h.Type('button'),
+      h.AriaLabel(isSilentNow ? 'Unmute' : 'Mute'),
+      h.Title(isSilentNow ? 'Unmute' : 'Mute'),
+      h.OnClick(Message.ClickedToggleMute()),
+      h.Class(
+        'flex items-center justify-center min-h-10 min-w-10 shrink-0 rounded-full text-gray-300 hover:text-white transition active:scale-95',
+      ),
+    ],
+    [h.i([h.Class(`fas ${icon} drop-shadow-md`), h.AriaHidden(true)])],
+  )
+}
+
+const volumeSliderView = (
+  volume: Volume,
+  className: string,
+  h: HtmlBuilder<Message>,
+): Html => {
+  const shown = isSilent(volume) ? 0 : volume.level
+  return h.input([
+    h.Type('range'),
+    h.Min('0'),
+    h.Max('100'),
+    h.Step('1'),
+    h.Value(`${shown}`),
+    h.AriaLabel('Volume'),
+    h.Attribute('aria-valuetext', `${shown} percent`),
+    h.OnInput(value => Message.ChangedVolume({ level: Number(value) })),
+    h.Class(twMerge('min-h-10 accent-sky-400 cursor-pointer', className)),
+  ])
+}
+
 const repeatButtonView = (repeat: Repeat, h: HtmlBuilder<Message>): Html =>
   h.button(
     [
@@ -1109,7 +1154,7 @@ const playerBarView = (
   return h.div(
     [
       h.Class(
-        'fixed bottom-0 left-0 right-0 bg-black/80 backdrop-blur-xl border-t border-white/10 text-white z-[55] h-20 flex items-center px-2 sm:px-4 shadow-2xl transition-all duration-300',
+        'fixed bottom-0 left-0 right-0 bg-black/80 backdrop-blur-xl border-t border-white/10 text-white z-[55] h-20 flex items-center px-1.5 sm:px-4 shadow-2xl transition-all duration-300',
       ),
     ],
     [
@@ -1159,7 +1204,7 @@ const playerBarView = (
               h.div(
                 [
                   h.Class(
-                    `transition-all duration-300 ${model.isExpanded ? 'w-0 h-0 opacity-0' : 'w-12 h-12 sm:w-14 sm:h-14 bg-gray-800 rounded overflow-hidden shadow-lg border border-white/10'}`,
+                    `transition-all duration-300 ${model.isExpanded ? 'w-0 h-0 opacity-0' : 'w-10 h-10 sm:w-14 sm:h-14 bg-gray-800 rounded overflow-hidden shadow-lg border border-white/10'}`,
                   ),
                 ],
                 [
@@ -1214,7 +1259,7 @@ const playerBarView = (
         [h.Class('flex flex-col items-center justify-center sm:w-1/3')],
         [
           h.div(
-            [h.Class('flex items-center space-x-1 sm:space-x-6')],
+            [h.Class('flex items-center sm:space-x-6')],
             [
               h.button(
                 [
@@ -1262,7 +1307,14 @@ const playerBarView = (
           ),
         ],
         [
-          repeatButtonView(model.repeat, h),
+          h.div(
+            [h.Class('flex items-center sm:contents')],
+            [
+              repeatButtonView(model.repeat, h),
+              muteButtonView(model.volume, h),
+              volumeSliderView(model.volume, 'hidden sm:block w-24', h),
+            ],
+          ),
           autoplaySwitchView(model.isAutoplay, h),
           h.button(
             [
@@ -1421,8 +1473,15 @@ const playerView = (
                 [nowPlaying.song.song_title],
               ),
               h.p(
-                [h.Class('text-center text-gray-400 mb-8')],
+                [h.Class('text-center text-gray-400 mb-4')],
                 [nowPlaying.song.title_text],
+              ),
+              h.div(
+                [h.Class('flex items-center justify-center gap-2 mb-8')],
+                [
+                  muteButtonView(model.volume, h),
+                  volumeSliderView(model.volume, 'w-full max-w-xs', h),
+                ],
               ),
               upNextPreviewView(model.setlist.queue, h),
             ],

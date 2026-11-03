@@ -6,6 +6,7 @@ import type { PlayableSong } from '../../domain.ts'
 import { PlayerEvent } from '../../youtube'
 import {
   ApplyPlayback,
+  ApplyVolume,
   FetchSongs,
   FocusInfoButton,
   FocusInfoPanel,
@@ -13,6 +14,7 @@ import {
   LoadAutoplay,
   LoadRepeat,
   LoadSavedSetlist,
+  LoadVolume,
   Message,
   type Model,
   PickRandomVideo,
@@ -20,6 +22,7 @@ import {
   SaveAutoplay,
   SaveRepeat,
   SaveSetlist,
+  SaveVolume,
   ScrollListToTop,
   ScrollSetlistToTop,
   SyncUrl,
@@ -30,7 +33,14 @@ import {
   update,
 } from './karaoke'
 import { layersToUrl, parseLayers } from './layers.ts'
-import { emptySetlist, restoreSaved, toPersistedJson } from './setlist.ts'
+import {
+  defaultVolume,
+  emptySetlist,
+  parseVolume,
+  restoreSaved,
+  toPersistedJson,
+  toVolumeJson,
+} from './setlist.ts'
 
 const makeSong = (
   id: string,
@@ -233,12 +243,14 @@ test('opening the page rereads saved data and fetches, and does not fetch twice'
     LoadSavedSetlist.name,
     LoadAutoplay.name,
     LoadRepeat.name,
+    LoadVolume.name,
     FetchSongs.name,
   ])
   expect(entered(opened.model).commands?.map(({ name }) => name)).toEqual([
     LoadSavedSetlist.name,
     LoadAutoplay.name,
     LoadRepeat.name,
+    LoadVolume.name,
   ])
 })
 
@@ -1265,4 +1277,106 @@ test('opening a direct link keeps the video, drops the overlays and repairs the 
   expect(
     syncOf(update(init(), Message.OpenedFromUrl({ search: '?v=v1' }))),
   ).toBeUndefined()
+})
+
+const volumeChanged = [
+  Command.resolve(ApplyVolume, Message.CompletedApplyVolume()),
+  Command.resolve(SaveVolume, Message.CompletedSaveVolume()),
+] as const
+
+test('volume starts at 100 and unmuted', () => {
+  expect(init().volume).toEqual({ level: 100, isMuted: false })
+})
+
+test('the slider sets and clamps the level, applies it to the player and saves it', () => {
+  story(
+    update,
+    given(init()),
+    message(Message.ChangedVolume({ level: 40 })),
+    ...volumeChanged,
+    model(current =>
+      expect(current.volume).toEqual({ level: 40, isMuted: false }),
+    ),
+    message(Message.ChangedVolume({ level: 250 })),
+    ...volumeChanged,
+    model(current => expect(current.volume.level).toBe(100)),
+    message(Message.ChangedVolume({ level: -5 })),
+    ...volumeChanged,
+    model(current => expect(current.volume.level).toBe(0)),
+  )
+})
+
+test('mute keeps the level, the slider above 0 unmutes, and 0 stays muted', () => {
+  story(
+    update,
+    given(init()),
+    message(Message.ChangedVolume({ level: 30 })),
+    ...volumeChanged,
+    message(Message.ClickedToggleMute()),
+    ...volumeChanged,
+    model(current =>
+      expect(current.volume).toEqual({ level: 30, isMuted: true }),
+    ),
+    message(Message.ChangedVolume({ level: 0 })),
+    ...volumeChanged,
+    model(current =>
+      expect(current.volume).toEqual({ level: 0, isMuted: true }),
+    ),
+    message(Message.ChangedVolume({ level: 20 })),
+    ...volumeChanged,
+    model(current =>
+      expect(current.volume).toEqual({ level: 20, isMuted: false }),
+    ),
+  )
+})
+
+test('unmuting from level 0 goes to a middle level, so it is not still silent', () => {
+  story(
+    update,
+    given({ ...init(), volume: { level: 0, isMuted: false } }),
+    message(Message.ClickedToggleMute()),
+    ...volumeChanged,
+    model(current =>
+      expect(current.volume).toEqual({ level: 50, isMuted: false }),
+    ),
+  )
+})
+
+test('a ready player gets the volume, so each new song keeps the level', () => {
+  story(
+    update,
+    given({
+      ...init(),
+      volume: { level: 35, isMuted: true },
+    }),
+    message(Message.ClickedSong({ song: a })),
+    saved,
+    message(
+      Message.ReceivedPlayerEvent({ playId: 1, event: PlayerEvent.Ready() }),
+    ),
+    Command.expectHas(ApplyPlayback, ApplyVolume),
+    Command.resolve(ApplyPlayback, Message.CompletedApplyPlayback()),
+    Command.resolve(ApplyVolume, Message.CompletedApplyVolume()),
+  )
+})
+
+test('saved volume round trips, and missing, corrupt or out of range data is clamped or defaulted', () => {
+  const saved = { level: 42, isMuted: true }
+  expect(parseVolume(Option.some(toVolumeJson(saved)))).toEqual(saved)
+  expect(parseVolume(Option.none())).toEqual(defaultVolume)
+  expect(parseVolume(Option.some('garbage'))).toEqual(defaultVolume)
+  expect(parseVolume(Option.some('{"level":"loud","isMuted":false}'))).toEqual(
+    defaultVolume,
+  )
+  expect(parseVolume(Option.some('{"level":900,"isMuted":false}')).level).toBe(
+    100,
+  )
+  expect(parseVolume(Option.some('{"level":-3,"isMuted":false}')).level).toBe(0)
+  const loaded = update(
+    init(),
+    Message.CompletedLoadVolume({
+      maybeValue: Option.some(toVolumeJson(saved)),
+    }),
+  )
+  expect(loaded.model.volume).toEqual(saved)
 })

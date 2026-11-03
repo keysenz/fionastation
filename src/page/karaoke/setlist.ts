@@ -394,3 +394,44 @@ export const restoreSaved = (
         }),
     },
   )
+
+export const Volume = Schema.Struct({
+  level: Schema.Number,
+  isMuted: Schema.Boolean,
+})
+export type Volume = typeof Volume.Type
+
+export const defaultVolume: Volume = { level: 100, isMuted: false }
+
+const VolumeJson = Schema.fromJsonString(Volume)
+
+const clampLevel = (level: number): number =>
+  Number.isFinite(level) ? Math.min(100, Math.max(0, Math.round(level))) : 100
+
+/** A slider above 0 unmutes, and 0 keeps whatever mute state there was. */
+export const setLevel = (volume: Volume, level: number): Volume => {
+  const clamped = clampLevel(level)
+  return { level: clamped, isMuted: clamped > 0 ? false : volume.isMuted }
+}
+
+export const isSilent = ({ level, isMuted }: Volume): boolean =>
+  isMuted || level === 0
+
+/** Unmuting from level 0 would stay silent, so it goes to a middle level. */
+export const toggleMute = (volume: Volume): Volume =>
+  isSilent(volume)
+    ? { level: volume.level === 0 ? 50 : volume.level, isMuted: false }
+    : { ...volume, isMuted: true }
+
+export const toVolumeJson = (volume: Volume): string =>
+  Schema.encodeSync(VolumeJson)(volume)
+
+/** Missing or corrupt saved data is full volume, and a saved level is clamped. */
+export const parseVolume = (maybeJson: Option.Option<string>): Volume =>
+  Option.match(
+    Option.flatMap(maybeJson, Schema.decodeUnknownOption(VolumeJson)),
+    {
+      onNone: () => defaultVolume,
+      onSome: ({ level, isMuted }) => ({ level: clampLevel(level), isMuted }),
+    },
+  )

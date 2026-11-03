@@ -27,7 +27,7 @@ import {
   goneVideoIdsOf,
   toPlayableSongs,
 } from '../../domain.ts'
-import { PlayerEvent, playerEvents, setPlaying } from '../../youtube'
+import { PlayerEvent, playerEvents, setPlaying, setVolume } from '../../youtube'
 import {
   type Layers,
   OVERLAYS,
@@ -41,8 +41,10 @@ import {
   PickCause,
   Repeat,
   Setlist,
+  Volume,
   applyAdvance,
   applySkip,
+  defaultVolume,
   emptySetlist,
   enqueue,
   enqueueAll,
@@ -50,6 +52,7 @@ import {
   markPlayerReady,
   moveInQueue,
   nextRepeat,
+  parseVolume,
   planAdvance,
   planSkip,
   play,
@@ -59,14 +62,18 @@ import {
   playPrevious,
   removeFromQueue,
   restoreSaved,
+  setLevel,
   setStatus,
   toPersistedJson,
+  toVolumeJson,
+  toggleMute,
   togglePlaying,
 } from './setlist.ts'
 
 const STORAGE_KEY = 'karaoke-storage'
 const AUTOPLAY_KEY = 'karaoke-autoplay'
 const REPEAT_KEY = 'karaoke-repeat'
+const VOLUME_KEY = 'karaoke-volume'
 export const STREAM_GONE = 'This stream is gone'
 const PLAYER_HOST_ID = 'karaoke'
 export const SONG_LIST_ID = 'karaoke-song-list'
@@ -107,6 +114,7 @@ export const Model = Schema.Struct({
   goneVideoIds: Schema.Array(Schema.String),
   isAutoplay: Schema.Boolean,
   repeat: Repeat,
+  volume: Volume,
   maybeSelectedVideoId: Schema.Option(Schema.String),
   maybeQueueDrag: Schema.Option(QueueDrag),
 })
@@ -140,6 +148,11 @@ export const Message = defineMessageUnion({
   ClickedDismissToast: {},
   ClickedToggleAutoplay: {},
   ClickedCycleRepeat: {},
+  ChangedVolume: { level: Schema.Number },
+  ClickedToggleMute: {},
+  CompletedLoadVolume: { maybeValue: Schema.Option(Schema.String) },
+  CompletedSaveVolume: {},
+  CompletedApplyVolume: {},
   ChangedLayers: { search: Schema.String },
   OpenedFromUrl: { search: Schema.String },
   CompletedSyncUrl: {},
@@ -309,6 +322,36 @@ export const SyncUrl = Command.define('SyncUrl', {
     }),
 })
 
+export const ApplyVolume = Command.define('ApplyVolume', {
+  args: { level: Schema.Number, isMuted: Schema.Boolean },
+  messages: [Message.CompletedApplyVolume],
+  execute: ({ level, isMuted }) =>
+    setVolume(PLAYER_HOST_ID, level, isMuted).pipe(
+      Effect.as(Message.CompletedApplyVolume()),
+    ),
+})
+
+export const LoadVolume = Command.define('LoadVolume', {
+  messages: [Message.CompletedLoadVolume],
+  execute: Effect.try({
+    try: () => Option.fromNullishOr(window.localStorage.getItem(VOLUME_KEY)),
+    catch: () => 'storage is blocked',
+  }).pipe(
+    Effect.orElseSucceed(() => Option.none<string>()),
+    Effect.map(maybeValue => Message.CompletedLoadVolume({ maybeValue })),
+  ),
+})
+
+export const SaveVolume = Command.define('SaveVolume', {
+  args: { volume: Volume },
+  messages: [Message.CompletedSaveVolume],
+  execute: ({ volume }) =>
+    Effect.try({
+      try: () => window.localStorage.setItem(VOLUME_KEY, toVolumeJson(volume)),
+      catch: () => 'storage is blocked or full',
+    }).pipe(Effect.ignore, Effect.as(Message.CompletedSaveVolume())),
+})
+
 export const LoadRepeat = Command.define('LoadRepeat', {
   messages: [Message.CompletedLoadRepeat],
   execute: Effect.try({
@@ -463,6 +506,7 @@ export const init = (): Model => ({
   goneVideoIds: [],
   isAutoplay: true,
   repeat: 'Off',
+  volume: defaultVolume,
   maybeSelectedVideoId: Option.none(),
   maybeQueueDrag: Option.none(),
 })
@@ -490,6 +534,7 @@ export const entered = (model: Model): UpdateReturn => {
       LoadSavedSetlist(),
       LoadAutoplay(),
       LoadRepeat(),
+      LoadVolume(),
       ...(fetched.commands ?? []),
     ],
   }
@@ -530,6 +575,11 @@ const applyLayers = ({ maybeVideoId, overlays }: Layers) => ({
   isQueueOpen: () => overlays.includes('queue'),
   isExpanded: () => overlays.includes('player'),
   isInfoOpen: () => overlays.includes('info'),
+})
+
+const changeVolume = (model: Model, volume: Volume): UpdateReturn => ({
+  model: modifyFields(model, { volume: () => volume }),
+  commands: [ApplyVolume(volume), SaveVolume({ volume })],
 })
 
 /** Anything but a saved mode name means Off, so corrupt data repeats nothing. */
@@ -767,7 +817,10 @@ const updateModel = (model: Model, message: Message) =>
                 model: modifyFields(model, {
                   setlist: markPlayerReady,
                 }),
-                commands: [ApplyPlayback({ isPlaying: status === 'Playing' })],
+                commands: [
+                  ApplyPlayback({ isPlaying: status === 'Playing' }),
+                  ApplyVolume(model.volume),
+                ],
               }),
               Playing: () =>
                 recordFromPlayer(model, setStatus(model.setlist, 'Playing')),
@@ -916,6 +969,19 @@ const updateModel = (model: Model, message: Message) =>
       model: modifyFields(model, { repeat: nextRepeat }),
       commands: [SaveRepeat({ repeat: nextRepeat(model.repeat) })],
     }),
+
+    ChangedVolume: ({ level }) =>
+      changeVolume(model, setLevel(model.volume, level)),
+
+    ClickedToggleMute: () => changeVolume(model, toggleMute(model.volume)),
+
+    CompletedLoadVolume: ({ maybeValue }) => ({
+      model: modifyFields(model, { volume: () => parseVolume(maybeValue) }),
+      commands: [ApplyVolume(parseVolume(maybeValue))],
+    }),
+
+    CompletedSaveVolume: () => ({ model }),
+    CompletedApplyVolume: () => ({ model }),
 
     CompletedLoadRepeat: ({ maybeValue }) => ({
       model: modifyFields(model, { repeat: () => parseRepeat(maybeValue) }),
