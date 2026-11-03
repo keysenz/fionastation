@@ -33,8 +33,12 @@ declare global {
 
 export type PlayerVars = Readonly<Record<string, number>>
 
-export const thumbnailUrl = (videoId: string): string =>
-  `https://img.youtube.com/vi/${videoId}/default.jpg`
+export type ThumbnailSize = 'default' | 'mqdefault' | 'hqdefault'
+
+export const thumbnailUrl = (
+  videoId: string,
+  size: ThumbnailSize = 'default',
+): string => `https://img.youtube.com/vi/${videoId}/${size}.jpg`
 
 export const PlayerEvent = defineTaggedUnion({
   Ready: {},

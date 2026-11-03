@@ -8,7 +8,7 @@ import {
   Schema,
   Stream,
 } from 'effect'
-import { AsyncData, Command, Mount, type Update } from 'foldkit'
+import { AsyncData, Command, Dom, Mount, type Update } from 'foldkit'
 import { defineMessageUnion } from 'foldkit/message'
 import { modifyFields } from 'foldkit/struct'
 
@@ -46,6 +46,8 @@ const STORAGE_KEY = 'karaoke-storage'
 const AUTOPLAY_KEY = 'karaoke-autoplay'
 export const STREAM_GONE = 'This stream is gone'
 const PLAYER_HOST_ID = 'karaoke'
+export const SONG_LIST_ID = 'karaoke-song-list'
+export const SETLIST_PANE_ID = 'karaoke-setlist-pane'
 
 // MODEL
 
@@ -67,6 +69,7 @@ export const Model = Schema.Struct({
   maybeSkipToast: Schema.Option(SkipToast),
   goneVideoIds: Schema.Array(Schema.String),
   isAutoplay: Schema.Boolean,
+  maybeSelectedVideoId: Schema.Option(Schema.String),
 })
 export type Model = typeof Model.Type
 
@@ -80,6 +83,8 @@ export const Message = defineMessageUnion({
   FailedFetchSongs: { error: Schema.String },
   ClickedRetryFetch: {},
   UpdatedSearch: { value: Schema.String },
+  ClickedVideo: { videoId: Schema.String },
+  ClickedBackToVideos: {},
   ClickedSong: { song: PlayableSong },
   ClickedAddToQueue: { song: PlayableSong },
   ClickedPlayPause: {},
@@ -96,6 +101,8 @@ export const Message = defineMessageUnion({
   CompletedSaveSetlist: {},
   CompletedLoadAutoplay: { maybeValue: Schema.Option(Schema.String) },
   CompletedSaveAutoplay: {},
+  CompletedScrollListToTop: {},
+  CompletedScrollSetlistToTop: {},
   CompletedPickRandomVideo: {
     playId: Schema.Number,
     song: PlayableSong,
@@ -161,6 +168,21 @@ export const LoadAutoplay = Command.define('LoadAutoplay', {
     Effect.orElseSucceed(() => Option.none<string>()),
     Effect.map(maybeValue => Message.CompletedLoadAutoplay({ maybeValue })),
   ),
+})
+
+// NOTE: a search swaps the list under the reader, so it starts again from its first video.
+export const ScrollListToTop = Command.define('ScrollListToTop', {
+  messages: [Message.CompletedScrollListToTop],
+  execute: Dom.scrollIntoViewAfterPaint(`#${SONG_LIST_ID}`, {
+    block: 'start',
+  }).pipe(Effect.ignore, Effect.as(Message.CompletedScrollListToTop())),
+})
+
+export const ScrollSetlistToTop = Command.define('ScrollSetlistToTop', {
+  messages: [Message.CompletedScrollSetlistToTop],
+  execute: Dom.scrollIntoViewAfterPaint(`#${SETLIST_PANE_ID}`, {
+    block: 'start',
+  }).pipe(Effect.ignore, Effect.as(Message.CompletedScrollSetlistToTop())),
 })
 
 export const SaveAutoplay = Command.define('SaveAutoplay', {
@@ -232,6 +254,7 @@ export const init = (): Model => ({
   maybeSkipToast: Option.none(),
   goneVideoIds: [],
   isAutoplay: true,
+  maybeSelectedVideoId: Option.none(),
 })
 
 export type UpdateReturn = Update.Return<Model, Message>
@@ -347,6 +370,19 @@ export const update = (model: Model, message: Message) =>
 
     UpdatedSearch: ({ value }) => ({
       model: modifyFields(model, { search: () => value }),
+      commands:
+        value.trim() === '' ? [] : [ScrollListToTop(), ScrollSetlistToTop()],
+    }),
+
+    ClickedVideo: ({ videoId }) => ({
+      model: modifyFields(model, {
+        maybeSelectedVideoId: () => Option.some(videoId),
+      }),
+      commands: [ScrollSetlistToTop()],
+    }),
+
+    ClickedBackToVideos: () => ({
+      model: modifyFields(model, { maybeSelectedVideoId: () => Option.none() }),
     }),
 
     ClickedSong: ({ song }) => {
@@ -548,4 +584,6 @@ export const update = (model: Model, message: Message) =>
     CompletedApplyPlayback: () => ({ model }),
     CompletedSaveSetlist: () => ({ model }),
     CompletedSaveAutoplay: () => ({ model }),
+    CompletedScrollListToTop: () => ({ model }),
+    CompletedScrollSetlistToTop: () => ({ model }),
   })

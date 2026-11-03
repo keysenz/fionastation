@@ -2,7 +2,10 @@ import Fuse from 'fuse.js'
 
 /** Builds a search over one kind of item. The index is rebuilt only when the
  *  list itself changes, because views run on every Message. */
-export const makeFuzzySearch = <Item>(keys: ReadonlyArray<string>) => {
+export const makeFuzzySearch = <Item>(
+  keys: ReadonlyArray<string>,
+  threshold = 0.4,
+) => {
   const indexes = new WeakMap<ReadonlyArray<Item>, Fuse<Item>>()
 
   const indexFor = (items: ReadonlyArray<Item>): Fuse<Item> => {
@@ -10,7 +13,7 @@ export const makeFuzzySearch = <Item>(keys: ReadonlyArray<string>) => {
     if (existing) {
       return existing
     }
-    const created = new Fuse(items, { keys: [...keys], threshold: 0.4 })
+    const created = new Fuse(items, { keys: [...keys], threshold })
     indexes.set(items, created)
     return created
   }

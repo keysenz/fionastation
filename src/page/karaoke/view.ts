@@ -4,216 +4,594 @@ import { type Html, type HtmlBuilder, createKeyedLazy } from 'foldkit/html'
 import { twMerge } from 'tailwind-merge'
 
 import { type PlayableSong, timestampToSeconds } from '../../domain.ts'
-import { makeFuzzySearch } from '../../fuzzySearch'
 import { homeRouter } from '../../route'
 import { thumbnailUrl } from '../../youtube'
 import {
   Message,
   type Model,
   MountPlayer,
+  SETLIST_PANE_ID,
+  SONG_LIST_ID,
   type SkipToast,
   allSongs,
 } from './karaoke'
 import type { NowPlaying } from './setlist.ts'
-
-const visibleSongs = makeFuzzySearch<PlayableSong>(['song_title', 'title_text'])
+import {
+  type VideoGroup,
+  groupByVideo,
+  resolveSelection,
+  searchVideos,
+} from './videoList.ts'
 
 const lazySongRow = createKeyedLazy()
+
+type Playback = {
+  maybeNowPlaying: Option.Option<NowPlaying>
+  isPlaying: boolean
+}
+
+const playbackOf = (model: Model): Playback => ({
+  maybeNowPlaying: model.setlist.maybeNowPlaying,
+  isPlaying: Option.exists(
+    model.setlist.maybeNowPlaying,
+    nowPlaying => nowPlaying.status === 'Playing',
+  ),
+})
+
+const holdsCurrent = (group: VideoGroup, playback: Playback): boolean =>
+  Option.exists(
+    playback.maybeNowPlaying,
+    nowPlaying => nowPlaying.song.video_url === group.videoId,
+  )
+
+const emptyStateView = (search: string, h: HtmlBuilder<Message>): Html =>
+  h.div(
+    [
+      h.Class(
+        'text-center text-gray-200 mt-10 p-4 bg-black/40 rounded-lg backdrop-blur-sm mx-auto max-w-md',
+      ),
+    ],
+    [h.p([h.Class('font-semibold')], [`No songs found for "${search}"`])],
+  )
+
+const goneBadgeView = (h: HtmlBuilder<Message>): Html =>
+  h.span(
+    [
+      h.Class(
+        'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest whitespace-nowrap bg-[#57182c] text-[#f0a3b4]',
+      ),
+    ],
+    ['Stream gone'],
+  )
+
+const equalizerView = (isPlaying: boolean, h: HtmlBuilder<Message>): Html =>
+  h.i([
+    h.Class(
+      twMerge(
+        'text-sky-300 text-xs',
+        isPlaying ? 'fas fa-chart-bar animate-pulse' : 'fas fa-pause',
+      ),
+    ),
+    h.AriaHidden(true),
+  ])
+
+/** Marks the literal query inside a title; a fuzzy match has no literal span, so it shows plain. */
+const highlightedView = (
+  text: string,
+  query: string,
+  h: HtmlBuilder<Message>,
+): ReadonlyArray<Html | string> => {
+  const needle = query.trim().toLowerCase()
+  const start = needle === '' ? -1 : text.toLowerCase().indexOf(needle)
+  if (start < 0) {
+    return [text]
+  }
+  const end = start + needle.length
+  return [
+    text.slice(0, start),
+    h.mark(
+      [h.Class('bg-sky-400/25 text-sky-100 rounded px-0.5 -mx-0.5')],
+      [text.slice(start, end)],
+    ),
+    text.slice(end),
+  ]
+}
+
+const addToQueueButtonView = (
+  song: PlayableSong,
+  h: HtmlBuilder<Message>,
+): Html =>
+  h.button(
+    [
+      h.Type('button'),
+      h.AriaLabel('Add to Queue'),
+      h.OnClick(Message.ClickedAddToQueue({ song }), { propagation: 'Stop' }),
+      h.Class(
+        'flex-shrink-0 flex items-center justify-center gap-2 min-h-10 min-w-10 px-2 sm:px-3 rounded-full transition-all active:scale-95 bg-black/30 border border-white/20 text-white font-bold hover:bg-[#446e92]/30 hover:border-[#446e92]/60',
+      ),
+    ],
+    [
+      h.i([h.Class('fas fa-list-ul text-xs'), h.AriaHidden(true)]),
+      h.span(
+        [
+          h.Class(
+            'hidden lg:inline text-[10px] uppercase tracking-widest whitespace-nowrap',
+          ),
+          h.AriaHidden(true),
+        ],
+        ['Add to Queue'],
+      ),
+    ],
+  )
 
 const songRowView = (
   song: PlayableSong,
   isCurrent: boolean,
   isPlaying: boolean,
   isGone: boolean,
+  search: string,
   h: HtmlBuilder<Message>,
 ): Html =>
-  h.keyed('div')(
+  h.keyed('li')(
     song.id,
     isGone
       ? [
           h.Class(
-            'flex items-center justify-between p-3 rounded-lg border border-transparent backdrop-blur-sm bg-black/20 cursor-not-allowed',
+            'flex items-center gap-3 min-h-12 px-3 py-1.5 rounded-xl bg-black/30 text-gray-300 cursor-not-allowed',
           ),
           h.AriaDisabled(true),
         ]
       : [
           h.Class(
             twMerge(
-              'group flex items-center justify-between p-3 rounded-lg transition-all cursor-pointer border border-transparent backdrop-blur-sm',
-              'hover:bg-white/10 hover:border-white/5',
+              'group flex items-center gap-3 min-h-12 px-3 py-1.5 rounded-xl transition-colors cursor-pointer border',
               isCurrent
-                ? 'bg-sky-900/40 border-sky-500/30 shadow-[0_0_15px_rgba(14,165,233,0.1)]'
-                : 'bg-black/20 hover:shadow-lg',
+                ? 'bg-[#446e92]/45 border-sky-300/40'
+                : 'border-transparent hover:bg-white/10',
             ),
           ),
           h.OnClick(Message.ClickedSong({ song })),
         ],
     [
-      h.div(
+      h.span(
         [
           h.Class(
             twMerge(
-              'flex items-center space-x-4 flex-1 min-w-0',
-              isGone && 'opacity-50',
+              'flex-shrink-0 w-16 text-xs tabular-nums',
+              isCurrent ? 'text-white/90' : 'text-gray-300',
+            ),
+          ),
+        ],
+        [song.timestamp],
+      ),
+      h.span(
+        [
+          h.Class(
+            twMerge(
+              'flex-1 min-w-0 truncate text-sm font-medium transition-colors',
+              isCurrent ? 'text-white' : 'text-white group-hover:text-sky-100',
+            ),
+          ),
+        ],
+        highlightedView(song.song_title, search, h),
+      ),
+      isCurrent ? equalizerView(isPlaying, h) : h.empty,
+      isGone ? h.empty : addToQueueButtonView(song, h),
+    ],
+  )
+
+const videoListThumbnailView = (
+  group: VideoGroup,
+  hasCurrent: boolean,
+  isPlaying: boolean,
+  h: HtmlBuilder<Message>,
+): Html =>
+  h.div(
+    [
+      h.Class(
+        'relative w-28 lg:w-32 aspect-video rounded-lg overflow-hidden bg-slate-800 flex-shrink-0 flex items-center justify-center shadow-md',
+      ),
+    ],
+    [
+      group.isGone
+        ? h.i([h.Class('fas fa-ban text-gray-300'), h.AriaHidden(true)])
+        : h.img([
+            h.Src(thumbnailUrl(group.videoId, 'mqdefault')),
+            h.Alt(''),
+            h.Loading('lazy'),
+            h.Class('w-full h-full object-cover'),
+          ]),
+      hasCurrent
+        ? h.span(
+            [
+              h.Role('img'),
+              h.AriaLabel('Now playing'),
+              h.Class(
+                'absolute bottom-1 left-1 flex items-center justify-center w-6 h-6 rounded-full bg-black/70',
+              ),
+            ],
+            [equalizerView(isPlaying, h)],
+          )
+        : h.empty,
+    ],
+  )
+
+const videoListItemView = (
+  group: VideoGroup,
+  totalSongs: number,
+  isSelected: boolean,
+  isSearching: boolean,
+  playback: Playback,
+  h: HtmlBuilder<Message>,
+): Html => {
+  const hasCurrent = holdsCurrent(group, playback)
+  return h.keyed('li')(
+    group.videoId,
+    [],
+    [
+      h.button(
+        [
+          h.Type('button'),
+          h.AriaCurrent(isSelected ? 'true' : 'false'),
+          h.OnClick(Message.ClickedVideo({ videoId: group.videoId })),
+          h.Class(
+            twMerge(
+              'flex items-center gap-3 w-full p-2 rounded-xl text-left border transition-colors',
+              isSelected
+                ? 'bg-black/60 border-transparent md:bg-[#2f5675] md:border-sky-300/50 md:shadow-lg'
+                : 'bg-black/60 border-transparent hover:bg-black/75',
+              hasCurrent && 'border-sky-500/40',
             ),
           ),
         ],
         [
-          isGone
-            ? h.div(
-                [
-                  h.Class(
-                    'w-12 h-12 rounded bg-slate-800 flex-shrink-0 flex items-center justify-center',
-                  ),
-                ],
-                [
-                  h.i([
-                    h.Class('fas fa-ban text-gray-500'),
-                    h.AriaHidden(true),
-                  ]),
-                ],
-              )
-            : h.div(
-                [
-                  h.Class(
-                    'relative w-12 h-12 rounded overflow-hidden bg-slate-800 flex-shrink-0 shadow-md transition-transform group-hover:scale-105',
-                  ),
-                ],
-                [
-                  h.img([
-                    h.Src(thumbnailUrl(song.video_url)),
-                    h.Alt('thumb'),
-                    h.Class(
-                      `w-full h-full object-cover transition-opacity ${isCurrent ? 'opacity-40' : 'opacity-80 group-hover:opacity-100'}`,
-                    ),
-                  ]),
-                  h.div(
-                    [
-                      h.Class(
-                        `absolute inset-0 flex items-center justify-center ${isCurrent ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'} bg-black/40 transition-opacity`,
-                      ),
-                    ],
-                    [
-                      h.i([
-                        h.Class(
-                          isCurrent && isPlaying
-                            ? 'fas fa-chart-bar animate-pulse text-white drop-shadow-md'
-                            : 'fas fa-play text-white drop-shadow-md',
-                        ),
-                      ]),
-                    ],
-                  ),
-                ],
-              ),
+          videoListThumbnailView(group, hasCurrent, playback.isPlaying, h),
           h.div(
-            [h.Class('flex-col min-w-0')],
+            [h.Class('flex-1 min-w-0')],
             [
-              h.h4(
-                [
-                  h.Class(
-                    twMerge(
-                      'font-medium text-sm truncate drop-shadow-sm transition-colors',
-                      isCurrent
-                        ? 'text-sky-300'
-                        : 'text-white group-hover:text-sky-200',
-                    ),
-                  ),
-                ],
-                [song.song_title],
-              ),
               h.p(
                 [
                   h.Class(
-                    'text-xs text-gray-300 truncate opacity-80 group-hover:opacity-100 transition-opacity',
+                    twMerge(
+                      'text-sm font-semibold leading-snug line-clamp-2 break-words',
+                      hasCurrent ? 'text-sky-200' : 'text-white',
+                      isSelected && hasCurrent && 'md:text-white',
+                      group.isGone && 'text-gray-200',
+                    ),
                   ),
                 ],
-                [song.title_text],
+                [group.title],
               ),
+              h.p(
+                [h.Class('mt-1 flex flex-wrap items-center gap-1.5 text-xs')],
+                [
+                  isSearching
+                    ? h.span(
+                        [
+                          h.Class(
+                            'px-2 py-0.5 rounded-full bg-sky-500/25 text-white font-semibold whitespace-nowrap',
+                          ),
+                        ],
+                        [
+                          `${group.songs.length} ${group.songs.length === 1 ? 'match' : 'matches'}`,
+                        ],
+                      )
+                    : h.empty,
+                  h.span(
+                    [h.Class('text-gray-200 whitespace-nowrap')],
+                    [`${totalSongs} ${totalSongs === 1 ? 'song' : 'songs'}`],
+                  ),
+                  group.isGone ? goneBadgeView(h) : h.empty,
+                ],
+              ),
+            ],
+          ),
+          h.i([
+            h.Class('fas fa-chevron-right md:hidden text-gray-300 text-xs'),
+            h.AriaHidden(true),
+          ]),
+        ],
+      ),
+    ],
+  )
+}
+
+const videoListPaneView = (
+  shown: ReadonlyArray<VideoGroup>,
+  totals: ReadonlyMap<string, number>,
+  maybeSelected: Option.Option<VideoGroup>,
+  isHiddenOnPhone: boolean,
+  model: Model,
+  h: HtmlBuilder<Message>,
+): Html => {
+  const isSearching = model.search.trim() !== ''
+  const playback = playbackOf(model)
+  const caption = isSearching
+    ? `${shown.length} ${shown.length === 1 ? 'stream has' : 'streams have'} this song`
+    : `${shown.length} streams`
+  return h.nav(
+    [
+      h.AriaLabel('Karaoke streams'),
+      h.Class(
+        twMerge(
+          'w-full md:w-80 lg:w-96 shrink-0 overflow-y-auto custom-scrollbar px-2 pr-12 md:pr-2 pb-24',
+          isHiddenOnPhone ? 'hidden md:block' : 'block',
+        ),
+      ),
+    ],
+    [
+      h.p(
+        [
+          h.Id(SONG_LIST_ID),
+          h.Class(
+            'inline-block mb-2 px-3 py-1 rounded-full bg-black/60 text-[11px] uppercase tracking-widest font-bold text-white',
+          ),
+        ],
+        [caption],
+      ),
+      h.ul(
+        [h.Class('space-y-1.5')],
+        shown.map(group =>
+          videoListItemView(
+            group,
+            totals.get(group.videoId) ?? 0,
+            Option.exists(
+              maybeSelected,
+              selected => selected.videoId === group.videoId,
+            ),
+            isSearching,
+            playback,
+            h,
+          ),
+        ),
+      ),
+    ],
+  )
+}
+
+const heroThumbnailView = (group: VideoGroup, h: HtmlBuilder<Message>): Html =>
+  h.div(
+    [
+      h.Class(
+        'w-full [@container(min-width:26rem)]:w-36 [@container(min-width:44rem)]:w-60 self-start aspect-video rounded-xl overflow-hidden bg-slate-800 flex-shrink-0 flex flex-col items-center justify-center gap-2 shadow-2xl ring-1 ring-white/10',
+      ),
+    ],
+    group.isGone
+      ? [
+          h.i([
+            h.Class('fas fa-ban text-3xl text-gray-300'),
+            h.AriaHidden(true),
+          ]),
+          goneBadgeView(h),
+        ]
+      : [
+          h.img([
+            h.Src(thumbnailUrl(group.videoId, 'hqdefault')),
+            h.Alt(''),
+            h.Class('w-full h-full object-cover'),
+          ]),
+        ],
+  )
+
+const setlistHeaderView = (
+  group: VideoGroup,
+  totalSongs: number,
+  isSearching: boolean,
+  playback: Playback,
+  h: HtmlBuilder<Message>,
+): Html => {
+  const hasCurrent = holdsCurrent(group, playback)
+  const countText = isSearching
+    ? `${group.songs.length} of ${totalSongs} songs match`
+    : `${totalSongs} songs`
+  return h.header(
+    [
+      h.Class(
+        'relative overflow-hidden rounded-2xl border border-white/15 bg-black/75 [container-type:inline-size]',
+      ),
+    ],
+    [
+      group.isGone
+        ? h.empty
+        : h.img([
+            h.Src(thumbnailUrl(group.videoId, 'hqdefault')),
+            h.Alt(''),
+            h.AriaHidden(true),
+            h.Class(
+              'absolute inset-0 w-full h-full object-cover scale-125 blur-2xl opacity-40',
+            ),
+          ]),
+      h.div([
+        h.Class(
+          'absolute inset-0 bg-gradient-to-t from-black/95 via-black/80 to-black/65',
+        ),
+      ]),
+      h.div(
+        [
+          h.Class(
+            'relative flex flex-col [@container(min-width:26rem)]:flex-row gap-4 p-3 [@container(min-width:26rem)]:p-5',
+          ),
+        ],
+        [
+          heroThumbnailView(group, h),
+          h.div(
+            [h.Class('flex-1 min-w-0 flex flex-col justify-end gap-2')],
+            [
+              hasCurrent
+                ? h.p(
+                    [
+                      h.Class(
+                        'flex items-center gap-2 text-[11px] uppercase tracking-widest font-bold text-sky-200',
+                      ),
+                    ],
+                    [equalizerView(playback.isPlaying, h), 'Now playing'],
+                  )
+                : h.p(
+                    [
+                      h.Class(
+                        'text-[11px] uppercase tracking-widest font-bold text-gray-200',
+                      ),
+                    ],
+                    ['Karaoke stream'],
+                  ),
+              h.h2(
+                [
+                  h.Class(
+                    twMerge(
+                      'text-lg [@container(min-width:26rem)]:text-xl [@container(min-width:44rem)]:text-2xl font-bold leading-tight break-words drop-shadow-lg',
+                      group.isGone && 'text-gray-200',
+                    ),
+                  ),
+                ],
+                [group.title],
+              ),
+              h.p(
+                [h.Class('text-sm text-gray-100')],
+                [
+                  group.isGone
+                    ? `${countText}. This stream is gone, so its songs cannot be played.`
+                    : countText,
+                ],
+              ),
+              group.isGone
+                ? h.empty
+                : Array.match(group.songs, {
+                    onEmpty: () => h.empty,
+                    onNonEmpty: ([first]) =>
+                      h.button(
+                        [
+                          h.Type('button'),
+                          h.OnClick(Message.ClickedSong({ song: first })),
+                          h.Class(
+                            'self-start mt-1 flex items-center gap-2 min-h-10 px-5 whitespace-nowrap rounded-full bg-white text-black text-sm font-bold shadow-lg hover:scale-105 active:scale-95 transition',
+                          ),
+                        ],
+                        [
+                          h.i([
+                            h.Class('fas fa-play text-xs'),
+                            h.AriaHidden(true),
+                          ]),
+                          isSearching
+                            ? 'Play first match'
+                            : 'Play from the top',
+                        ],
+                      ),
+                  }),
             ],
           ),
         ],
       ),
-      isGone
-        ? h.span(
-            [
-              h.Class(
-                'flex-shrink-0 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest whitespace-nowrap bg-[#57182c] text-[#f0a3b4]',
-              ),
-            ],
-            ['Stream gone'],
-          )
-        : h.div(
-            [h.Class('flex items-center px-1')],
-            [
-              h.button(
-                [
-                  h.OnClick(Message.ClickedAddToQueue({ song }), {
-                    propagation: 'Stop',
-                  }),
-                  h.Class(
-                    'flex items-center space-x-2 px-3 py-2 rounded-full transition-all active:scale-95 bg-white/5 border border-white/10 text-gray-400 font-bold hover:bg-[#446e92]/20 hover:border-[#446e92]/50 hover:text-white opacity-0 group-hover:opacity-100',
-                  ),
-                ],
-                [
-                  h.i([h.Class('fas fa-list-ul text-xs')]),
-                  h.span(
-                    [
-                      h.Class(
-                        'text-[10px] uppercase tracking-widest whitespace-nowrap',
-                      ),
-                    ],
-                    ['Add to Queue'],
-                  ),
-                ],
-              ),
-            ],
+    ],
+  )
+}
+
+const backBarView = (h: HtmlBuilder<Message>): Html =>
+  h.div(
+    [h.Class('md:hidden sticky top-0 z-10 -mx-2 px-2 pb-2 bg-transparent')],
+    [
+      h.button(
+        [
+          h.Type('button'),
+          h.OnClick(Message.ClickedBackToVideos()),
+          h.Class(
+            'flex items-center gap-2 min-h-10 px-4 rounded-full bg-black/70 backdrop-blur-md border border-white/15 text-sm font-semibold text-white shadow-lg active:scale-95 transition',
           ),
+        ],
+        [
+          h.i([h.Class('fas fa-arrow-left text-xs'), h.AriaHidden(true)]),
+          'All streams',
+        ],
+      ),
     ],
   )
 
-const songListView = (model: Model, h: HtmlBuilder<Message>): Html => {
-  const songs = allSongs(model)
-  const goneIds = new Set(model.goneVideoIds)
-  const visible = visibleSongs(songs, model.search)
-  const maybeNowPlaying = model.setlist.maybeNowPlaying
-  return h.div(
-    [h.Class('space-y-1 pb-24')],
-    Array.match(visible, {
-      onEmpty: () => [
-        h.div(
-          [
-            h.Class(
-              'text-center text-gray-200 mt-10 p-4 bg-black/40 rounded-lg backdrop-blur-sm mx-auto max-w-md',
-            ),
-          ],
-          [
-            h.p(
-              [h.Class('font-semibold')],
-              [`No songs found for "${model.search}"`],
-            ),
-          ],
+const setlistPaneView = (
+  group: VideoGroup,
+  totalSongs: number,
+  isHiddenOnPhone: boolean,
+  model: Model,
+  h: HtmlBuilder<Message>,
+): Html => {
+  const isSearching = model.search.trim() !== ''
+  const playback = playbackOf(model)
+  return h.section(
+    [
+      h.AriaLabel(`Setlist of ${group.title}`),
+      h.Class(
+        twMerge(
+          'flex-1 min-w-0 overflow-y-auto custom-scrollbar px-2 md:pl-0 pr-12 pb-24',
+          isHiddenOnPhone ? 'hidden md:block' : 'block',
         ),
-      ],
-      onNonEmpty: nonEmpty =>
-        nonEmpty.map(song => {
-          const isCurrent = Option.exists(
-            maybeNowPlaying,
-            nowPlaying => nowPlaying.song.id === song.id,
-          )
-          const isPlaying = Option.exists(
-            maybeNowPlaying,
-            nowPlaying => nowPlaying.status === 'Playing',
-          )
-          return lazySongRow(song.id, songRowView, [
-            song,
-            isCurrent,
-            isCurrent && isPlaying,
-            goneIds.has(song.video_url),
-            h,
-          ])
-        }),
-    }),
+      ),
+    ],
+    [
+      h.div(
+        [h.Id(SETLIST_PANE_ID)],
+        [
+          backBarView(h),
+          setlistHeaderView(group, totalSongs, isSearching, playback, h),
+          h.ol(
+            [
+              h.Class(
+                'mt-3 space-y-1 rounded-2xl bg-black/60 backdrop-blur-sm p-1.5',
+              ),
+            ],
+            group.songs.map(song => {
+              const isCurrent = Option.exists(
+                playback.maybeNowPlaying,
+                nowPlaying => nowPlaying.song.id === song.id,
+              )
+              return lazySongRow(song.id, songRowView, [
+                song,
+                isCurrent,
+                isCurrent && playback.isPlaying,
+                group.isGone,
+                model.search,
+                h,
+              ])
+            }),
+          ),
+        ],
+      ),
+    ],
   )
+}
+
+const songListView = (model: Model, h: HtmlBuilder<Message>): Html => {
+  const groups = groupByVideo(allSongs(model), model.goneVideoIds)
+  const totals = new Map(
+    groups.map(group => [group.videoId, group.songs.length]),
+  )
+  const shown = searchVideos(groups, model.search)
+  const selection = resolveSelection(shown, model.maybeSelectedVideoId)
+  return Option.match(selection.maybeVideo, {
+    onNone: () =>
+      h.div(
+        [h.Id(SONG_LIST_ID), h.Class('h-full overflow-y-auto p-2 pr-12')],
+        [emptyStateView(model.search, h)],
+      ),
+    onSome: selected =>
+      h.div(
+        [h.Class('flex h-full min-h-0 md:gap-4 md:pl-2')],
+        [
+          videoListPaneView(
+            shown,
+            totals,
+            selection.maybeVideo,
+            selection.isChosen,
+            model,
+            h,
+          ),
+          setlistPaneView(
+            selected,
+            totals.get(selected.videoId) ?? 0,
+            !selection.isChosen,
+            model,
+            h,
+          ),
+        ],
+      ),
+  })
 }
 
 const failureView = (error: string, h: HtmlBuilder<Message>): Html =>
@@ -261,7 +639,7 @@ const headerView = (model: Model, h: HtmlBuilder<Message>): Html =>
               h.a(
                 [
                   h.Href(homeRouter()),
-                  h.Class('text-gray-400 hover:text-white drop-shadow-md'),
+                  h.Class('text-gray-200 hover:text-white drop-shadow-md'),
                 ],
                 [h.i([h.Class('fas fa-arrow-left fa-lg')])],
               ),
@@ -283,7 +661,7 @@ const headerView = (model: Model, h: HtmlBuilder<Message>): Html =>
           h.div(
             [
               h.Class(
-                'absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400',
+                'absolute z-10 left-4 top-1/2 transform -translate-y-1/2 text-gray-300',
               ),
             ],
             [h.i([h.Class('fas fa-search')])],
@@ -292,7 +670,7 @@ const headerView = (model: Model, h: HtmlBuilder<Message>): Html =>
             h.Type('text'),
             h.Placeholder('Search songs...'),
             h.Class(
-              'w-full bg-black/50 backdrop-blur-md text-white rounded-full py-2 pl-12 pr-4 text-sm border border-white/10 focus:border-[#446e92] focus:outline-none transition-all shadow-lg',
+              'w-full bg-black/60 backdrop-blur-md text-white placeholder:text-gray-300 rounded-full py-2 pl-12 pr-4 text-sm border border-white/10 focus:border-[#446e92] focus:outline-none transition-all shadow-lg',
             ),
             h.Value(model.search),
             h.OnInput(value => Message.UpdatedSearch({ value })),
@@ -312,8 +690,25 @@ const queueDrawerView = (model: Model, h: HtmlBuilder<Message>): Html => {
     ],
     [
       h.div(
-        [h.Class('p-4 border-b border-white/10 bg-white/5')],
-        [h.h2([h.Class('text-lg font-bold drop-shadow-md')], ['Up Next'])],
+        [
+          h.Class(
+            'flex items-center justify-between p-4 border-b border-white/10 bg-white/5',
+          ),
+        ],
+        [
+          h.h2([h.Class('text-lg font-bold drop-shadow-md')], ['Up Next']),
+          h.button(
+            [
+              h.Type('button'),
+              h.AriaLabel('Close queue'),
+              h.OnClick(Message.ClickedQueueHandle()),
+              h.Class(
+                'flex items-center justify-center min-h-10 min-w-10 rounded-full bg-white/10 text-white hover:bg-white/20 active:scale-95 transition',
+              ),
+            ],
+            [h.i([h.Class('fas fa-times'), h.AriaHidden(true)])],
+          ),
+        ],
       ),
       h.div(
         [h.Class('flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar')],
@@ -335,7 +730,7 @@ const queueDrawerView = (model: Model, h: HtmlBuilder<Message>): Html => {
                   ],
                   [
                     h.div(
-                      [h.Class('text-gray-400 text-xs w-4')],
+                      [h.Class('text-gray-300 text-xs w-4')],
                       [`${index + 1}`],
                     ),
                     h.div(
@@ -381,7 +776,7 @@ const queueDrawerView = (model: Model, h: HtmlBuilder<Message>): Html => {
                     h.h3(
                       [
                         h.Class(
-                          'text-sm font-semibold text-gray-400 mb-2 px-2 uppercase tracking-wider',
+                          'text-sm font-semibold text-gray-300 mb-2 px-2 uppercase tracking-wider',
                         ),
                       ],
                       ['History'],
@@ -392,7 +787,7 @@ const queueDrawerView = (model: Model, h: HtmlBuilder<Message>): Html => {
                   h.div(
                     [
                       h.Class(
-                        'flex items-center space-x-3 opacity-60 hover:opacity-100 transition-opacity p-2 rounded hover:bg-white/5',
+                        'flex items-center space-x-3 opacity-80 hover:opacity-100 transition-opacity p-2 rounded hover:bg-white/5',
                       ),
                     ],
                     [
@@ -603,7 +998,7 @@ const playerBarView = (
                 [nowPlaying.song.song_title],
               ),
               h.p(
-                [h.Class('text-xs text-gray-400 truncate')],
+                [h.Class('text-xs text-gray-300 truncate')],
                 [
                   Option.getOrElse(
                     nowPlaying.maybeLoadError,
@@ -692,14 +1087,14 @@ const upNextPreviewView = (
       h.h3(
         [
           h.Class(
-            'text-gray-400 mb-4 uppercase text-xs tracking-wider font-bold',
+            'text-gray-300 mb-4 uppercase text-xs tracking-wider font-bold',
           ),
         ],
         ['Up Next'],
       ),
       Array.match(queue, {
         onEmpty: () =>
-          h.p([h.Class('text-gray-500 italic')], ['Queue is empty']),
+          h.p([h.Class('text-gray-300 italic')], ['Queue is empty']),
         onNonEmpty: songs =>
           h.div(
             [h.Class('space-y-3')],
@@ -707,7 +1102,7 @@ const upNextPreviewView = (
               h.div(
                 [h.Class('flex items-center space-x-3 text-sm')],
                 [
-                  h.span([h.Class('text-gray-500')], [`${index + 1}`]),
+                  h.span([h.Class('text-gray-300')], [`${index + 1}`]),
                   h.span([h.Class('text-white truncate')], [song.song_title]),
                 ],
               ),
@@ -845,7 +1240,7 @@ const skipToastView = (toast: SkipToast, h: HtmlBuilder<Message>): Html =>
           h.Type('button'),
           h.AriaLabel('Dismiss'),
           h.OnClick(Message.ClickedDismissToast()),
-          h.Class('shrink-0 text-gray-400 hover:text-white transition-colors'),
+          h.Class('shrink-0 text-gray-300 hover:text-white transition-colors'),
         ],
         [h.i([h.Class('fas fa-times')])],
       ),
@@ -865,7 +1260,14 @@ export const view = Submodel.defineView<Model, Message>((model, h): Html =>
         [h.Class('flex flex-1 min-h-0 relative')],
         [
           h.div(
-            [h.Class('flex-1 overflow-y-auto custom-scrollbar p-2')],
+            [
+              h.Class(
+                twMerge(
+                  'flex-1 min-w-0 min-h-0 transition-[padding] duration-300 ease-in-out',
+                  model.isQueueOpen && 'md:pr-[22.5rem]',
+                ),
+              ),
+            ],
             [
               AsyncData.matchData(model.songs, {
                 onEmpty: () => spinnerView(h),

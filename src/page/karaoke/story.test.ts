@@ -15,6 +15,8 @@ import {
   STREAM_GONE,
   SaveAutoplay,
   SaveSetlist,
+  ScrollListToTop,
+  ScrollSetlistToTop,
   type UpdateReturn,
   WaitBeforeDismissToast,
   entered,
@@ -699,5 +701,53 @@ test('a finished pick after a dead video shows the toast for the new play and ke
         dismissId: 2,
       })
     }),
+  )
+})
+
+test('clicking a video selects it and scrolls its setlist to the top, and Back returns to the list', () => {
+  story(
+    update,
+    given(init()),
+    message(Message.ClickedVideo({ videoId: 'v1' })),
+    Command.expectHas(ScrollSetlistToTop),
+    Command.resolve(ScrollSetlistToTop, Message.CompletedScrollSetlistToTop()),
+    message(Message.ClickedVideo({ videoId: 'v2' })),
+    Command.resolve(ScrollSetlistToTop, Message.CompletedScrollSetlistToTop()),
+    model(current => {
+      expect(current.maybeSelectedVideoId).toEqual(Option.some('v2'))
+    }),
+    message(Message.ClickedBackToVideos()),
+    model(current => {
+      expect(current.maybeSelectedVideoId).toEqual(Option.none())
+    }),
+  )
+})
+
+test('searching keeps the chosen video, so clearing the search restores it', () => {
+  story(
+    update,
+    given(init()),
+    message(Message.ClickedVideo({ videoId: 'v1' })),
+    Command.resolve(ScrollSetlistToTop, Message.CompletedScrollSetlistToTop()),
+    message(Message.UpdatedSearch({ value: 'tabako' })),
+    Command.resolve(ScrollListToTop, Message.CompletedScrollListToTop()),
+    Command.resolve(ScrollSetlistToTop, Message.CompletedScrollSetlistToTop()),
+    message(Message.UpdatedSearch({ value: '' })),
+    model(current => {
+      expect(current.maybeSelectedVideoId).toEqual(Option.some('v1'))
+    }),
+  )
+})
+
+test('a search scrolls the list back to its first video, and clearing it does not', () => {
+  story(
+    update,
+    given(init()),
+    message(Message.UpdatedSearch({ value: 'satu' })),
+    Command.expectHas(ScrollListToTop, ScrollSetlistToTop),
+    Command.resolve(ScrollListToTop, Message.CompletedScrollListToTop()),
+    Command.resolve(ScrollSetlistToTop, Message.CompletedScrollSetlistToTop()),
+    message(Message.UpdatedSearch({ value: '' })),
+    Command.expectNone(),
   )
 })

@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 import { mkdirSync, writeFileSync } from 'node:fs';
+import http from 'node:http';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import http from 'node:http';
 import { chromium } from 'playwright';
 
 const BASE = process.env.BASE_URL ?? `http://localhost:${process.env.VERIFY_PORT ?? 3456}`;
@@ -19,11 +19,42 @@ function check(feature, name, ok, detail = '') {
 
 const api = async (path, init) => {
   const res = await fetch(BASE + path, init);
-  return { status: res.status, body: res.status === 200 ? await res.json() : null };
+  return {
+    status: res.status,
+    body: res.status === 200 ? await res.json() : null,
+  };
 };
 
-const songRow = (page) => page.locator('div.rounded-lg.p-3', { has: page.locator('h4') });
+const STREAMS = 'nav[aria-label="Karaoke streams"]';
+const SETLIST = 'section[aria-label^="Setlist of"]';
+const videoRows = (page) => page.locator(`${STREAMS} li`);
+const setlistOf = (page) => page.locator(SETLIST);
+const songRowsIn = (setlist) => setlist.locator('ol > li');
+const streamCountIs = (page, n) => page.waitForFunction(([sel, want]) => document.querySelectorAll(sel).length === want, [`${STREAMS} li`, n]);
+const scrollListToTop = (page) =>
+  page.evaluate(
+    ([a, b]) =>
+      document.querySelectorAll(`${a}, ${b}`).forEach((el) => {
+        el.scrollTop = 0;
+      }),
+    [STREAMS, SETLIST],
+  );
+const showList = async (page) => {
+  if (!(await page.locator(STREAMS).isVisible())) {
+    await page.getByRole('button', { name: 'All streams' }).click();
+    await page.locator(STREAMS).waitFor({ state: 'visible' });
+  }
+};
+const queueDrawerOf = (page) => page.getByRole('heading', { name: 'Up Next' }).locator('xpath=../..');
+const queueHandle = (page) => page.getByRole('button', { name: 'Queue', exact: true });
 const autoplaySwitch = (page) => page.getByRole('switch', { name: 'Autoplay' });
+const switchBecomes = (page, checked, message) =>
+  page
+    .locator(`[role="switch"][aria-label="Autoplay"][aria-checked="${checked}"]`)
+    .waitFor({ timeout: 5000 })
+    .catch(() => {
+      throw new Error(message);
+    });
 const barButton = (page, icon) => page.locator(`.fixed.bottom-0 button:has(i.${icon})`);
 const playerSrc = (page) => page.locator('iframe[src*="youtube"]').first().getAttribute('src', { timeout: 30000 });
 
@@ -36,9 +67,16 @@ const step = async (feature, name, action) => {
   }
 };
 
-const songRows = (videos) => videos.flatMap((v) => v.karaoke_song.map((song) => ({
-  ...song, video_url: v.video_url, title_text: v.video_title, membership: v.membership, is_gone: v.is_gone,
-})));
+const songRows = (videos) =>
+  videos.flatMap((v) =>
+    v.karaoke_song.map((song) => ({
+      ...song,
+      video_url: v.video_url,
+      title_text: v.video_title,
+      membership: v.membership,
+      is_gone: v.is_gone,
+    })),
+  );
 
 const waitForGoneIds = async () => {
   const deadline = Date.now() + 120000;
@@ -61,6 +99,46 @@ const videoStatus = async (videoUrl) => {
 
 const isPublic = async (row) => !row.is_gone;
 
+const displayOrder = (videos) => [...videos.filter((v) => !v.is_gone), ...videos.filter((v) => v.is_gone)];
+const videoRow = (page, videos, videoUrl) => videoRows(page).nth(displayOrder(videos).findIndex((v) => v.video_url === videoUrl));
+const openVideo = async (page, videos, videoUrl) => {
+  await showList(page);
+  const button = videoRow(page, videos, videoUrl).locator('button');
+  await button.click();
+  await button.and(page.locator('[aria-current="true"]')).waitFor();
+  await setlistOf(page).waitFor({ state: 'visible' });
+  return setlistOf(page);
+};
+const songRowOf = async (page, videos, row) => {
+  const section = await openVideo(page, videos, row.video_url);
+  const position = videos.find((v) => v.video_url === row.video_url).karaoke_song.findIndex((s) => s.id === row.id);
+  return songRowsIn(section).nth(position);
+};
+const matches = (q) => (text) => text.toLowerCase().includes(q.toLowerCase());
+const expectedPerVideo = (videos, q) => {
+  const hit = matches(q);
+  return displayOrder(videos)
+    .map((video) => ({
+      video,
+      matching: video.karaoke_song.filter((s) => hit(s.song_title) || hit(video.video_title)).length,
+    }))
+    .filter((x) => x.matching > 0);
+};
+const expectedFor = (videos, q) => {
+  const found = expectedPerVideo(videos, q);
+  return {
+    videos: found.length,
+    songs: found.reduce((n, x) => n + x.matching, 0),
+  };
+};
+const titleOnMostLiveVideos = (rows) => {
+  const byTitle = new Map();
+  for (const r of rows) {
+    if (!r.is_gone) byTitle.set(r.song_title, (byTitle.get(r.song_title) ?? new Set()).add(r.video_url));
+  }
+  return [...byTitle].sort((x, y) => y[1].size - x[1].size)[0][0];
+};
+
 const findRowIndex = async (rows, matches, from = 0) => {
   for (let i = from; i < rows.length; i++) {
     if (await matches(rows[i], i)) return i;
@@ -69,24 +147,46 @@ const findRowIndex = async (rows, matches, from = 0) => {
 };
 
 // fetch normalizes paths, so this sends the request line exactly as written.
-const rawRequest = (path, init = {}) => new Promise((resolve, reject) => {
-  const { hostname, port } = new URL(BASE);
-  http.request({ hostname, port, path, headers: init.headers ?? {} }, (res) => {
-    res.resume();
-    res.on('end', () => resolve({ status: res.statusCode, headers: res.headers }));
-  }).on('error', reject).end();
-});
+const rawRequest = (path, init = {}) =>
+  new Promise((resolve, reject) => {
+    const { hostname, port } = new URL(BASE);
+    http
+      .request({ hostname, port, path, headers: init.headers ?? {} }, (res) => {
+        res.resume();
+        res.on('end', () => resolve({ status: res.statusCode, headers: res.headers }));
+      })
+      .on('error', reject)
+      .end();
+  });
 
-const playerReady = (page) => page.waitForFunction(() => {
-  const frame = document.querySelector('iframe[src*="youtube"]');
-  return frame && window.YT?.get(frame.id)?.getPlayerState;
-}, null, { timeout: 30000 });
-const playerState = (page, state) => page.waitForFunction((want) => {
-  const frame = document.querySelector('iframe[src*="youtube"]');
-  return window.YT.get(frame.id).getPlayerState() === want;
-}, state, { timeout: 30000 });
-const playVideo = (page) => page.evaluate(() => { const f = document.querySelector('iframe[src*="youtube"]'); window.YT.get(f.id).playVideo(); });
-const seekNearEnd = (page) => page.evaluate(() => { const p = window.YT.get(document.querySelector('iframe[src*="youtube"]').id); p.seekTo(Math.max(0, p.getDuration() - 2), true); });
+const playerReady = (page) =>
+  page.waitForFunction(
+    () => {
+      const frame = document.querySelector('iframe[src*="youtube"]');
+      return frame && window.YT?.get(frame.id)?.getPlayerState;
+    },
+    null,
+    { timeout: 30000 },
+  );
+const playerState = (page, state) =>
+  page.waitForFunction(
+    (want) => {
+      const frame = document.querySelector('iframe[src*="youtube"]');
+      return window.YT.get(frame.id).getPlayerState() === want;
+    },
+    state,
+    { timeout: 30000 },
+  );
+const playVideo = (page) =>
+  page.evaluate(() => {
+    const f = document.querySelector('iframe[src*="youtube"]');
+    window.YT.get(f.id).playVideo();
+  });
+const seekNearEnd = (page) =>
+  page.evaluate(() => {
+    const p = window.YT.get(document.querySelector('iframe[src*="youtube"]').id);
+    p.seekTo(Math.max(0, p.getDuration() - 2), true);
+  });
 
 const journeys = {
   async site(page) {
@@ -94,10 +194,16 @@ const journeys = {
     await page.getByRole('heading', { name: /Fiona/ }).waitFor();
     const bg = page.getByAltText('Background');
     await bg.waitFor();
-    const loaded = await bg.evaluate(async (img) => { await img.decode().catch(() => {}); return img.naturalWidth; });
+    const loaded = await bg.evaluate(async (img) => {
+      await img.decode().catch(() => {});
+      return img.naturalWidth;
+    });
     check('site', 'background image renders', loaded > 0, `naturalWidth ${loaded}`);
     await page.screenshot({ path: join(out, 'home.png') });
-    for (const [label, heading] of [['About', 'Fiona Clearesta'], ['Credits', 'Credits']]) {
+    for (const [label, heading] of [
+      ['About', 'Fiona Clearesta'],
+      ['Credits', 'Credits'],
+    ]) {
       await page.goto(BASE + '/');
       await page.getByRole('link', { name: label }).click();
       await page.getByRole('heading', { name: heading }).first().waitFor();
@@ -113,8 +219,12 @@ const journeys = {
     check('karaoke', 'api returns only karaoke streams with songs', total > 0, `${videos.length} videos, ${total} songs`);
 
     await page.goto(BASE + '/karaoke');
-    await songRow(page).first().waitFor();
-    check('karaoke', 'list shows every song', (await songRow(page).count()) === total, `${await songRow(page).count()} rows`);
+    await videoRows(page).first().waitFor();
+    check('karaoke', 'list shows one row per video', (await videoRows(page).count()) === videos.length, `${await videoRows(page).count()} rows`);
+    const firstShown = displayOrder(videos)[0];
+    check('karaoke', 'exactly one stream is selected on load', (await page.locator(`${STREAMS} [aria-current="true"]`).count()) === 1);
+    check('karaoke', 'the setlist shows only the selected stream, not every stream', (await songRowsIn(setlistOf(page)).count()) === firstShown.karaoke_song.length, `${firstShown.karaoke_song.length} songs`);
+    await page.screenshot({ path: join(out, 'karaoke-list.png') });
 
     const rows = songRows(videos);
     const aIndex = await findRowIndex(rows, isPublic);
@@ -122,36 +232,138 @@ const journeys = {
     const cIndex = await findRowIndex(rows, async (s) => (await isPublic(s)) && s.song_title !== rows[aIndex].song_title && s.song_title !== rows[bIndex].song_title);
     const [a, b, c] = [rows[aIndex], rows[bIndex], rows[cIndex]];
     const search = page.getByPlaceholder('Search songs...');
-    await search.fill(a.song_title);
-    await page.waitForFunction((n) => document.querySelectorAll('h4').length < n, total);
-    check('karaoke', 'search narrows the list', await songRow(page).filter({ hasText: a.song_title }).first().isVisible(), a.song_title);
+
+    const opened = await openVideo(page, videos, a.video_url);
+    check('karaoke', 'a video opens to its own songs', (await songRowsIn(opened).count()) === videos.find((v) => v.video_url === a.video_url).karaoke_song.length);
+    await openVideo(page, videos, b.video_url);
+    check(
+      'karaoke',
+      'choosing another stream swaps the setlist to its songs',
+      (await songRowsIn(setlistOf(page)).count()) === videos.find((v) => v.video_url === b.video_url).karaoke_song.length && (await page.locator(`${STREAMS} [aria-current="true"]`).count()) === 1,
+    );
+
+    const shared = titleOnMostLiveVideos(rows);
+    const want = expectedFor(videos, shared);
+    await search.fill(shared);
+    await streamCountIs(page, want.videos);
+    check('karaoke', 'searching a title leaves exactly the videos that contain it', (await videoRows(page).count()) === want.videos, `${want.videos} videos for "${shared}"`);
+    const perVideo = expectedPerVideo(videos, shared);
+    const matchedVideos = perVideo.map((x) => x.video);
+    let songsSeen = 0;
+    let headersOk = true;
+    for (const { video, matching } of perVideo) {
+      const setlist = await openVideo(page, matchedVideos, video.video_url);
+      songsSeen += await songRowsIn(setlist).count();
+      headersOk &&=
+        (await setlist.getByText(`${matching} of ${video.karaoke_song.length} songs match`).count()) === 1 &&
+        (await videoRows(page)
+          .filter({ hasText: video.video_title })
+          .first()
+          .getByText(new RegExp(`^${matching} ${matching === 1 ? 'match' : 'matches'}$`))
+          .count()) === 1;
+    }
+    check('karaoke', 'searching shows only the matching songs in each stream', songsSeen === want.songs, `${want.songs} songs`);
+    check('karaoke', 'each stream shows M of N songs match and a match count', headersOk);
+
+    const chosen = videos.filter((v) => !v.is_gone && v.karaoke_song.some((s) => s.song_title === shared)).at(-1);
+    const chosenSong = chosen.karaoke_song.find((s) => s.song_title === shared);
+    await videoRows(page).filter({ hasText: chosen.video_title }).first().locator('button').click();
+    await songRowsIn(setlistOf(page)).filter({ hasText: shared }).first().click();
+    const start = chosenSong.timestamp.split(':').reduce((t, part) => t * 60 + Number(part), 0);
+    const chosenSrc = await playerSrc(page);
+    check('karaoke', 'playing a song from a chosen video loads that video at its timestamp', chosenSrc.includes(`/embed/${chosen.video_url}`) && chosenSrc.includes(`start=${start}`), chosenSrc.slice(0, 100));
+    await page.screenshot({ path: join(out, 'karaoke-search-played.png') });
+
     await search.fill('zzzqqqxxx');
     await page.getByText('No songs found').waitFor();
     check('karaoke', 'search shows an empty state', true);
+    await search.fill('satu bulan');
+    const satu = expectedFor(videos, 'satu bulan');
+    if (satu.videos > 0) await streamCountIs(page, satu.videos);
+    await scrollListToTop(page);
+    await page.screenshot({ path: join(out, 'karaoke-search.png') });
     await search.fill('');
+    await streamCountIs(page, videos.length);
+    check('karaoke', 'clearing the search restores every video', (await videoRows(page).count()) === videos.length);
+    const stillSelected = await page.locator(`${STREAMS} [aria-current="true"]`).evaluate((el, title) => el.textContent.includes(title), chosen.video_title);
+    check('karaoke', 'clearing the search keeps the stream that was chosen', stillSelected);
 
-    await songRow(page).nth(aIndex).click();
+    const other = displayOrder(videos).find((v) => v.video_url !== chosen.video_url);
+    await openVideo(page, videos, other.video_url);
+    const nowPlayingRow = videoRow(page, videos, chosen.video_url);
+    check('karaoke', 'the video holding the current song is marked even when another stream is selected', (await nowPlayingRow.getByLabel('Now playing').count()) === 1 && (await nowPlayingRow.locator('[aria-current="true"]').count()) === 0);
+
+    const rowA = await songRowOf(page, videos, a);
+    await rowA.click();
     const bar = page.locator('.fixed.bottom-0');
     await bar.getByRole('heading', { name: a.song_title }).waitFor();
     const src = await playerSrc(page);
     check('karaoke', 'play opens the player at the song timestamp', src.includes(a.video_url) && src.includes('start='), src.slice(0, 90));
 
-    const row1 = songRow(page).nth(bIndex);
-    await row1.hover();
-    await row1.getByRole('button', { name: 'Add to Queue' }).click();
+    const row1 = await songRowOf(page, videos, b);
+    const addButton = row1.getByRole('button', {
+      name: 'Add to Queue',
+      exact: true,
+    });
+    const addBox = await addButton.boundingBox();
+    check('karaoke', 'Add to Queue is visible without hovering and is at least 40px', !!addBox && addBox.width >= 40 && addBox.height >= 40, JSON.stringify(addBox));
+    await addButton.click();
     await barButton(page, 'fa-step-forward').click();
     await bar.getByRole('heading', { name: b.song_title }).waitFor();
     check('karaoke', 'next plays the queued song', true, b.song_title);
 
-    const row2 = songRow(page).nth(cIndex);
-    await row2.hover();
-    await row2.getByRole('button', { name: 'Add to Queue' }).click();
-    await page.getByRole('button', { name: 'Queue', exact: true }).click();
-    const drawer = page.getByRole('heading', { name: 'Up Next' }).locator('xpath=../..');
+    const row2 = await songRowOf(page, videos, c);
+    await row2.getByRole('button', { name: 'Add to Queue', exact: true }).click();
+    await queueHandle(page).click();
+    const drawer = queueDrawerOf(page);
     await drawer.getByText(c.song_title).first().waitFor();
     check('karaoke', 'queue drawer lists the queued song', true, c.song_title);
     await page.waitForTimeout(400);
     await page.screenshot({ path: join(out, 'karaoke-queue.png') });
+    await step('karaoke', 'with the queue drawer open at 1280x800 every visible Add to Queue sits left of the drawer and can be clicked', async () => {
+      await page.setViewportSize({ width: 1280, height: 800 });
+      await page.waitForTimeout(500);
+      await openVideo(page, videos, a.video_url);
+      const drawerBox = await queueDrawerOf(page).boundingBox();
+      if (!drawerBox || drawerBox.x > 1280 - 300) throw new Error(`drawer box ${JSON.stringify(drawerBox)}`);
+      const buttons = setlistOf(page).getByRole('button', {
+        name: 'Add to Queue',
+        exact: true,
+      });
+      const n = await buttons.count();
+      if (n !== videos.find((v) => v.video_url === a.video_url).karaoke_song.length) throw new Error(`${n} buttons`);
+      let checked = 0;
+      for (let i = 0; i < n; i++) {
+        await buttons.nth(i).evaluate((el) => el.scrollIntoView({ block: 'center' }));
+        const box = await buttons.nth(i).boundingBox();
+        if (box.x + box.width > drawerBox.x) throw new Error(`button ${i} ends at x ${box.x + box.width}, the drawer starts at ${drawerBox.x}`);
+        const reachable = await buttons.nth(i).evaluate((el) => {
+          const r = el.getBoundingClientRect();
+          const hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+          return el.contains(hit);
+        });
+        if (!reachable) throw new Error(`button ${i} is covered`);
+        checked++;
+      }
+      await buttons.last().click({ timeout: 5000 });
+      check('karaoke', 'Add to Queue buttons checked beside the open drawer', checked === n, `${checked} buttons, drawer at x ${drawerBox.x}`);
+    });
+    await step('karaoke', 'scrollbar styles apply to the stream list, the setlist and the drawer', async () => {
+      const colors = await page.evaluate(
+        (sels) =>
+          sels.map((sel) => {
+            const el = document.querySelector(sel);
+            const cs = getComputedStyle(el);
+            return [cs.scrollbarColor, cs.scrollbarWidth, el.scrollHeight > el.clientHeight];
+          }),
+        [STREAMS, SETLIST, 'div.overflow-y-auto.p-4'],
+      );
+      for (const [color, width] of colors) {
+        if (!color.includes('rgba(68, 110, 146') || width !== 'thin') throw new Error(JSON.stringify(colors));
+      }
+      if (!colors[0][2]) throw new Error('the stream list does not scroll, so the check proves nothing');
+    });
+    await page.screenshot({ path: join(out, 'karaoke-queue-open-wide.png') });
 
     await barButton(page, 'fa-step-backward').click();
     await bar.getByRole('heading', { name: a.song_title }).waitFor();
@@ -162,12 +374,11 @@ const journeys = {
     check('karaoke', 'next plays the song previous kept', true, b.song_title);
 
     await page.reload();
-    await songRow(page).first().waitFor();
+    await videoRows(page).first().waitFor();
     const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('karaoke-storage')).state);
-    check('karaoke', 'queue and history survive a reload',
-      stored.queue.some((s) => s.id === c.id) && stored.history.some((s) => s.id === a.id));
-    await page.getByRole('button', { name: 'Queue', exact: true }).click();
-    await page.getByRole('heading', { name: 'Up Next' }).locator('xpath=../..').getByText(c.song_title).first().waitFor();
+    check('karaoke', 'queue and history survive a reload', stored.queue.some((s) => s.id === c.id) && stored.history.some((s) => s.id === a.id));
+    await queueHandle(page).click();
+    await queueDrawerOf(page).getByText(c.song_title).first().waitFor();
     check('karaoke', 'drawer shows the restored queue after reload', true);
   },
 
@@ -209,12 +420,14 @@ const journeys = {
     if (!otherFirsts.length) throw new Error('no other live video to pick');
 
     await page.goto(BASE + '/karaoke');
-    await songRow(page).first().waitFor();
-    await songRow(page).nth(start).click();
+    await videoRows(page).first().waitFor();
+    await (await songRowOf(page, videos, rows[start])).click();
     const bar = page.locator('.fixed.bottom-0');
     await bar.getByRole('heading', { name: rows[start].song_title }).waitFor();
     await playerReady(page);
-    await page.evaluate(() => { window.__frame = document.querySelector('iframe[src*="youtube"]'); });
+    await page.evaluate(() => {
+      window.__frame = document.querySelector('iframe[src*="youtube"]');
+    });
 
     await step('player', 'the autoplay switch shows on by default', async () => {
       await autoplaySwitch(page).waitFor();
@@ -246,13 +459,23 @@ const journeys = {
       await bar.locator('i.fa-pause').waitFor({ timeout: 15000 });
     });
     await step('player', 'a pause started inside the player reaches the bar', async () => {
-      await page.evaluate(() => { const f = document.querySelector('iframe[src*="youtube"]'); window.YT.get(f.id).pauseVideo(); });
+      await page.evaluate(() => {
+        const f = document.querySelector('iframe[src*="youtube"]');
+        window.YT.get(f.id).pauseVideo();
+      });
       await bar.locator('i.fa-play').waitFor({ timeout: 15000 });
     });
     await step('player', 'video end moves on to the next song of the same video', async () => {
       await playVideo(page);
       await seekNearEnd(page);
-      await page.waitForFunction(() => { const f = document.querySelector('iframe[src*="youtube"]'); return f && f !== window.__frame; }, null, { timeout: 40000 });
+      await page.waitForFunction(
+        () => {
+          const f = document.querySelector('iframe[src*="youtube"]');
+          return f && f !== window.__frame;
+        },
+        null,
+        { timeout: 40000 },
+      );
       await bar.getByRole('heading', { name: nextRow.song_title }).waitFor();
       const seconds = nextRow.timestamp.split(':').reduce((t, part) => t * 60 + Number(part), 0);
       if (!(await playerSrc(page)).includes(`start=${seconds}`)) throw new Error(`player is not at start=${seconds}`);
@@ -260,14 +483,23 @@ const journeys = {
     check('player', 'only one player exists after moving on', (await page.locator('iframe[src*="youtube"]').count()) === 1);
 
     await step('player', 'the end of the last song of a video plays the first song of another live video', async () => {
-      await songRow(page).nth(lastIndex).click();
+      await (await songRowOf(page, videos, lastRow)).click();
       await bar.getByRole('heading', { name: lastRow.song_title }).waitFor();
       await playerReady(page);
-      await page.evaluate(() => { window.__frame = document.querySelector('iframe[src*="youtube"]'); });
+      await page.evaluate(() => {
+        window.__frame = document.querySelector('iframe[src*="youtube"]');
+      });
       await playVideo(page);
       await playerState(page, 1);
       await seekNearEnd(page);
-      await page.waitForFunction(() => { const f = document.querySelector('iframe[src*="youtube"]'); return f && f !== window.__frame; }, null, { timeout: 40000 });
+      await page.waitForFunction(
+        () => {
+          const f = document.querySelector('iframe[src*="youtube"]');
+          return f && f !== window.__frame;
+        },
+        null,
+        { timeout: 40000 },
+      );
       const src = await playerSrc(page);
       const landed = otherFirsts.find((r) => src.includes(r.video_url));
       if (!landed) throw new Error(`player is on a video that is not another live one: ${src}`);
@@ -275,14 +507,16 @@ const journeys = {
       if (!src.includes(`start=${seconds}`)) throw new Error(`player is not at the first song, start=${seconds}`);
       await bar.getByRole('heading', { name: landed.song_title }).waitFor();
     });
-    await songRow(page).nth(start + 1).click();
+    await (await songRowOf(page, videos, nextRow)).click();
     await bar.getByRole('heading', { name: nextRow.song_title }).waitFor();
 
     await step('player', 'with autoplay off the video end keeps the same song, paused, in the same player', async () => {
-      await page.evaluate(() => { window.__frame = document.querySelector('iframe[src*="youtube"]'); });
+      await page.evaluate(() => {
+        window.__frame = document.querySelector('iframe[src*="youtube"]');
+      });
       await playerReady(page);
       await autoplaySwitch(page).click();
-      if ((await autoplaySwitch(page).getAttribute('aria-checked')) !== 'false') throw new Error('the switch did not turn off');
+      await switchBecomes(page, false, 'the switch did not turn off');
       await playVideo(page);
       await playerState(page, 1);
       await seekNearEnd(page);
@@ -293,23 +527,28 @@ const journeys = {
     });
     await step('player', 'the off state survives a reload', async () => {
       await page.reload();
-      await songRow(page).first().waitFor();
+      await videoRows(page).first().waitFor();
       if ((await page.evaluate(() => localStorage.getItem('karaoke-autoplay'))) !== 'false') throw new Error('nothing saved');
-      await songRow(page).nth(start).click();
+      await (await songRowOf(page, videos, rows[start])).click();
       await autoplaySwitch(page).waitFor();
       if ((await autoplaySwitch(page).getAttribute('aria-checked')) !== 'false') throw new Error('the switch came back on');
     });
     await step('player', 'a page with blocked storage still renders and defaults to autoplay on', async () => {
       const blockedTab = await page.context().newPage();
       await blockedTab.addInitScript(() => {
-        Object.defineProperty(window, 'localStorage', { get() { throw new DOMException('blocked', 'SecurityError'); } });
+        Object.defineProperty(window, 'localStorage', {
+          get() {
+            throw new DOMException('blocked', 'SecurityError');
+          },
+        });
       });
       await blockedTab.goto(BASE + '/karaoke');
-      await songRow(blockedTab).nth(start).click();
+      await videoRows(blockedTab).first().waitFor();
+      await (await songRowOf(blockedTab, videos, rows[start])).click();
       await autoplaySwitch(blockedTab).waitFor();
       if ((await autoplaySwitch(blockedTab).getAttribute('aria-checked')) !== 'true') throw new Error('the switch is not on');
       await autoplaySwitch(blockedTab).click();
-      if ((await autoplaySwitch(blockedTab).getAttribute('aria-checked')) !== 'false') throw new Error('the switch does not toggle');
+      await switchBecomes(blockedTab, false, 'the switch does not toggle');
       await blockedTab.close();
     });
   },
@@ -317,8 +556,7 @@ const journeys = {
   async unavailable(page) {
     const { body: videos } = await api('/api/get-karaoke');
     const rows = songRows(videos);
-    const goneIndex = rows.findIndex((r, i) => r.is_gone && rows.findIndex((x) => x.video_url === r.video_url) === i
-      && rows.slice(i + 1).some((x) => !x.is_gone));
+    const goneIndex = rows.findIndex((r, i) => r.is_gone && rows.findIndex((x) => x.video_url === r.video_url) === i && rows.slice(i + 1).some((x) => !x.is_gone));
     if (goneIndex < 0) throw new Error('no gone song has a live song after it');
     const gone = rows[goneIndex];
     const liveIndex = rows.findIndex((r) => !r.is_gone);
@@ -328,30 +566,70 @@ const journeys = {
     const stepForward = barButton(page, 'fa-step-forward');
 
     await page.goto(BASE + '/karaoke');
-    await songRow(page).first().waitFor();
-    const goneRow = songRow(page).nth(goneIndex);
-    await step('unavailable', 'a gone row shows Stream gone and offers no Add to Queue', async () => {
-      await goneRow.getByText('Stream gone', { exact: true }).waitFor();
-      await goneRow.hover();
-      if (await goneRow.getByRole('button', { name: 'Add to Queue' }).count()) throw new Error('the gone row has an Add to Queue button');
-      if ((await goneRow.getAttribute('aria-disabled')) !== 'true') throw new Error('the gone row is not aria-disabled');
-      if ((await goneRow.locator('img').count()) !== 0) throw new Error('the gone row requests a thumbnail');
+    await videoRows(page).first().waitFor();
+    const liveVideos = videos.filter((v) => !v.is_gone).length;
+    const goneRow = videoRow(page, videos, gone.video_url);
+    await step('unavailable', 'gone videos are listed after every live one, labelled Stream gone, with no thumbnail request', async () => {
+      const labelled = await videoRows(page).evaluateAll((items) => items.map((x) => x.textContent.includes('Stream gone')));
+      if (labelled.some((isGone, i) => isGone !== i >= liveVideos)) throw new Error(`labels ${labelled.map(Number).join('')}`);
+      if ((await goneRow.locator('img').count()) !== 0) throw new Error('the gone video requests a thumbnail');
+    });
+    const goneVideo = videos.find((v) => v.video_url === gone.video_url);
+    await step('unavailable', 'a gone video can be expanded to show what was sung, with disabled rows and no Add to Queue', async () => {
+      const goneSetlist = await openVideo(page, videos, gone.video_url);
+      const goneRows = songRowsIn(goneSetlist);
+      if ((await goneRows.count()) !== goneVideo.karaoke_song.length) throw new Error('the songs are not listed');
+      if (await goneSetlist.getByRole('button', { name: 'Add to Queue' }).count()) throw new Error('a gone row has an Add to Queue button');
+      for (const attr of await goneRows.evaluateAll((els) => els.map((el) => el.getAttribute('aria-disabled')))) {
+        if (attr !== 'true') throw new Error('a gone row is not aria-disabled');
+      }
       await page.screenshot({ path: join(out, 'karaoke-gone-row.png') });
     });
-    await step('unavailable', 'clicking a gone row changes nothing and opens no player', async () => {
-      await goneRow.click();
+    await step('unavailable', 'clicking a gone song row changes nothing and opens no player', async () => {
+      await songRowsIn(setlistOf(page))
+        .nth(goneVideo.karaoke_song.findIndex((s) => s.id === gone.id))
+        .click();
       await page.waitForTimeout(1000);
       if (await stepForward.count()) throw new Error('a player bar appeared');
       if (await page.locator('iframe[src*="youtube"]').count()) throw new Error('a player was mounted');
     });
+    await step('unavailable', 'a search that matches a gone video lists it after the live ones', async () => {
+      const search = page.getByPlaceholder('Search songs...');
+      await search.fill(gone.song_title);
+      const want = expectedFor(videos, gone.song_title);
+      await streamCountIs(page, want.videos);
+      const last = videoRows(page).last();
+      if ((await last.getByText('Stream gone').count()) !== 1) throw new Error('the gone video is not last');
+      await search.fill('');
+    });
 
-    await page.evaluate((song) => localStorage.setItem('karaoke-storage', JSON.stringify({
-      state: { queue: [{ id: song.id, song_title: song.song_title, timestamp: song.timestamp, created_at: song.created_at, video_url: song.video_url, title_text: song.title_text, membership: song.membership }], history: [] },
-      version: 0,
-    })), gone);
+    await page.evaluate(
+      (song) =>
+        localStorage.setItem(
+          'karaoke-storage',
+          JSON.stringify({
+            state: {
+              queue: [
+                {
+                  id: song.id,
+                  song_title: song.song_title,
+                  timestamp: song.timestamp,
+                  created_at: song.created_at,
+                  video_url: song.video_url,
+                  title_text: song.title_text,
+                  membership: song.membership,
+                },
+              ],
+              history: [],
+            },
+            version: 0,
+          }),
+        ),
+      gone,
+    );
     await page.reload();
-    await songRow(page).first().waitFor();
-    await songRow(page).nth(liveIndex).click();
+    await videoRows(page).first().waitFor();
+    await (await songRowOf(page, videos, live)).click();
     await bar.getByRole('heading', { name: live.song_title }).waitFor();
     await stepForward.click();
     const toast = page.getByRole('status');
@@ -368,7 +646,11 @@ const journeys = {
       await page.setViewportSize({ width: 1280, height: 800 });
     });
     await step('unavailable', 'the player lands on the first song of a live video', async () => {
-      await page.waitForFunction((urls) => urls.some((url) => document.querySelector('iframe[src*="youtube"]')?.src.includes(url)), liveFirsts.map((r) => r.video_url), { timeout: 60000 });
+      await page.waitForFunction(
+        (urls) => urls.some((url) => document.querySelector('iframe[src*="youtube"]')?.src.includes(url)),
+        liveFirsts.map((r) => r.video_url),
+        { timeout: 60000 },
+      );
       const src = await playerSrc(page);
       const landed = liveFirsts.find((r) => src.includes(r.video_url));
       await bar.getByRole('heading', { name: landed.song_title }).waitFor({ timeout: 60000 });
@@ -401,9 +683,15 @@ const journeys = {
     blocked = false;
     await step('fetchFailure', 'try again recovers without a reload', async () => {
       await page.getByRole('button', { name: 'Try again' }).click();
-      await songRow(page).first().waitFor();
+      await videoRows(page).first().waitFor();
     });
-    await page.route('**/api/get-cover', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: '[{"nope":1}]' }));
+    await page.route('**/api/get-cover', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: '[{"nope":1}]',
+      }),
+    );
     await page.goto(BASE + '/cover');
     await step('fetchFailure', 'data of the wrong shape is refused at the boundary', () => page.getByText('Could not load the covers').waitFor());
   },
@@ -412,7 +700,7 @@ const journeys = {
     await page.goto(BASE + '/');
     await page.evaluate(() => localStorage.setItem('karaoke-storage', 'not json'));
     await page.goto(BASE + '/karaoke');
-    await songRow(page).first().waitFor();
+    await videoRows(page).first().waitFor();
     await step('storage', 'corrupt saved data starts with an empty queue', async () => {
       await page.getByRole('button', { name: 'Queue', exact: true }).click();
       await page.getByText('Queue is empty').first().waitFor();
@@ -421,9 +709,17 @@ const journeys = {
 
     const blockedTab = await context.newPage();
     await blockedTab.addInitScript(() => {
-      Object.defineProperty(window, 'localStorage', { get() { throw new DOMException('blocked', 'SecurityError'); } });
+      Object.defineProperty(window, 'localStorage', {
+        get() {
+          throw new DOMException('blocked', 'SecurityError');
+        },
+      });
     });
-    for (const [path, text] of [['/', 'Station'], ['/about', 'Fiona Clearesta'], ['/credits', 'Credits']]) {
+    for (const [path, text] of [
+      ['/', 'Station'],
+      ['/about', 'Fiona Clearesta'],
+      ['/credits', 'Credits'],
+    ]) {
       await blockedTab.goto(BASE + path);
       await step('storage', `${path} renders with storage blocked`, () => blockedTab.getByRole('heading', { name: text }).first().waitFor());
     }
@@ -431,7 +727,8 @@ const journeys = {
     await step('storage', 'karaoke works with storage blocked', async () => {
       const { body: blockedVideos } = await api('/api/get-karaoke');
       const blockedRows = songRows(blockedVideos);
-      await songRow(blockedTab).nth(await findRowIndex(blockedRows, isPublic)).click();
+      await videoRows(blockedTab).first().waitFor();
+      await (await songRowOf(blockedTab, blockedVideos, blockedRows[await findRowIndex(blockedRows, isPublic)])).click();
       await blockedTab.locator('.fixed.bottom-0 h3').first().waitFor();
     });
     await blockedTab.close();
@@ -443,15 +740,13 @@ const journeys = {
     const tabB = await context.newPage();
     await page.goto(BASE + '/');
     await tabB.goto(BASE + '/karaoke');
-    await songRow(tabB).first().waitFor();
-    await songRow(tabB).nth(firstIndex).hover();
-    await songRow(tabB).nth(firstIndex).getByRole('button', { name: 'Add to Queue' }).click();
+    await videoRows(tabB).first().waitFor();
+    await (await songRowOf(tabB, videos, rows[firstIndex])).getByRole('button', { name: 'Add to Queue', exact: true }).click();
     await page.getByRole('link', { name: 'Karaoke' }).click();
-    await songRow(page).first().waitFor();
-    await songRow(page).nth(otherIndex).hover();
-    await songRow(page).nth(otherIndex).getByRole('button', { name: 'Add to Queue' }).click();
+    await videoRows(page).first().waitFor();
+    await (await songRowOf(page, videos, rows[otherIndex])).getByRole('button', { name: 'Add to Queue', exact: true }).click();
     const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('karaoke-storage')).state.queue.length);
-    check('storage', 'two tabs keep each other\'s queued songs', saved === 2, `${saved} saved`);
+    check('storage', "two tabs keep each other's queued songs", saved === 2, `${saved} saved`);
     await tabB.close();
   },
 
@@ -459,7 +754,10 @@ const journeys = {
     await page.addInitScript(() => {
       window.__sounds = 0;
       const original = window.Audio.prototype.play;
-      window.Audio.prototype.play = function play() { window.__sounds++; return original.call(this); };
+      window.Audio.prototype.play = function play() {
+        window.__sounds++;
+        return original.call(this);
+      };
     });
     await page.goto(BASE + '/cover');
     await page.locator('h2.text-2xl').waitFor();
@@ -483,10 +781,14 @@ const journeys = {
     check('paths', 'a trailing slash redirects', slash.status === 308 && slash.headers.location === '/about', slash.headers.location);
     const offsite = await rawRequest('/.//evil.example/');
     check('paths', 'a redirect cannot leave the site', !String(offsite.headers.location).startsWith('//'), offsite.headers.location);
-    const range = await rawRequest('/piosayang.mp3', { headers: { Range: 'bytes=0-1' } });
+    const range = await rawRequest('/piosayang.mp3', {
+      headers: { Range: 'bytes=0-1' },
+    });
     check('paths', 'audio answers a range request', range.status === 206 && range.headers['content-range']?.startsWith('bytes 0-1/'));
     const first = await rawRequest('/api/get-karaoke');
-    const again = await rawRequest('/api/get-karaoke', { headers: { 'If-None-Match': first.headers.etag } });
+    const again = await rawRequest('/api/get-karaoke', {
+      headers: { 'If-None-Match': first.headers.etag },
+    });
     check('paths', 'unchanged data answers 304', first.status === 200 && again.status === 304);
   },
 
@@ -502,6 +804,84 @@ const journeys = {
       await drawer.locator('button', { hasText: covers[2].title }).first().click();
       await page.waitForFunction(() => document.querySelector('div.absolute.inset-0.translate-x-full'));
       await page.locator('h2.text-2xl').filter({ hasText: covers[2].title }).waitFor();
+    });
+
+    await page.setViewportSize({ width: 375, height: 667 });
+    const { body: videos } = await api('/api/get-karaoke');
+    const rows = songRows(videos);
+    const noOverflow = () =>
+      page.evaluate(() => {
+        const scroller = [...document.querySelectorAll('nav[aria-label="Karaoke streams"], section[aria-label^="Setlist of"]')].find((el) => el.offsetParent);
+        return {
+          page: document.documentElement.scrollWidth,
+          scroller: scroller.scrollWidth - scroller.clientWidth,
+        };
+      });
+    await page.goto(BASE + '/karaoke');
+    await videoRows(page).first().waitFor();
+    await page.waitForTimeout(400);
+    await step('mobile', 'the karaoke list fits a 375px phone', async () => {
+      const w = await noOverflow();
+      if (w.page > 375 || w.scroller > 0) throw new Error(JSON.stringify(w));
+      await page.screenshot({ path: join(out, 'karaoke-list-375.png') });
+    });
+    await step('mobile', 'Add to Queue is icon-only, 40px, named exactly, and clear of the queue handle', async () => {
+      const row = rows.find((r) => !r.is_gone);
+      const setlist = await openVideo(page, videos, row.video_url);
+      const buttons = setlist.getByRole('button', {
+        name: 'Add to Queue',
+        exact: true,
+      });
+      const n = await buttons.count();
+      if (n !== videos.find((v) => v.video_url === row.video_url).karaoke_song.length) throw new Error(`${n} buttons`);
+      const handle = await queueHandle(page).boundingBox();
+      for (let i = 0; i < n; i++) {
+        await buttons.nth(i).scrollIntoViewIfNeeded();
+        const box = await buttons.nth(i).boundingBox();
+        if (box.width < 40 || box.height < 40) throw new Error(`button ${i} is ${box.width}x${box.height}`);
+        if (box.x + box.width > handle.x) throw new Error(`button ${i} reaches x ${box.x + box.width}, the handle starts at ${handle.x}`);
+        if (await buttons.nth(i).locator('span:visible').count()) throw new Error('the label is visible on a phone');
+      }
+      const w = await noOverflow();
+      if (w.page > 375 || w.scroller > 0) throw new Error(`overflow ${JSON.stringify(w)}`);
+    });
+    await step('mobile', 'a search fits a 375px phone and shows M of N songs', async () => {
+      await showList(page);
+      await page.getByPlaceholder('Search songs...').fill('satu bulan');
+      const want = expectedFor(videos, 'satu bulan');
+      await streamCountIs(page, want.videos);
+      await page.waitForTimeout(300);
+      const w = await noOverflow();
+      if (w.page > 375 || w.scroller > 0) throw new Error(JSON.stringify(w));
+      if (
+        (await page
+          .locator(STREAMS)
+          .getByText(/^\d+ match(es)?$/)
+          .count()) !== want.videos
+      )
+        throw new Error('rows lack a match count');
+      await scrollListToTop(page);
+      await page.screenshot({ path: join(out, 'karaoke-search-375.png') });
+      await videoRows(page).first().locator('button').click();
+      await setlistOf(page)
+        .getByText(/^\d+ of \d+ songs match$/)
+        .waitFor();
+      await page.screenshot({ path: join(out, 'karaoke-setlist-375.png') });
+      await page.getByRole('button', { name: 'All streams' }).click();
+      await page.locator(STREAMS).waitFor({ state: 'visible' });
+      await page.getByPlaceholder('Search songs...').fill('');
+    });
+    await step('mobile', 'the queue drawer has a visible 40px Close button that closes it', async () => {
+      await queueHandle(page).click();
+      await page.waitForTimeout(500);
+      const close = page.getByRole('button', { name: 'Close queue' });
+      const box = await close.boundingBox();
+      if (!box || box.width < 40 || box.height < 40 || box.x < 0 || box.x + box.width > 375) throw new Error(`close box ${JSON.stringify(box)}`);
+      await page.screenshot({ path: join(out, 'karaoke-queue-375.png') });
+      await close.click();
+      await page.waitForTimeout(500);
+      const drawerBox = await queueDrawerOf(page).boundingBox();
+      if (drawerBox.x < 375 - 1) throw new Error(`the drawer is still on screen at x ${drawerBox.x}`);
     });
   },
 
@@ -532,11 +912,15 @@ try {
 const browser = await chromium.launch();
 for (const [name, journey] of Object.entries(journeys)) {
   if (wanted.length && !wanted.includes(name)) continue;
-  const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  const context = await browser.newContext({
+    viewport: { width: 1280, height: 800 },
+  });
   const page = await context.newPage();
   const logged = [];
   page.on('pageerror', (e) => logged.push(`pageerror: ${e.message}`));
-  page.on('console', (m) => { if (m.type() === 'error' && !/youtube|google|doubleclick|fontawesome|ERR_|Failed to load resource/i.test(m.text() + m.location().url)) logged.push(`console: ${m.text()}`); });
+  page.on('console', (m) => {
+    if (m.type() === 'error' && !/youtube|google|doubleclick|fontawesome|ERR_|Failed to load resource/i.test(m.text() + m.location().url)) logged.push(`console: ${m.text()}`);
+  });
   try {
     await journey(page, context);
   } catch (e) {
