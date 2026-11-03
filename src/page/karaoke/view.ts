@@ -926,7 +926,7 @@ const playerBarView = (
   h.div(
     [
       h.Class(
-        'fixed bottom-0 left-0 right-0 bg-black/80 backdrop-blur-xl border-t border-white/10 text-white z-50 h-20 flex items-center px-4 shadow-2xl transition-all duration-300',
+        'fixed bottom-0 left-0 right-0 bg-black/80 backdrop-blur-xl border-t border-white/10 text-white z-[55] h-20 flex items-center px-4 shadow-2xl transition-all duration-300',
       ),
     ],
     [
@@ -1066,7 +1066,13 @@ const playerBarView = (
                 'text-gray-300 hover:text-white transition hover:rotate-90',
               ),
             ],
-            [h.i([h.Class('fas fa-expand drop-shadow-md')])],
+            [
+              h.i([
+                h.Class(
+                  `fas ${model.isExpanded ? 'fa-compress' : 'fa-expand'} drop-shadow-md`,
+                ),
+              ]),
+            ],
           ),
         ],
       ),
@@ -1122,7 +1128,7 @@ const playerView = (
   return h.div(
     [
       h.Class(
-        `fixed transition-all duration-500 shadow-2xl overflow-hidden z-50 bg-black/95 backdrop-blur-xl flex flex-col ${isExpanded ? 'inset-0' : 'w-1 h-1 opacity-0 pointer-events-none bottom-0 right-0'}`,
+        `fixed transition-all duration-500 shadow-2xl z-50 bg-black/95 backdrop-blur-xl flex flex-col ${isExpanded ? 'inset-0 overflow-y-auto' : 'overflow-hidden w-1 h-1 opacity-0 pointer-events-none bottom-0 right-0'}`,
       ),
     ],
     [

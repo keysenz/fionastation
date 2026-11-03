@@ -447,6 +447,23 @@ const journeys = {
       await page.screenshot({ path: join(out, 'player-expanded.png') });
       await page.locator('button:has(i.fa-chevron-down)').click();
     });
+    await step('player', 'while expanded the bar stays usable, Up Next scrolls into view, and the same button collapses', async () => {
+      await barButton(page, 'fa-expand').click();
+      await page.waitForTimeout(600);
+      const onTop = (locator) =>
+        locator.evaluate((el) => {
+          const b = el.getBoundingClientRect();
+          return el.contains(document.elementFromPoint(b.x + b.width / 2, b.y + b.height / 2));
+        });
+      if (!(await onTop(autoplaySwitch(page)))) throw new Error('the overlay covers the autoplay switch');
+      if (!(await onTop(barButton(page, 'fa-compress')))) throw new Error('the overlay covers the collapse button');
+      const upNext = page.locator('.inset-0').getByRole('heading', { name: 'Up Next' });
+      await upNext.scrollIntoViewIfNeeded();
+      const box = await upNext.boundingBox();
+      if (!box || box.y + box.height > 800 - 80) throw new Error(`Up Next is out of reach at ${JSON.stringify(box)}`);
+      await barButton(page, 'fa-compress').click();
+      await page.waitForFunction(() => !document.querySelector('.inset-0 iframe[src*="youtube"]'));
+    });
     await step('player', 'the pause button pauses the real video', async () => {
       await playVideo(page);
       await playerState(page, 1);
