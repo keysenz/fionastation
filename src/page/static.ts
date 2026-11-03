@@ -5,7 +5,7 @@ import {
   coverRouter,
   creditsRouter,
   homeRouter,
-  karaokeRouter,
+  radioRouter,
 } from '../route'
 
 const NBSP = ' '
@@ -137,7 +137,7 @@ export const homeView = <Message>(h: HtmlBuilder<Message>): Html =>
         [h.Class('mb-12 flex flex-col md:flex-row gap-6 md:gap-12')],
         [
           menuItem(aboutRouter(), 'fionawave.webp', 'About', h),
-          menuItem(karaokeRouter(), 'FioLove.webp', 'Karaoke', h),
+          menuItem(radioRouter(), 'FioLove.webp', 'Fio Radio', h),
           menuItem(coverRouter(), 'FioWah.webp', 'Cover', h),
           menuItem(creditsRouter(), 'FioManteb.webp', 'Credits', h),
         ],

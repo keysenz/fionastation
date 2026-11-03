@@ -92,7 +92,7 @@ export const subscriptions = Subscription.lift(Karaoke.subscriptions)<
 >({
   read: karaokeChild.read,
   toParentMessage: karaokeChild.toParentMessage,
-  when: model => model.route._tag === 'Karaoke',
+  when: model => model.route._tag === 'Radio',
 })
 
 const enterRoute = (model: Model): UpdateReturn =>
@@ -101,7 +101,7 @@ const enterRoute = (model: Model): UpdateReturn =>
     About: () => ({ model }),
     Credits: () => ({ model }),
     NotFound: () => ({ model }),
-    Karaoke: () => foldKaraokeEntered(model),
+    Radio: () => foldKaraokeEntered(model),
     Cover: () => foldCoverEntered(model),
   })
 
@@ -154,7 +154,7 @@ const routeView = (
     About: () => aboutView(h),
     Credits: () => creditsView(h),
     NotFound: () => [notFoundView(h)],
-    Karaoke: () => [
+    Radio: () => [
       h.submodel({
         slotId: 'karaoke',
         model: model.karaoke,

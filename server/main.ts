@@ -12,7 +12,7 @@ const ROOT = resolve(import.meta.dirname, '../dist')
 const PORT = Number(process.env.PORT ?? 3000)
 
 // NOTE: keep in step with src/route.ts. Any other path gets the 404 status with the app's own 404 page.
-const PAGE_PATHS = new Set(['/', '/about', '/karaoke', '/cover', '/credits'])
+const PAGE_PATHS = new Set(['/', '/about', '/radio', '/cover', '/credits'])
 
 const API_ROUTES: Record<string, () => unknown> = {
   '/api/get-karaoke': () =>
@@ -132,6 +132,16 @@ const handle = async (req: IncomingMessage, res: ServerResponse) => {
     // NOTE: the leading slashes collapse because `//host` in a Location header would redirect off this site.
     const target = `/${pathname.slice(0, -1).replace(/^\/+/, '')}`
     res.writeHead(308, { ...SECURITY_HEADERS, Location: target })
+    res.end()
+    return
+  }
+
+  if (
+    pathname === '/karaoke' &&
+    (req.method === 'GET' || req.method === 'HEAD')
+  ) {
+    const { search } = new URL(req.url ?? '/', 'http://localhost')
+    res.writeHead(301, { ...SECURITY_HEADERS, Location: `/radio${search}` })
     res.end()
     return
   }
