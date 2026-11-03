@@ -348,7 +348,7 @@ const journeys = {
     await bar.getByRole('heading', { name: cover.karaoke_song[0].song_title }).waitFor();
     await bar.getByText('Cover', { exact: true }).waitFor();
     const src = await playerSrc(page);
-    check('radio', 'playing a cover shows Cover in the bar and loads its video', src.includes(cover.video_url), src.slice(0, 90));
+    check('radio', 'playing a cover shows Cover in the bar and loads its video', src.includes(`/embed/${cover.video_url}?`), src.slice(0, 90));
     await page.screenshot({ path: join(out, 'radio-cover-playing.png') });
 
     const originalRow = await songRowOf(page, videos, { ...original.karaoke_song[0], video_url: original.video_url });
@@ -448,7 +448,7 @@ const journeys = {
     const bar = page.locator('.fixed.bottom-0');
     await bar.getByRole('heading', { name: a.song_title }).waitFor();
     const src = await playerSrc(page);
-    check('karaoke', 'play opens the player at the song timestamp', src.includes(a.video_url) && src.includes('start='), src.slice(0, 90));
+    check('karaoke', 'play opens the player at the song timestamp', src.includes(`/embed/${a.video_url}?`) && src.includes('start='), src.slice(0, 90));
 
     const row1 = await songRowOf(page, videos, b);
     const addButton = row1.getByRole('button', {
@@ -660,7 +660,7 @@ const journeys = {
         { timeout: 40000 },
       );
       const src = await playerSrc(page);
-      const landed = otherFirsts.find((r) => src.includes(r.video_url));
+      const landed = otherFirsts.find((r) => src.includes(`/embed/${r.video_url}?`));
       if (!landed) throw new Error(`player is on a video that is not another live one: ${src}`);
       const seconds = landed.timestamp.split(':').reduce((t, part) => t * 60 + Number(part), 0);
       if (!src.includes(`start=${seconds}`)) throw new Error(`player is not at the first song, start=${seconds}`);
@@ -828,7 +828,7 @@ const journeys = {
         { timeout: 60000 },
       );
       const src = await playerSrc(page);
-      const landed = liveFirsts.find((r) => src.includes(r.video_url));
+      const landed = liveFirsts.find((r) => src.includes(`/embed/${r.video_url}?`));
       await bar.getByRole('heading', { name: landed.song_title }).waitFor({ timeout: 60000 });
       if ((await page.locator('iframe[src*="youtube"]').count()) !== 1) throw new Error('more than one player');
       if (await bar.getByText('This stream is gone').count()) throw new Error('the bar still shows the error');
