@@ -1,11 +1,12 @@
 import { Array, Option } from 'effect'
 
-import type { PlayableSong } from '../../domain.ts'
+import type { PlayableSong, VideoKind } from '../../domain.ts'
 import { makeFuzzySearch } from '../../fuzzySearch'
 
 export type VideoGroup = {
   videoId: string
   title: string
+  kind: VideoKind
   isGone: boolean
   songs: ReadonlyArray<PlayableSong>
 }
@@ -31,6 +32,7 @@ export const groupByVideo = (
           {
             videoId,
             title: first.title_text,
+            kind: first.kind,
             isGone: goneIds.has(videoId),
             songs: videoSongs,
           },

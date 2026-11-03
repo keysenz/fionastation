@@ -3,7 +3,11 @@ import { AsyncData, Submodel } from 'foldkit'
 import { type Html, type HtmlBuilder, createKeyedLazy } from 'foldkit/html'
 import { twMerge } from 'tailwind-merge'
 
-import { type PlayableSong, timestampToSeconds } from '../../domain.ts'
+import {
+  type PlayableSong,
+  type VideoKind,
+  timestampToSeconds,
+} from '../../domain.ts'
 import { homeRouter } from '../../route'
 import { thumbnailUrl } from '../../youtube'
 import {
@@ -25,6 +29,17 @@ import {
 } from './videoList.ts'
 
 const lazySongRow = createKeyedLazy()
+
+const KIND_LABELS: Record<VideoKind, string> = {
+  karaoke: 'Karaoke',
+  cover: 'Cover',
+  original: 'Original',
+}
+
+const kindLabel = (kind: VideoKind): string => KIND_LABELS[kind]
+
+const songCountText = (count: number): string =>
+  `${count} ${count === 1 ? 'song' : 'songs'}`
 
 type Playback = {
   maybeNowPlaying: Option.Option<NowPlaying>
@@ -217,6 +232,16 @@ const videoListThumbnailView = (
     ],
   )
 
+const kindPillView = (kind: VideoKind, h: HtmlBuilder<Message>): Html =>
+  h.span(
+    [
+      h.Class(
+        'px-2 py-0.5 rounded-full bg-fuchsia-500/30 text-white font-semibold whitespace-nowrap',
+      ),
+    ],
+    [kindLabel(kind)],
+  )
+
 const videoListItemView = (
   group: VideoGroup,
   totalSongs: number,
@@ -278,10 +303,12 @@ const videoListItemView = (
                         ],
                       )
                     : h.empty,
-                  h.span(
-                    [h.Class('text-gray-200 whitespace-nowrap')],
-                    [`${totalSongs} ${totalSongs === 1 ? 'song' : 'songs'}`],
-                  ),
+                  group.kind === 'karaoke'
+                    ? h.span(
+                        [h.Class('text-gray-200 whitespace-nowrap')],
+                        [songCountText(totalSongs)],
+                      )
+                    : kindPillView(group.kind, h),
                   group.isGone ? goneBadgeView(h) : h.empty,
                 ],
               ),
@@ -308,11 +335,11 @@ const videoListPaneView = (
   const isSearching = model.search.trim() !== ''
   const playback = playbackOf(model)
   const caption = isSearching
-    ? `${shown.length} ${shown.length === 1 ? 'stream has' : 'streams have'} this song`
-    : `${shown.length} streams`
+    ? `${shown.length} ${shown.length === 1 ? 'video has' : 'videos have'} this song`
+    : `${shown.length} videos`
   return h.nav(
     [
-      h.AriaLabel('Karaoke streams'),
+      h.AriaLabel('Videos'),
       h.Class(
         twMerge(
           'w-full md:w-80 lg:w-96 shrink-0 overflow-y-auto custom-scrollbar px-2 pr-12 md:pr-2 pb-24',
@@ -384,7 +411,7 @@ const setlistHeaderView = (
   const hasCurrent = holdsCurrent(group, playback)
   const countText = isSearching
     ? `${group.songs.length} of ${totalSongs} songs match`
-    : `${totalSongs} songs`
+    : songCountText(totalSongs)
   return h.header(
     [
       h.Class(
@@ -433,7 +460,7 @@ const setlistHeaderView = (
                         'text-[11px] uppercase tracking-widest font-bold text-gray-200',
                       ),
                     ],
-                    ['Karaoke stream'],
+                    [kindLabel(group.kind)],
                   ),
               h.h2(
                 [
@@ -500,7 +527,7 @@ const backBarView = (h: HtmlBuilder<Message>): Html =>
         ],
         [
           h.i([h.Class('fas fa-arrow-left text-xs'), h.AriaHidden(true)]),
-          'All streams',
+          'All videos',
         ],
       ),
     ],
@@ -603,7 +630,7 @@ const failureView = (error: string, h: HtmlBuilder<Message>): Html =>
       ),
     ],
     [
-      h.p([h.Class('font-semibold')], ['Could not load the karaoke archive']),
+      h.p([h.Class('font-semibold')], ['Could not load Fio Radio']),
       h.p([h.Class('text-sm mt-2 opacity-75')], [error]),
       h.button(
         [
@@ -650,7 +677,7 @@ const headerView = (model: Model, h: HtmlBuilder<Message>): Html =>
                     'text-xl font-bold tracking-tight text-[#446e92] uppercase drop-shadow-md',
                   ),
                 ],
-                ['Karaoke'],
+                ['Fio Radio'],
               ),
             ],
           ),
@@ -815,7 +842,7 @@ const queueDrawerView = (model: Model, h: HtmlBuilder<Message>): Html => {
                         ),
                         h.p(
                           [h.Class('text-xs text-gray-300 truncate')],
-                          ['Karaoke'],
+                          [kindLabel(song.kind)],
                         ),
                       ],
                     ),
@@ -1063,9 +1090,8 @@ const playerBarView = (
               h.p(
                 [h.Class('text-xs text-gray-300 truncate')],
                 [
-                  Option.getOrElse(
-                    nowPlaying.maybeLoadError,
-                    () => 'Karaoke Archive',
+                  Option.getOrElse(nowPlaying.maybeLoadError, () =>
+                    kindLabel(nowPlaying.song.kind),
                   ),
                 ],
               ),
