@@ -139,6 +139,8 @@ export const Model = Schema.Struct({
   maybePlayhead: Schema.Option(Playhead),
   // NOTE: a key means the fetch has started, which keeps asking for the same lyrics idempotent.
   lyricsBySongId: Schema.Record(Schema.String, LyricsData.schema),
+  // NOTE: delayed retries spent per song this session. A manual retry resets it.
+  lyricsAutoRetries: Schema.Record(Schema.String, Schema.Number),
   lyricNudges: Nudges,
 })
 export type Model = typeof Model.Type
@@ -179,6 +181,7 @@ export const Message = defineMessageUnion({
   SucceededFetchLyrics: { songId: Schema.String, lyrics: Lyrics },
   FailedFetchLyrics: { songId: Schema.String, error: Schema.String },
   ClickedRetryLyrics: { songId: Schema.String },
+  ElapsedLyricsRetryDelay: { songId: Schema.String },
   ClickedNudgeLyrics: { songId: Schema.String, by: Schema.Literals([-1, 1]) },
   ClickedResetLyricsNudge: { songId: Schema.String },
   CompletedLoadLyricNudges: { maybeJson: Schema.Option(Schema.String) },
@@ -244,6 +247,18 @@ export const FetchLyrics = Command.define('FetchLyrics', {
         onFailure: error => Message.FailedFetchLyrics({ songId, error }),
         onSuccess: lyrics => Message.SucceededFetchLyrics({ songId, lyrics }),
       }),
+    ),
+})
+
+const LYRICS_RETRY_DELAY_SECONDS = 15
+export const MAX_AUTO_LYRICS_RETRIES = 3
+
+export const WaitBeforeRetryLyrics = Command.define('WaitBeforeRetryLyrics', {
+  args: { songId: Schema.String },
+  messages: [Message.ElapsedLyricsRetryDelay],
+  execute: ({ songId }) =>
+    Effect.sleep(Duration.seconds(LYRICS_RETRY_DELAY_SECONDS)).pipe(
+      Effect.as(Message.ElapsedLyricsRetryDelay({ songId })),
     ),
 })
 
@@ -578,6 +593,7 @@ export const init = (): Model => ({
   maybeQueueDrag: Option.none(),
   maybePlayhead: Option.none(),
   lyricsBySongId: {},
+  lyricsAutoRetries: {},
   lyricNudges: {},
 })
 
@@ -681,8 +697,19 @@ const ensureLyrics = (
   }
 }
 
-/** Reads the song now being sung and the one after it, so the next song's lyrics are there
+/** The song now being sung and the one after it, so the next song's lyrics are there
  *  before it starts. */
+const currentAndNextSongIds = (model: Model): ReadonlyArray<string> =>
+  Option.match(nowSingingOf(model), {
+    onNone: () => [],
+    onSome: ({ segment }) => [
+      segment.song.id,
+      ...Option.toArray(
+        Option.map(nextSegmentSong(allSongs(model), segment), song => song.id),
+      ),
+    ],
+  })
+
 const progressed = (
   model: Model,
   playId: number,
@@ -691,19 +718,8 @@ const progressed = (
   const moved = modifyFields(model, {
     maybePlayhead: () => Option.some({ playId, seconds }),
   })
-  return Option.match(nowSingingOf(moved), {
-    onNone: () => ({ model: moved }),
-    onSome: ({ segment }) =>
-      ensureLyrics(moved, [
-        segment.song.id,
-        ...Option.toArray(
-          Option.map(
-            nextSegmentSong(allSongs(moved), segment),
-            song => song.id,
-          ),
-        ),
-      ]),
-  })
+  const ids = currentAndNextSongIds(moved)
+  return ids.length === 0 ? { model: moved } : ensureLyrics(moved, ids)
 }
 
 const continuationOf = (model: Model): Continuation => {
@@ -1166,7 +1182,31 @@ const updateModel = (model: Model, message: Message) =>
           [songId]: AsyncData.fail(error),
         }),
       }),
+      commands:
+        (model.lyricsAutoRetries[songId] ?? 0) < MAX_AUTO_LYRICS_RETRIES
+          ? [WaitBeforeRetryLyrics({ songId })]
+          : [],
     }),
+
+    ElapsedLyricsRetryDelay: ({ songId }) =>
+      Option.exists(
+        Option.fromNullishOr(model.lyricsBySongId[songId]),
+        AsyncData.isFailure,
+      ) && currentAndNextSongIds(model).includes(songId)
+        ? {
+            model: modifyFields(model, {
+              lyricsBySongId: known => ({
+                ...known,
+                [songId]: AsyncData.Loading(),
+              }),
+              lyricsAutoRetries: known => ({
+                ...known,
+                [songId]: (known[songId] ?? 0) + 1,
+              }),
+            }),
+            commands: [FetchLyrics({ songId })],
+          }
+        : { model },
 
     ClickedRetryLyrics: ({ songId }) =>
       Option.exists(
@@ -1179,6 +1219,7 @@ const updateModel = (model: Model, message: Message) =>
                 ...known,
                 [songId]: AsyncData.Loading(),
               }),
+              lyricsAutoRetries: known => Record.remove(known, songId),
             }),
             commands: [FetchLyrics({ songId })],
           }
