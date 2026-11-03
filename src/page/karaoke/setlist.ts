@@ -80,6 +80,15 @@ export const play = (setlist: Setlist, song: PlayableSong): Setlist =>
 export const enqueue = (setlist: Setlist, song: PlayableSong): Setlist =>
   modifyFields(setlist, { queue: queue => [...queue, song] })
 
+/** Appends songs to the queue in the order given. */
+export const enqueueAll = (
+  setlist: Setlist,
+  songs: ReadonlyArray<PlayableSong>,
+): Setlist =>
+  Array.isReadonlyArrayNonEmpty(songs)
+    ? modifyFields(setlist, { queue: queue => [...queue, ...songs] })
+    : setlist
+
 export const moveInQueue = (
   setlist: Setlist,
   from: number,

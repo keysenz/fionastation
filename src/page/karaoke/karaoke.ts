@@ -37,6 +37,7 @@ import {
   applySkip,
   emptySetlist,
   enqueue,
+  enqueueAll,
   failLoad,
   markPlayerReady,
   moveInQueue,
@@ -114,6 +115,7 @@ export const Message = defineMessageUnion({
   ClickedBackToVideos: {},
   ClickedSong: { song: PlayableSong },
   ClickedAddToQueue: { song: PlayableSong },
+  ClickedQueueHistory: {},
   ClickedQueuedSong: { index: Schema.Number },
   ClickedRemoveFromQueue: { index: Schema.Number },
   ClickedPlayPause: {},
@@ -545,6 +547,14 @@ export const update = (model: Model, message: Message) =>
 
     ClickedAddToQueue: ({ song }) =>
       changeSetlist(model, enqueue(model.setlist, song)),
+
+    ClickedQueueHistory: () => {
+      const queued = enqueueAll(
+        model.setlist,
+        Array.reverse(model.setlist.history),
+      )
+      return queued === model.setlist ? { model } : changeSetlist(model, queued)
+    },
 
     ClickedQueuedSong: ({ index }) => {
       const played = playFromQueue(model.setlist, index)

@@ -1000,3 +1000,23 @@ test('removing or playing a queue slot that does not exist changes nothing and s
     }),
   )
 })
+
+test('queueing the history appends it oldest first and saves, and an empty history changes nothing', () => {
+  story(
+    update,
+    given(init()),
+    message(Message.ClickedQueueHistory()),
+    Command.expectNone(),
+    message(Message.ClickedSong({ song: a })),
+    saved,
+    message(Message.ClickedSong({ song: b })),
+    saved,
+    message(Message.ClickedSong({ song: a2 })),
+    saved,
+    message(Message.ClickedQueueHistory()),
+    saved,
+    model(current => {
+      expect(queueOf(current)).toEqual(['a', 'b'])
+    }),
+  )
+})

@@ -895,50 +895,74 @@ const queueDrawerView = (model: Model, h: HtmlBuilder<Message>): Html => {
                 h.div(
                   [h.Class('pt-4 border-t border-white/10 mt-4')],
                   [
-                    h.h3(
+                    h.div(
+                      [h.Class('flex items-center justify-between mb-2 px-2')],
                       [
-                        h.Class(
-                          'text-sm font-semibold text-gray-300 mb-2 px-2 uppercase tracking-wider',
+                        h.h3(
+                          [
+                            h.Class(
+                              'text-sm font-semibold text-gray-300 uppercase tracking-wider',
+                            ),
+                          ],
+                          ['History'],
+                        ),
+                        h.button(
+                          [
+                            h.Type('button'),
+                            h.OnClick(Message.ClickedQueueHistory()),
+                            h.Class(
+                              'min-h-10 px-3 rounded-full bg-black/30 border border-white/20 text-[10px] font-bold uppercase tracking-widest text-white hover:bg-[#446e92]/30 active:scale-95 transition',
+                            ),
+                          ],
+                          ['Queue all'],
                         ),
                       ],
-                      ['History'],
                     ),
                   ],
                 ),
                 ...history.map(song =>
-                  h.button(
+                  h.div(
                     [
-                      h.Type('button'),
-                      h.AriaLabel(`Play "${song.song_title}" again`),
-                      h.OnClick(Message.ClickedSong({ song })),
                       h.Class(
-                        'flex w-full items-center space-x-3 min-h-10 text-left opacity-80 hover:opacity-100 transition-opacity p-2 rounded hover:bg-white/5',
+                        'flex items-center gap-2 opacity-80 hover:opacity-100 transition-opacity p-2 rounded hover:bg-white/5',
                       ),
                     ],
                     [
-                      h.div(
+                      h.button(
                         [
+                          h.Type('button'),
+                          h.AriaLabel(`Play "${song.song_title}" again`),
+                          h.OnClick(Message.ClickedSong({ song })),
                           h.Class(
-                            'w-8 h-8 bg-slate-800 rounded flex-shrink-0 overflow-hidden',
+                            'flex flex-1 min-w-0 items-center space-x-3 min-h-10 text-left',
                           ),
                         ],
                         [
-                          h.img([
-                            h.Src(thumbnailUrl(song.video_url)),
-                            h.Alt('art'),
-                            h.Class('w-full h-full object-cover'),
-                          ]),
-                        ],
-                      ),
-                      h.div(
-                        [h.Class('flex-1 min-w-0')],
-                        [
+                          h.div(
+                            [
+                              h.Class(
+                                'w-8 h-8 bg-slate-800 rounded flex-shrink-0 overflow-hidden',
+                              ),
+                            ],
+                            [
+                              h.img([
+                                h.Src(thumbnailUrl(song.video_url)),
+                                h.Alt('art'),
+                                h.Class('w-full h-full object-cover'),
+                              ]),
+                            ],
+                          ),
                           h.p(
-                            [h.Class('text-sm truncate text-gray-200')],
+                            [
+                              h.Class(
+                                'flex-1 min-w-0 text-sm truncate text-gray-200',
+                              ),
+                            ],
                             [song.song_title],
                           ),
                         ],
                       ),
+                      addToQueueButtonView(song, h),
                     ],
                   ),
                 ),
