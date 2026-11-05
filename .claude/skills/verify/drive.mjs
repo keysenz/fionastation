@@ -346,7 +346,7 @@ const journeys = {
     await coverRow.click();
     const bar = page.locator('[data-player-bar]');
     await bar.getByRole('heading', { name: cover.karaoke_song[0].song_title }).waitFor();
-    await bar.getByText('Cover', { exact: true }).waitFor();
+    await bar.getByText('Cover', { exact: true }).first().waitFor();
     const src = await playerSrc(page);
     check('radio', 'playing a cover shows Cover in the bar and loads its video', src.includes(`/embed/${cover.video_url}?`), src.slice(0, 90));
     await page.screenshot({ path: join(out, 'radio-cover-playing.png') });
