@@ -1362,7 +1362,24 @@ test('a ready player gets the volume, so each new song keeps the level', () => {
     message(
       Message.ReceivedPlayerEvent({ playId: 1, event: PlayerEvent.Ready() }),
     ),
-    Command.expectHas(ApplyPlayback, ApplyVolume),
+    Command.expectExact(ApplyVolume),
+    Command.resolve(ApplyVolume, Message.CompletedApplyVolume()),
+  )
+})
+
+test('a pause pressed while the video loads reaches the player once it is ready', () => {
+  story(
+    update,
+    given(init()),
+    message(Message.ClickedSong({ song: a })),
+    saved,
+    message(Message.ClickedPlayPause()),
+    saved,
+    Command.resolve(ApplyPlayback, Message.CompletedApplyPlayback()),
+    message(
+      Message.ReceivedPlayerEvent({ playId: 1, event: PlayerEvent.Ready() }),
+    ),
+    Command.expectExact(ApplyPlayback, ApplyVolume),
     Command.resolve(ApplyPlayback, Message.CompletedApplyPlayback()),
     Command.resolve(ApplyVolume, Message.CompletedApplyVolume()),
   )

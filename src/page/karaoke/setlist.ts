@@ -23,7 +23,7 @@ const PAUSED: PlaybackStatus = 'Paused'
 
 export const NowPlaying = Schema.Struct({
   song: PlayableSong,
-  // NOTE: tells two plays of one song apart, so replaying it still gets a new player.
+  // NOTE: tells two plays of one song apart, so replaying it still reloads the video.
   playId: Schema.Number,
   status: PlaybackStatus,
   player: PlayerState,
