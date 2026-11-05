@@ -25,6 +25,12 @@ const api = async (path, init) => {
   };
 };
 
+// The page treats a members-only video as gone, because an embedded player cannot play it.
+const pageVideos = async () => {
+  const { status, body } = await api('/api/get-karaoke');
+  return { status, body: body?.map((v) => ({ ...v, is_gone: v.is_gone || v.membership })) };
+};
+
 const STREAMS = 'nav[aria-label="Videos"]';
 const SETLIST = 'section[aria-label^="Setlist of"]';
 const videoRows = (page) => page.locator(`${STREAMS} li`);
@@ -232,7 +238,7 @@ const videoLoads = (page, videoIds, { startSeconds, isPlaying = false, timeout =
     });
 
 const queueReorderJourney = async (page, feature, { touch }) => {
-  const { body: videos } = await api('/api/get-karaoke');
+  const { body: videos } = await pageVideos();
   const picked = [];
   const video = videos.find((v) => {
     picked.length = 0;
@@ -358,7 +364,7 @@ const journeys = {
   },
 
   async radio(page) {
-    const { body: videos } = await api('/api/get-karaoke');
+    const { body: videos } = await pageVideos();
     const live = (kind) => videos.find((v) => v.kind === kind && !v.is_gone && v.karaoke_song.length === 1);
     const cover = live('cover');
     const original = live('original');
@@ -397,7 +403,7 @@ const journeys = {
   },
 
   async karaoke(page) {
-    const { body: videos } = await api('/api/get-karaoke');
+    const { body: videos } = await pageVideos();
     const total = videos.reduce((n, v) => n + v.karaoke_song.length, 0);
     check('karaoke', 'api returns only karaoke streams with songs', total > 0, `${videos.length} videos, ${total} songs`);
 
@@ -564,7 +570,7 @@ const journeys = {
   },
 
   async player(page) {
-    const { body: videos } = await api('/api/get-karaoke');
+    const { body: videos } = await pageVideos();
     const rows = songRows(videos);
     const start = await findRowIndex(rows.slice(0, -1), async (s, i) => (await isPublic(s)) && rows[i + 1].video_url === s.video_url);
     const nextRow = rows[start + 1];
@@ -744,7 +750,7 @@ const journeys = {
   },
 
   async strictAutoplay() {
-    const { body: videos } = await api('/api/get-karaoke');
+    const { body: videos } = await pageVideos();
     const [first, second] = videos.filter((v) => !v.is_gone && v.karaoke_song.length > 2);
     if (!second) throw new Error('the data has fewer than two live streams with three songs');
     const songOf = (video, index) => ({ ...video.karaoke_song[index], video_url: video.video_url });
@@ -823,7 +829,7 @@ const journeys = {
   },
 
   async unavailable(page) {
-    const { body: videos } = await api('/api/get-karaoke');
+    const { body: videos } = await pageVideos();
     const rows = songRows(videos);
     const goneIndex = rows.findIndex((r, i) => r.is_gone && rows.findIndex((x) => x.video_url === r.video_url) === i && rows.slice(i + 1).some((x) => !x.is_gone));
     if (goneIndex < 0) throw new Error('no gone song has a live song after it');
@@ -962,7 +968,7 @@ const journeys = {
     });
     await blockedTab.goto(BASE + '/');
     await step('storage', 'karaoke works with storage blocked', async () => {
-      const { body: blockedVideos } = await api('/api/get-karaoke');
+      const { body: blockedVideos } = await pageVideos();
       const blockedRows = songRows(blockedVideos);
       await videoRows(blockedTab).first().waitFor();
       await (await songRowOf(blockedTab, blockedVideos, blockedRows[await findRowIndex(blockedRows, isPublic)])).click();
@@ -970,7 +976,7 @@ const journeys = {
     });
     await blockedTab.close();
 
-    const { body: videos } = await api('/api/get-karaoke');
+    const { body: videos } = await pageVideos();
     const rows = songRows(videos);
     const firstIndex = rows.findIndex((s) => !s.is_gone);
     const otherIndex = rows.findIndex((s) => !s.is_gone && s.song_title !== rows[firstIndex].song_title);
@@ -1108,7 +1114,7 @@ const journeys = {
       if ((await focusedId()) !== 'karaoke-info-button') throw new Error(`focus is on ${await focusedId()}`);
     });
     await step('info', 'the panel sits above the player bar and the search stays usable after closing', async () => {
-      const { body: videos } = await api('/api/get-karaoke');
+      const { body: videos } = await pageVideos();
       const rows = songRows(videos);
       await (await songRowOf(page, videos, rows[await findRowIndex(rows, isPublic)])).click();
       await page.locator('[data-player-bar] h3').first().waitFor();
@@ -1155,7 +1161,7 @@ const journeys = {
   },
 
   async volume(page) {
-    const { body: videos } = await api('/api/get-karaoke');
+    const { body: videos } = await pageVideos();
     const singles = videos.filter((v) => isSingleSong(videos, v.video_url));
     const slider = page.locator('input[aria-label="Volume"]:visible');
     const volumeOf = () =>
@@ -1227,7 +1233,7 @@ const journeys = {
 
   async mobilePlayer(page) {
     await page.setViewportSize({ width: 375, height: 667 });
-    const { body: videos } = await api('/api/get-karaoke');
+    const { body: videos } = await pageVideos();
     const singles = [];
     for (const v of videos) {
       if (isSingleSong(videos, v.video_url) && !singles.some((s) => s.karaoke_song[0].song_title === v.karaoke_song[0].song_title)) singles.push(v);
@@ -1353,7 +1359,7 @@ const journeys = {
 
   async mobile(page) {
     await page.setViewportSize({ width: 375, height: 667 });
-    const { body: videos } = await api('/api/get-karaoke');
+    const { body: videos } = await pageVideos();
     const rows = songRows(videos);
     const noOverflow = () =>
       page.evaluate(() => {

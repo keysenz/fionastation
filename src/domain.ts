@@ -46,10 +46,13 @@ export const toPlayableSongs = (
     })),
   )
 
+// NOTE: an embedded player cannot play a members-only video and reports no error when one is loaded into it, so those count as gone.
 export const goneVideoIdsOf = (
   videos: ReadonlyArray<KaraokeVideo>,
 ): ReadonlyArray<string> =>
-  videos.filter(video => video.is_gone).map(video => video.video_url)
+  videos
+    .filter(video => video.is_gone || video.membership)
+    .map(video => video.video_url)
 
 export const timestampToSeconds = (timestamp: string): number => {
   const seconds = timestamp
