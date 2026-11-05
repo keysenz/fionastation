@@ -1,12 +1,14 @@
 import {
-  Deferred,
+  Cause,
   Duration,
   Effect,
   Option,
   Queue,
   Schedule,
   Schema,
+  Scope,
   Stream,
+  SubscriptionRef,
 } from 'effect'
 import { defineTaggedUnion } from 'foldkit/schema'
 
@@ -17,6 +19,10 @@ type YouTubePlayer = Readonly<{
   mute: () => void
   unMute: () => void
   getCurrentTime: () => number
+  getPlayerState: () => number
+  loadVideoById: (
+    video: Readonly<{ videoId: string; startSeconds: number }>,
+  ) => void
   destroy: () => void
 }>
 
@@ -24,7 +30,6 @@ type YouTubeApi = Readonly<{
   Player: new (
     target: HTMLElement,
     options: Readonly<{
-      videoId: string
       width: string
       height: string
       playerVars: PlayerVars
@@ -70,9 +75,15 @@ const PROGRESS_EPSILON_SECONDS = 0.05
 const VIDEO_UNAVAILABLE = 'This video is not available on YouTube'
 const PLAYER_UNAVAILABLE = 'Could not load the YouTube player'
 
+const STATE_UNSTARTED = -1
 const STATE_ENDED = 0
 const STATE_PLAYING = 1
 const STATE_PAUSED = 2
+const STATE_CUED = 5
+
+// NOTE: a browser that blocks autoplay leaves the video unstarted and says nothing, so a video that sits there this long counts as paused.
+const BLOCKED_AFTER_TICKS =
+  Duration.toMillis(Duration.seconds(3)) / Duration.toMillis(PROGRESS_INTERVAL)
 
 const loadApiScript = (): Promise<YouTubeApi> =>
   new Promise((resolve, reject) => {
@@ -93,7 +104,33 @@ const loadApiScript = (): Promise<YouTubeApi> =>
 // NOTE: the page loads YouTube's script once, however many players mount.
 const loadApi = Effect.runSync(Effect.cached(Effect.tryPromise(loadApiScript)))
 
-const playersByHostId = new Map<string, YouTubePlayer>()
+type PlayerReport =
+  | Readonly<{ kind: 'StateChanged'; state: number }>
+  | Readonly<{ kind: 'Failed' }>
+  | Readonly<{ kind: 'PlayRequested' }>
+
+type Host = Readonly<{
+  player: YouTubePlayer
+  listeners: Set<(report: PlayerReport) => void>
+}>
+
+const hostsById = new Map<
+  string,
+  SubscriptionRef.SubscriptionRef<Option.Option<Host>>
+>()
+
+const hostRef = (hostId: string) => {
+  const known = hostsById.get(hostId)
+  if (known) {
+    return known
+  }
+  const ref = Effect.runSync(SubscriptionRef.make(Option.none<Host>()))
+  hostsById.set(hostId, ref)
+  return ref
+}
+
+const currentHost = (hostId: string): Host | undefined =>
+  Option.getOrUndefined(Effect.runSync(SubscriptionRef.get(hostRef(hostId))))
 
 const stateChangeToEvent = (state: number): Option.Option<PlayerEvent> => {
   if (state === STATE_PLAYING) {
@@ -108,91 +145,150 @@ const stateChangeToEvent = (state: number): Option.Option<PlayerEvent> => {
   return Option.none()
 }
 
-/** Runs one YouTube player inside `element` for as long as the stream runs, so
+/** Runs one empty YouTube player inside `element` until the scope closes, so
  *  removing the element from the view destroys the player. The player replaces
- *  the node it gets, so it gets a child the renderer does not own. */
-export const playerEvents = (
+ *  the node it gets, so it gets a child the renderer does not own. Videos play
+ *  in it through `videoEvents`. */
+export const runPlayer = (
   element: Element,
-  options: Readonly<{
-    hostId: string
-    videoId: string
-    playerVars: PlayerVars
-  }>,
+  options: Readonly<{ hostId: string; playerVars: PlayerVars }>,
+): Effect.Effect<void, Cause.UnknownError, Scope.Scope> =>
+  Effect.gen(function* () {
+    const api = yield* loadApi
+    const ref = hostRef(options.hostId)
+    const listeners = new Set<(report: PlayerReport) => void>()
+    const report = (playerReport: PlayerReport) =>
+      listeners.forEach(listener => listener(playerReport))
+    yield* Effect.acquireRelease(
+      Effect.sync(() => {
+        const target = document.createElement('div')
+        element.append(target)
+        const player: YouTubePlayer = new api.Player(target, {
+          width: '100%',
+          height: '100%',
+          playerVars: options.playerVars,
+          events: {
+            onReady: () =>
+              Effect.runSync(
+                SubscriptionRef.set(ref, Option.some({ player, listeners })),
+              ),
+            onStateChange: ({ data }) =>
+              report({ kind: 'StateChanged', state: data }),
+            onError: () => report({ kind: 'Failed' }),
+          },
+        })
+        return player
+      }),
+      player =>
+        Effect.gen(function* () {
+          yield* SubscriptionRef.update(ref, maybeHost =>
+            Option.filter(maybeHost, host => host.player !== player),
+          )
+          player.destroy()
+        }),
+    )
+  })
+
+const loadedVideoEvents = (
+  host: Host,
+  video: Readonly<{ videoId: string; startSeconds: number }>,
 ): Stream.Stream<PlayerEvent> =>
   Stream.callback<PlayerEvent>(queue =>
     Effect.gen(function* () {
-      const api = yield* loadApi
-      const ready = yield* Deferred.make<YouTubePlayer>()
-      const lastSeen = { seconds: Number.NEGATIVE_INFINITY }
-      const offerProgress = (player: YouTubePlayer, isForced: boolean) => {
-        const seconds = player.getCurrentTime()
+      const progress = {
+        isLoaded: false,
+        lastSeconds: Number.NEGATIVE_INFINITY,
+        unstartedTicks: 0,
+      }
+      const offerProgress = (isForced: boolean) => {
+        const seconds = host.player.getCurrentTime()
         if (
+          progress.isLoaded &&
           Number.isFinite(seconds) &&
           (isForced ||
-            Math.abs(seconds - lastSeen.seconds) >= PROGRESS_EPSILON_SECONDS)
+            Math.abs(seconds - progress.lastSeconds) >=
+              PROGRESS_EPSILON_SECONDS)
         ) {
-          lastSeen.seconds = seconds
+          progress.lastSeconds = seconds
           Queue.offerUnsafe(queue, PlayerEvent.Progressed({ seconds }))
         }
       }
-      yield* Effect.acquireRelease(
-        Effect.sync(() => {
-          const target = document.createElement('div')
-          element.append(target)
-          const player: YouTubePlayer = new api.Player(target, {
-            videoId: options.videoId,
-            width: '100%',
-            height: '100%',
-            playerVars: options.playerVars,
-            events: {
-              onReady: () => {
-                playersByHostId.set(options.hostId, player)
-                Deferred.doneUnsafe(ready, Effect.succeed(player))
-                Queue.offerUnsafe(queue, PlayerEvent.Ready())
-              },
-              onStateChange: ({ data }) => {
-                // NOTE: a seek made with YouTube's own controls changes the state, so this reports it before the next tick.
-                offerProgress(player, true)
-                Option.match(stateChangeToEvent(data), {
-                  onNone: () => false,
-                  onSome: event => Queue.offerUnsafe(queue, event),
-                })
-              },
-              onError: () => {
-                Queue.offerUnsafe(
-                  queue,
-                  PlayerEvent.VideoFailed({ reason: VIDEO_UNAVAILABLE }),
-                )
-              },
-            },
-          })
-          return player
-        }),
-        player =>
-          Effect.sync(() => {
-            if (playersByHostId.get(options.hostId) === player) {
-              playersByHostId.delete(options.hostId)
-            }
-            player.destroy()
-          }),
-      )
-      yield* Effect.forkScoped(
-        Deferred.await(ready).pipe(
-          Effect.flatMap(player =>
-            Effect.sync(() => offerProgress(player, false)).pipe(
-              Effect.repeat(Schedule.spaced(PROGRESS_INTERVAL)),
-            ),
-          ),
-        ),
-      )
-      return yield* Effect.never
-    }).pipe(
-      Effect.catch(() =>
-        Effect.sync(() =>
+      const reportIfBlocked = () => {
+        const state = host.player.getPlayerState()
+        const isUnstarted = state === STATE_UNSTARTED || state === STATE_CUED
+        progress.unstartedTicks =
+          progress.isLoaded && isUnstarted ? progress.unstartedTicks + 1 : 0
+        if (progress.unstartedTicks === BLOCKED_AFTER_TICKS) {
+          Queue.offerUnsafe(queue, PlayerEvent.Paused())
+        }
+      }
+      const listener = (report: PlayerReport) => {
+        if (report.kind === 'PlayRequested') {
+          progress.unstartedTicks = 0
+          return
+        }
+        if (report.kind === 'Failed') {
           Queue.offerUnsafe(
             queue,
-            PlayerEvent.PlayerFailed({ reason: PLAYER_UNAVAILABLE }),
+            PlayerEvent.VideoFailed({ reason: VIDEO_UNAVAILABLE }),
+          )
+          return
+        }
+        // NOTE: loading over a playing video first reports that video's pause, and an end can still be on its way.
+        if (!progress.isLoaded) {
+          if (report.state === STATE_PAUSED || report.state === STATE_ENDED) {
+            return
+          }
+          progress.isLoaded = true
+          Queue.offerUnsafe(queue, PlayerEvent.Ready())
+        }
+        // NOTE: a seek made with YouTube's own controls changes the state, so this reports it before the next tick.
+        offerProgress(true)
+        Option.match(stateChangeToEvent(report.state), {
+          onNone: () => false,
+          onSome: event => Queue.offerUnsafe(queue, event),
+        })
+      }
+      yield* Effect.acquireRelease(
+        Effect.sync(() => {
+          host.listeners.add(listener)
+          host.player.loadVideoById(video)
+        }),
+        () => Effect.sync(() => host.listeners.delete(listener)),
+      )
+      yield* Effect.forkScoped(
+        Effect.sync(() => {
+          offerProgress(false)
+          reportIfBlocked()
+        }).pipe(Effect.repeat(Schedule.spaced(PROGRESS_INTERVAL))),
+      )
+      return yield* Effect.never
+    }),
+  )
+
+/** Plays one video in the player that `runPlayer` runs for `hostId`, waiting
+ *  for that player when it is not ready yet. Ending the stream stops listening,
+ *  and the next `videoEvents` call replaces the video in the same player, which
+ *  keeps the play permission a browser gave that player. */
+export const videoEvents = (
+  hostId: string,
+  video: Readonly<{ videoId: string; startSeconds: number }>,
+): Stream.Stream<PlayerEvent> =>
+  Stream.unwrap(
+    loadApi.pipe(
+      Effect.as(
+        SubscriptionRef.changes(hostRef(hostId)).pipe(
+          Stream.switchMap(maybeHost =>
+            Option.match(maybeHost, {
+              onNone: () => Stream.empty,
+              onSome: host => loadedVideoEvents(host, video),
+            }),
           ),
+        ),
+      ),
+      Effect.catch(() =>
+        Effect.succeed(
+          Stream.make(PlayerEvent.PlayerFailed({ reason: PLAYER_UNAVAILABLE })),
         ),
       ),
     ),
@@ -203,11 +299,12 @@ export const setPlaying = (
   isPlaying: boolean,
 ): Effect.Effect<void> =>
   Effect.sync(() => {
-    const player = playersByHostId.get(hostId)
+    const host = currentHost(hostId)
     if (isPlaying) {
-      player?.playVideo()
+      host?.player.playVideo()
+      host?.listeners.forEach(listener => listener({ kind: 'PlayRequested' }))
     } else {
-      player?.pauseVideo()
+      host?.player.pauseVideo()
     }
   })
 
@@ -218,7 +315,7 @@ export const setVolume = (
   isMuted: boolean,
 ): Effect.Effect<void> =>
   Effect.sync(() => {
-    const player = playersByHostId.get(hostId)
+    const player = currentHost(hostId)?.player
     player?.setVolume(level)
     if (isMuted) {
       player?.mute()

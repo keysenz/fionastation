@@ -7,7 +7,7 @@ A visitor plays a video, and the page and the YouTube player stay in agreement.
 - `player-expand` keeps the same iframe across expand and collapse.
 - `player-control` pauses the real video from the bar.
 - `player-report` shows a play or pause started inside the player in the bar.
-- `player-end` moves to the next song of the same video at video end, and replaces the iframe. At the last song of a video it picks a random other live video and plays its first song. With autoplay off it pauses the same song.
+- `player-end` moves to the next song of the same video at video end, in the same iframe. At the last song of a video it picks a random other live video and plays its first song. With autoplay off it pauses the same song.
 - `player-unavailable` skips a video YouTube refuses, with every song that shares it, and lands on the first song of a random other live video. With autoplay off, or when nothing later is left, the same song stays paused and the bar says `This stream is gone`, with no toast.
 - `player-autoplay` is a switch in the bar (role `switch`, name `Autoplay`), on by default and saved in `localStorage` under `karaoke-autoplay`. Off, a video end with an empty queue keeps the same song, paused, and a failed video stays on it. The queue still plays either way.
 - `player-strict-autoplay` plays each clicked song in a browser that blocks autoplay without a gesture inside the player (Safari, Firefox, phones). After the first play, every later song plays from its start in the same iframe.

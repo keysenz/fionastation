@@ -26,6 +26,7 @@ import {
   KaraokeVideo,
   PlayableSong,
   goneVideoIdsOf,
+  timestampToSeconds,
   toPlayableSongs,
 } from '../../domain.ts'
 import {
@@ -44,7 +45,13 @@ import {
   segmentAt,
   toNudgesJson,
 } from '../../lyrics.ts'
-import { PlayerEvent, playerEvents, setPlaying, setVolume } from '../../youtube'
+import {
+  PlayerEvent,
+  runPlayer,
+  setPlaying,
+  setVolume,
+  videoEvents,
+} from '../../youtube'
 import {
   type Layers,
   OVERLAYS,
@@ -176,6 +183,7 @@ export const Message = defineMessageUnion({
   CompletedLoadVolume: { maybeValue: Schema.Option(Schema.String) },
   CompletedSaveVolume: {},
   CompletedApplyVolume: {},
+  CompletedMountPlayer: {},
   SucceededFetchLyrics: { songId: Schema.String, lyrics: Lyrics },
   FailedFetchLyrics: { songId: Schema.String, error: Schema.String },
   ClickedRetryLyrics: { songId: Schema.String },
@@ -479,26 +487,14 @@ export const WaitBeforeDismissToast = Command.define('WaitBeforeDismissToast', {
     ),
 })
 
-export const MountPlayer = Mount.defineStream('MountPlayer', {
-  args: {
-    playId: Schema.Number,
-    videoId: Schema.String,
-    startSeconds: Schema.Number,
-  },
-  messages: [Message.ReceivedPlayerEvent],
-  execute: ({ element, playId, videoId, startSeconds }) =>
-    playerEvents(element, {
+// NOTE: a YouTube script that fails to load is reported to each play by `videoEvents`, so the Mount ignores it.
+export const MountPlayer = Mount.define('MountPlayer', {
+  messages: [Message.CompletedMountPlayer],
+  execute: ({ element }) =>
+    runPlayer(element, {
       hostId: PLAYER_HOST_ID,
-      videoId,
-      playerVars: {
-        autoplay: 1,
-        controls: 1,
-        modestbranding: 1,
-        start: startSeconds,
-      },
-    }).pipe(
-      Stream.map(event => Message.ReceivedPlayerEvent({ playId, event })),
-    ),
+      playerVars: { controls: 1, modestbranding: 1 },
+    }).pipe(Effect.ignore, Effect.as(Message.CompletedMountPlayer())),
 })
 
 // SUBSCRIPTION
@@ -557,7 +553,38 @@ const queueDragStream = Stream.callback<Message>(queue =>
   ).pipe(Effect.flatMap(() => Effect.never)),
 )
 
+const PlayerLoad = Schema.Struct({
+  playId: Schema.Number,
+  videoId: Schema.String,
+  startSeconds: Schema.Number,
+})
+
 export const subscriptions = Subscription.make<Model, Message>()(entry => ({
+  nowPlayingVideo: entry(
+    { maybeLoad: Schema.Option(PlayerLoad) },
+    {
+      modelToDependencies: model => ({
+        maybeLoad: Option.map(
+          model.setlist.maybeNowPlaying,
+          ({ playId, song }) => ({
+            playId,
+            videoId: song.video_url,
+            startSeconds: timestampToSeconds(song.timestamp),
+          }),
+        ),
+      }),
+      dependenciesToStream: ({ maybeLoad }) =>
+        Option.match(maybeLoad, {
+          onNone: () => Stream.empty,
+          onSome: ({ playId, videoId, startSeconds }) =>
+            videoEvents(PLAYER_HOST_ID, { videoId, startSeconds }).pipe(
+              Stream.map(event =>
+                Message.ReceivedPlayerEvent({ playId, event }),
+              ),
+            ),
+        }),
+    },
+  ),
   queueDrag: entry(
     { isDragging: Schema.Boolean },
     {
@@ -763,8 +790,8 @@ const parseRepeat = (maybeValue: Option.Option<string>): Repeat =>
 
 /** What the visitor asks for goes through here, which saves it and tells the
  *  player. A player's own reports must not, because telling a player what it
- *  just reported would echo. A new play needs no player Command, because it
- *  mounts a new player that autoplays. */
+ *  just reported would echo. A new play needs no player Command, because the
+ *  `nowPlayingVideo` subscription loads its video. */
 const changeSetlist = (model: Model, setlist: Setlist): UpdateReturn => {
   const playbackCommand = Option.flatMap(
     Option.all({
@@ -974,7 +1001,7 @@ const updateModel = (model: Model, message: Message) =>
           }
         : { model },
 
-    // NOTE: a replaced player can still have events on their way, and acting on a late end would skip a song.
+    // NOTE: the previous play's video can still have events on their way, and acting on a late end would skip a song.
     ReceivedPlayerEvent: ({ playId, event }) =>
       Option.match(
         Option.filter(
@@ -989,10 +1016,14 @@ const updateModel = (model: Model, message: Message) =>
                 model: modifyFields(model, {
                   setlist: markPlayerReady,
                 }),
-                commands: [
-                  ApplyPlayback({ isPlaying: status === 'Playing' }),
-                  ApplyVolume(model.volume),
-                ],
+                // NOTE: loading a video starts it, and a play call while it seeks to the song's start can start it from 0.
+                commands:
+                  status === 'Paused'
+                    ? [
+                        ApplyPlayback({ isPlaying: false }),
+                        ApplyVolume(model.volume),
+                      ]
+                    : [ApplyVolume(model.volume)],
               }),
               Playing: () =>
                 recordFromPlayer(model, setStatus(model.setlist, 'Playing')),
@@ -1155,6 +1186,7 @@ const updateModel = (model: Model, message: Message) =>
 
     CompletedSaveVolume: () => ({ model }),
     CompletedApplyVolume: () => ({ model }),
+    CompletedMountPlayer: () => ({ model }),
 
     SucceededFetchLyrics: ({ songId, lyrics }) => ({
       model: modifyFields(model, {

@@ -3,11 +3,7 @@ import { AsyncData, Submodel } from 'foldkit'
 import { type Html, type HtmlBuilder, createKeyedLazy } from 'foldkit/html'
 import { twMerge } from 'tailwind-merge'
 
-import {
-  type PlayableSong,
-  type VideoKind,
-  timestampToSeconds,
-} from '../../domain.ts'
+import { type PlayableSong, type VideoKind } from '../../domain.ts'
 import { thumbnailUrl } from '../../youtube'
 import { infoButtonView, infoPanelView } from './info.ts'
 import {
@@ -1646,20 +1642,7 @@ const playerView = (
                       : 'w-full h-full',
                   ),
                 ],
-                [
-                  h.keyed('div')(`play-${nowPlaying.playId}`, [
-                    h.Class('w-full h-full'),
-                    h.OnMount(
-                      MountPlayer({
-                        playId: nowPlaying.playId,
-                        videoId: nowPlaying.song.video_url,
-                        startSeconds: timestampToSeconds(
-                          nowPlaying.song.timestamp,
-                        ),
-                      }),
-                    ),
-                  ]),
-                ],
+                [h.div([h.Class('w-full h-full'), h.OnMount(MountPlayer())])],
               ),
               isExpanded
                 ? Option.match(maybeSinging, {
