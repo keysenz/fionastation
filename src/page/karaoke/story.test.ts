@@ -55,6 +55,8 @@ const makeSong = (
 ): PlayableSong => ({
   id,
   song_title: `Song ${id}`,
+  artist: '',
+  original_title: '',
   timestamp: '00:01:00',
   created_at: 'x',
   video_url: video,

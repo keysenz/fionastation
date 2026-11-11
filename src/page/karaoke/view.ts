@@ -187,16 +187,36 @@ const songRowView = (
         ],
         [song.timestamp],
       ),
-      h.span(
+      h.div(
+        [h.Class('flex-1 min-w-0')],
         [
-          h.Class(
-            twMerge(
-              'flex-1 min-w-0 truncate text-sm font-medium transition-colors',
-              isCurrent ? 'text-white' : 'text-white group-hover:text-sky-100',
-            ),
+          h.span(
+            [
+              h.Class(
+                twMerge(
+                  'block truncate text-sm font-medium transition-colors',
+                  isCurrent
+                    ? 'text-white'
+                    : 'text-white group-hover:text-sky-100',
+                ),
+              ),
+            ],
+            highlightedView(song.song_title, search, h),
           ),
+          song.artist === ''
+            ? h.empty
+            : h.span(
+                [
+                  h.Class(
+                    twMerge(
+                      'block truncate text-xs',
+                      isCurrent ? 'text-white/80' : 'text-gray-300',
+                    ),
+                  ),
+                ],
+                highlightedView(song.artist, search, h),
+              ),
         ],
-        highlightedView(song.song_title, search, h),
       ),
       isCurrent ? equalizerView(isPlaying, h) : h.empty,
       isGone ? h.empty : addToQueueButtonView(song, h),

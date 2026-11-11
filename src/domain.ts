@@ -6,6 +6,12 @@ export type VideoKind = typeof VideoKind.Type
 export const KaraokeSong = Schema.Struct({
   id: Schema.String,
   song_title: Schema.String,
+  artist: Schema.String.pipe(
+    Schema.withDecodingDefaultTypeKey(Effect.succeed('')),
+  ),
+  original_title: Schema.String.pipe(
+    Schema.withDecodingDefaultTypeKey(Effect.succeed('')),
+  ),
   timestamp: Schema.String,
   created_at: Schema.String,
 })
