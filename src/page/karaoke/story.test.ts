@@ -286,6 +286,23 @@ test('a queue saved before songs had a kind restores as karaoke', () => {
   expect(restored.queue).toEqual([{ ...withoutKind, kind: 'karaoke' }])
 })
 
+test('a queue saved before songs had artist, version and note restores with them empty', () => {
+  const {
+    artist: _artist,
+    original_title: _originalTitle,
+    version: _version,
+    note: _note,
+    ...oldSong
+  } = a
+  const oldSave = JSON.stringify({
+    state: { queue: [oldSong], history: [oldSong] },
+    version: 0,
+  })
+  const restored = restoreSaved(emptySetlist, Option.some(oldSave))
+  expect(restored.queue).toEqual([a])
+  expect(restored.history).toEqual([a])
+})
+
 test('a saved cover keeps its kind', () => {
   const cover = makeSong('cover', 'cover-video', 'cover')
   const restored = restoreSaved(
