@@ -7,6 +7,7 @@ import { gzipSync } from 'node:zlib'
 
 import { findSongForLyrics, listKaraokeVideos, listSongIds } from './db.ts'
 import { loadOverrides, lookupLyrics, warnAboutUnknownSongs } from './lyrics.ts'
+import { loadSongbook } from './songbook.ts'
 import { isGone, startRefreshing } from './videoStatus.ts'
 
 const ROOT = resolve(import.meta.dirname, '../dist')
@@ -33,7 +34,7 @@ const hasProxySecret = (req: IncomingMessage) => {
 }
 
 // NOTE: keep in step with src/route.ts. Any other path gets the 404 status with the app's own 404 page.
-const PAGE_PATHS = new Set(['/'])
+const PAGE_PATHS = new Set(['/', '/songs'])
 
 const MOVED_PAGE_PATHS = new Set([
   '/radio',
@@ -95,6 +96,20 @@ const API_ROUTES: Record<
     cacheControl: NO_CACHE,
   }),
   '/api/get-lyrics': query => lyricsRoute(query.get('song')),
+  '/api/get-songbook': async () => {
+    const lookup = await loadSongbook()
+    return lookup.kind === 'Answered'
+      ? {
+          status: 200,
+          body: lookup.songbook,
+          cacheControl: 'public, max-age=300, s-maxage=300',
+        }
+      : {
+          status: 503,
+          body: { error: 'The song list is unavailable right now' },
+          cacheControl: 'no-store',
+        }
+  },
 }
 
 const SECURITY_HEADERS = {

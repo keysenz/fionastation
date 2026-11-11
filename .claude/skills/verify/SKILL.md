@@ -1,6 +1,6 @@
 ---
 name: verify
-description: Launch and drive the Fiona Station website (the single Foldkit page of Fio Radio with its info panel, and its read-only JSON API) in a real browser, locally or on the devbox, and capture proof. Use to confirm any UI, API, data-layer, or dependency change works in the real app.
+description: Launch and drive the Fiona Station website (the Fio Radio page with its info panel, the /songs song list, and its read-only JSON API) in a real browser, locally or on the devbox, and capture proof. Use to confirm any UI, API, data-layer, or dependency change works in the real app.
 ---
 
 # Verify Fiona Station
@@ -48,7 +48,7 @@ Require `server: ours`, the expected Foldkit version, and a non-zero count of so
 (cd .claude/skills/verify && node drive.mjs karaoke info)   # chosen journeys
 ```
 
-The journeys are `site`, `radio`, `karaoke`, `player`, `strictAutoplay`, `queueReorder`, `queueReorderTouch`, `unavailable`, `fetchFailure`, `storage`, `navigation`, `paths`, `info`, `mobile`, and `api`. `features/README.md` maps each one to what it proves. The exit code is non-zero if any check fails.
+The journeys are `site`, `radio`, `karaoke`, `songs`, `player`, `strictAutoplay`, `queueReorder`, `queueReorderTouch`, `unavailable`, `fetchFailure`, `storage`, `navigation`, `paths`, `info`, `mobile`, and `api`. `features/README.md` maps each one to what it proves. The exit code is non-zero if any check fails.
 
 ## Evidence
 

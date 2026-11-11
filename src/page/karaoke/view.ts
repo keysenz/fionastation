@@ -4,6 +4,7 @@ import { type Html, type HtmlBuilder, createKeyedLazy } from 'foldkit/html'
 import { twMerge } from 'tailwind-merge'
 
 import { type PlayableSong, type VideoKind } from '../../domain.ts'
+import { songsRouter } from '../../route'
 import { thumbnailUrl } from '../../youtube'
 import { infoButtonView, infoPanelView } from './info.ts'
 import {
@@ -725,6 +726,15 @@ const headerView = (model: Model, h: HtmlBuilder<Message>): Html =>
                 ['Fio Radio'],
               ),
             ],
+          ),
+          h.a(
+            [
+              h.Href(songsRouter()),
+              h.Class(
+                'flex items-center gap-2 min-h-10 px-4 rounded-full border border-white/15 bg-black/40 text-sm font-semibold text-gray-100 hover:bg-white/10 drop-shadow-md transition',
+              ),
+            ],
+            [h.i([h.Class('fas fa-music'), h.AriaHidden(true)]), 'Song list'],
           ),
         ],
       ),
