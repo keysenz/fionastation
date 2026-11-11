@@ -13,8 +13,16 @@ export type VideoGroup = {
 
 const FUZZY_THRESHOLD = 0.3
 
+const SEARCHED_FIELDS = [
+  'song_title',
+  'artist',
+  'version',
+  'note',
+  'original_title',
+] as const
+
 const fuzzySongs = makeFuzzySearch<PlayableSong>(
-  ['song_title', 'artist', 'original_title'],
+  SEARCHED_FIELDS,
   FUZZY_THRESHOLD,
 )
 
@@ -81,8 +89,8 @@ export const searchVideos = (
     return groups
   }
   const literal = keepMatching(groups, song =>
-    [song.song_title, song.artist, song.original_title, song.title_text].some(
-      text => text.toLowerCase().includes(needle),
+    [...SEARCHED_FIELDS.map(field => song[field]), song.title_text].some(text =>
+      text.toLowerCase().includes(needle),
     ),
   )
   if (Array.isReadonlyArrayNonEmpty(literal)) {

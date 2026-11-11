@@ -3,6 +3,7 @@ import { AsyncData } from 'foldkit'
 import type { Html, HtmlBuilder } from 'foldkit/html'
 import { twMerge } from 'tailwind-merge'
 
+import { songLabel } from '../../domain.ts'
 import {
   LyricCursor,
   Lyrics,
@@ -223,7 +224,7 @@ const captionView = (
     ? h.empty
     : h.p(
         [h.Class('text-xs text-gray-400 text-center truncate pb-1')],
-        [`Now singing: ${singing.segment.song.song_title}`],
+        [`Now singing: ${songLabel(singing.segment.song)}`],
       )
 
 const lyricsBodyView = (

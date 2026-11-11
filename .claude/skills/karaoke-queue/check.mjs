@@ -15,7 +15,7 @@ const RUNS = Number(process.env.RUNS ?? 1000);
 const S = await import(pathToFileURL(modulePath).href);
 
 const makeSong = (n) => ({
-  id: `song-${n}`, song_title: `Song ${n}`, timestamp: '00:00:01', created_at: 'x', video_url: `v${Math.ceil(n / 4)}`, title_text: 'Stream', membership: false, kind: ['karaoke', 'cover', 'original'][Math.ceil(n / 4) % 3],
+  id: `song-${n}`, song_title: `Song ${n}`, artist: '', original_title: '', version: '', note: '', timestamp: '00:00:01', created_at: 'x', video_url: `v${Math.ceil(n / 4)}`, title_text: 'Stream', membership: false, kind: ['karaoke', 'cover', 'original'][Math.ceil(n / 4) % 3],
 });
 const archive = Array.from({ length: 12 }, (_, i) => makeSong(i + 1));
 const song = fc.integer({ min: 1, max: 12 }).map(makeSong);

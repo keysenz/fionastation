@@ -26,6 +26,7 @@ import {
   KaraokeVideo,
   PlayableSong,
   goneVideoIdsOf,
+  songLabel,
   timestampToSeconds,
   toPlayableSongs,
 } from '../../domain.ts'
@@ -1100,7 +1101,7 @@ const updateModel = (model: Model, message: Message) =>
                       onSome: ({ playId: dismissId }) => ({
                         model: withSkipToast(
                           modifyFields(goneModel, { setlist: () => setlist }),
-                          nowPlayingSong.song_title,
+                          songLabel(nowPlayingSong),
                           dismissId,
                         ),
                         commands: [
@@ -1140,7 +1141,7 @@ const updateModel = (model: Model, message: Message) =>
               : {
                   model: withSkipToast(
                     modifyFields(model, { setlist: () => setlist }),
-                    previousSong.song_title,
+                    songLabel(previousSong),
                     dismissId,
                   ),
                   commands: [

@@ -3,7 +3,7 @@ import { AsyncData, Submodel } from 'foldkit'
 import { type Html, type HtmlBuilder, createKeyedLazy } from 'foldkit/html'
 import { twMerge } from 'tailwind-merge'
 
-import { type PlayableSong, type VideoKind } from '../../domain.ts'
+import { type PlayableSong, type VideoKind, songLabel } from '../../domain.ts'
 import { songsRouter } from '../../route'
 import { thumbnailUrl } from '../../youtube'
 import { infoButtonView, infoPanelView } from './info.ts'
@@ -188,36 +188,16 @@ const songRowView = (
         ],
         [song.timestamp],
       ),
-      h.div(
-        [h.Class('flex-1 min-w-0')],
+      h.span(
         [
-          h.span(
-            [
-              h.Class(
-                twMerge(
-                  'block truncate text-sm font-medium transition-colors',
-                  isCurrent
-                    ? 'text-white'
-                    : 'text-white group-hover:text-sky-100',
-                ),
-              ),
-            ],
-            highlightedView(song.song_title, search, h),
+          h.Class(
+            twMerge(
+              'flex-1 min-w-0 truncate text-sm font-medium transition-colors',
+              isCurrent ? 'text-white' : 'text-white group-hover:text-sky-100',
+            ),
           ),
-          song.artist === ''
-            ? h.empty
-            : h.span(
-                [
-                  h.Class(
-                    twMerge(
-                      'block truncate text-xs',
-                      isCurrent ? 'text-white/80' : 'text-gray-300',
-                    ),
-                  ),
-                ],
-                highlightedView(song.artist, search, h),
-              ),
         ],
+        highlightedView(songLabel(song), search, h),
       ),
       isCurrent ? equalizerView(isPlaying, h) : h.empty,
       isGone ? h.empty : addToQueueButtonView(song, h),
@@ -909,7 +889,7 @@ const queueDrawerView = (model: Model, h: HtmlBuilder<Message>): Html => {
                                   'text-sm font-medium truncate group-hover:text-sky-300 text-white drop-shadow-sm',
                                 ),
                               ],
-                              [song.song_title],
+                              [songLabel(song)],
                             ),
                             h.p(
                               [h.Class('text-xs text-gray-300 truncate')],
@@ -1002,7 +982,7 @@ const queueDrawerView = (model: Model, h: HtmlBuilder<Message>): Html => {
                                 'flex-1 min-w-0 text-sm truncate text-gray-200',
                               ),
                             ],
-                            [song.song_title],
+                            [songLabel(song)],
                           ),
                         ],
                       ),
@@ -1301,7 +1281,7 @@ const playerBarView = (
             [
               h.h3(
                 [h.Class('font-bold text-sm truncate drop-shadow-sm')],
-                [nowPlaying.song.song_title],
+                [songLabel(nowPlaying.song)],
               ),
               h.p(
                 [h.Class('hidden sm:block text-xs text-gray-300 truncate')],
@@ -1464,7 +1444,7 @@ const upNextPreviewView = (
                 [h.Class('flex items-center space-x-3 text-sm')],
                 [
                   h.span([h.Class('text-gray-300')], [`${index + 1}`]),
-                  h.span([h.Class('text-white truncate')], [song.song_title]),
+                  h.span([h.Class('text-white truncate')], [songLabel(song)]),
                 ],
               ),
             ),
@@ -1517,7 +1497,7 @@ const phoneQueueRowView = (
             [
               h.p(
                 [h.Class('text-sm font-medium truncate text-white')],
-                [song.song_title],
+                [songLabel(song)],
               ),
               h.p(
                 [h.Class('text-xs text-gray-300 truncate')],
@@ -1696,7 +1676,7 @@ const playerView = (
                     'text-xl sm:text-2xl md:text-3xl font-bold text-center mb-1 sm:mb-2 drop-shadow-lg',
                   ),
                 ],
-                [nowPlaying.song.song_title],
+                [songLabel(nowPlaying.song)],
               ),
               h.p(
                 [h.Class('text-center text-gray-400 mb-4')],

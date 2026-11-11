@@ -39,6 +39,7 @@ export function listKaraokeVideos(): Omit<KaraokeVideo, 'is_gone'>[] {
     .prepare(
       `SELECT s.id, s.song_title, COALESCE(s.artist, '') AS artist,
               COALESCE(s.original_title, '') AS original_title,
+              COALESCE(s.version, '') AS version, COALESCE(s.note, '') AS note,
               s.timestamp, s.created_at, s.video_id
        FROM karaoke_song s
        ORDER BY s.timestamp ASC`,
@@ -51,14 +52,7 @@ export function listKaraokeVideos(): Omit<KaraokeVideo, 'is_gone'>[] {
     ...video,
     membership: video.membership !== 0,
     karaoke_song: (songsByVideo.get(video.id) ?? []).map(
-      ({ id, song_title, artist, original_title, timestamp, created_at }) => ({
-        id,
-        song_title,
-        artist,
-        original_title,
-        timestamp,
-        created_at,
-      }),
+      ({ video_id: _videoId, ...song }) => song,
     ),
   }))
 }

@@ -3,15 +3,18 @@ import { Effect, Schema } from 'effect'
 export const VideoKind = Schema.Literals(['karaoke', 'cover', 'original'])
 export type VideoKind = typeof VideoKind.Type
 
+// NOTE: queues saved before these fields existed lack them, so they decode as empty.
+const TextOrEmpty = Schema.String.pipe(
+  Schema.withDecodingDefaultTypeKey(Effect.succeed('')),
+)
+
 export const KaraokeSong = Schema.Struct({
   id: Schema.String,
   song_title: Schema.String,
-  artist: Schema.String.pipe(
-    Schema.withDecodingDefaultTypeKey(Effect.succeed('')),
-  ),
-  original_title: Schema.String.pipe(
-    Schema.withDecodingDefaultTypeKey(Effect.succeed('')),
-  ),
+  artist: TextOrEmpty,
+  original_title: TextOrEmpty,
+  version: TextOrEmpty,
+  note: TextOrEmpty,
   timestamp: Schema.String,
   created_at: Schema.String,
 })
@@ -38,6 +41,15 @@ export const PlayableSong = Schema.Struct({
   ),
 })
 export type PlayableSong = typeof PlayableSong.Type
+
+export const songLabel = ({
+  song_title,
+  version,
+  artist,
+}: Pick<KaraokeSong, 'song_title' | 'version' | 'artist'>): string =>
+  song_title +
+  (version === '' ? '' : ` (${version})`) +
+  (artist === '' ? '' : ` - ${artist}`)
 
 export const toPlayableSongs = (
   videos: ReadonlyArray<KaraokeVideo>,
