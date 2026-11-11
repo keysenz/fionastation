@@ -43,7 +43,7 @@ const titleList = (
   h: HtmlBuilder<Message>,
 ): Html =>
   h.ul(
-    [h.Class('grid gap-x-6 gap-y-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4')],
+    [h.Class('grid gap-y-1')],
     titles.map(title =>
       h.li(
         [h.Class('border-b border-white/5 py-1.5 text-sm text-gray-100')],
@@ -96,7 +96,7 @@ const songbookView = (
         ['No song matches that search.'],
       )
     : h.div(
-        [h.Class('space-y-8')],
+        [h.Class('grid items-start gap-8 md:auto-cols-fr md:grid-flow-col')],
         [
           ...groups.map(group => languageSection(group, h)),
           Array.isReadonlyArrayNonEmpty(requests)
