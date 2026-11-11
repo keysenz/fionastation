@@ -11,11 +11,15 @@ const song = (
   videoTitle: string,
   artist = '',
   originalTitle = songTitle,
+  version = '',
+  note = '',
 ): PlayableSong => ({
   id,
   song_title: songTitle,
   artist,
   original_title: originalTitle,
+  version,
+  note,
   timestamp: '00:01:00',
   created_at: 'x',
   video_url: video,
@@ -31,7 +35,16 @@ const songs = [
   song('4', 'Satu Bulan (Short)', 'mid', 'Stream Bentar'),
   song('5', 'Tabako', 'mid', 'Stream Bentar'),
   song('6', 'Hello', 'mid', 'Stream Bentar', 'Adele', 'Adele - Hello ft. Ren'),
-  song('7', 'Tabako', 'old', 'Old Karaoke'),
+  song(
+    '7',
+    'Tabako',
+    'old',
+    'Old Karaoke',
+    '',
+    'Tabako',
+    'acapella',
+    'DAZBEE cover',
+  ),
 ]
 const groups = groupByVideo(songs, ['gone'])
 const shapeOf = (shown: ReturnType<typeof searchVideos>) =>
@@ -77,6 +90,11 @@ test('a search matches the artist and names kept only in the original title', ()
   expect(shapeOf(searchVideos(groups, 'kobasolo'))).toEqual([['new', ['2']]])
   expect(shapeOf(searchVideos(groups, 'ADELE'))).toEqual([['mid', ['6']]])
   expect(shapeOf(searchVideos(groups, 'ren'))).toEqual([['mid', ['6']]])
+})
+
+test('a search matches the version and the note, like the bot', () => {
+  expect(shapeOf(searchVideos(groups, 'dazbee'))).toEqual([['old', ['7']]])
+  expect(shapeOf(searchVideos(groups, 'Acapella'))).toEqual([['old', ['7']]])
 })
 
 test('a misspelled artist falls back to fuzzy matching', () => {

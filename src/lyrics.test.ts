@@ -28,6 +28,8 @@ const song = (
   song_title: title,
   artist: '',
   original_title: '',
+  version: '',
+  note: '',
   timestamp,
   created_at: 'x',
   video_url: video,

@@ -57,6 +57,8 @@ const makeSong = (
   song_title: `Song ${id}`,
   artist: '',
   original_title: '',
+  version: '',
+  note: '',
   timestamp: '00:01:00',
   created_at: 'x',
   video_url: video,
