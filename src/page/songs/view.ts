@@ -43,7 +43,7 @@ const titleList = (
   h: HtmlBuilder<Message>,
 ): Html =>
   h.ul(
-    [h.Class('grid gap-x-6 gap-y-1 sm:grid-cols-2')],
+    [h.Class('grid gap-x-6 gap-y-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4')],
     titles.map(title =>
       h.li(
         [h.Class('border-b border-white/5 py-1.5 text-sm text-gray-100')],
@@ -150,7 +150,7 @@ const searchView = (search: string, h: HtmlBuilder<Message>): Html =>
 
 export const view = Submodel.defineView<Model, Message>((model, h): Html =>
   h.main(
-    [h.Class('mx-auto w-full max-w-3xl grow px-4 py-6')],
+    [h.Class('w-full grow px-4 py-4')],
     [
       h.div(
         [
