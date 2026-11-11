@@ -139,7 +139,7 @@ const addToQueueButtonView = (
       h.span(
         [
           h.Class(
-            'hidden lg:inline text-[10px] uppercase tracking-widest whitespace-nowrap',
+            'hidden [@container(min-width:32rem)]:inline text-[10px] uppercase tracking-widest whitespace-nowrap',
           ),
           h.AriaHidden(true),
         ],
@@ -168,7 +168,7 @@ const songRowView = (
       : [
           h.Class(
             twMerge(
-              'group flex items-center gap-3 min-h-12 px-3 py-1.5 rounded-xl transition-colors cursor-pointer border',
+              'group flex items-center gap-3 min-h-12 px-3 py-1.5 rounded-xl transition-colors cursor-pointer border [container-type:inline-size]',
               isCurrent
                 ? 'bg-[#446e92]/45 border-sky-300/40'
                 : 'border-transparent hover:bg-white/10',
@@ -318,7 +318,14 @@ const videoListItemView = (
   return h.keyed('li')(
     group.videoId,
     Option.isSome(maybePlayOnTap)
-      ? [h.Class(twMerge('flex items-center gap-1 pr-2', rowClass))]
+      ? [
+          h.Class(
+            twMerge(
+              'flex items-center gap-1 pr-2 [container-type:inline-size]',
+              rowClass,
+            ),
+          ),
+        ]
       : [],
     Option.match(maybePlayOnTap, {
       onNone: () => [
