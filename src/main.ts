@@ -8,6 +8,8 @@ import { Url, toString as urlToString } from 'foldkit/url'
 
 import * as Karaoke from './page/karaoke/karaoke'
 import { view as karaokeView } from './page/karaoke/view'
+import * as Songs from './page/songs/songs'
+import { view as songsView } from './page/songs/view'
 import { notFoundView } from './page/static'
 import { AppRoute, urlToAppRoute } from './route'
 
@@ -16,6 +18,7 @@ import { AppRoute, urlToAppRoute } from './route'
 export const Model = Schema.Struct({
   route: AppRoute,
   karaoke: Karaoke.Model,
+  songs: Songs.Model,
 })
 export type Model = typeof Model.Type
 
@@ -27,6 +30,7 @@ export const Message = defineMessageUnion({
   ClickedLink: { request: UrlRequest },
   ChangedUrl: { url: Url },
   GotKaraokeMessage: { message: Karaoke.Message },
+  GotSongsMessage: { message: Songs.Message },
 })
 export type Message = typeof Message.Type
 
@@ -75,6 +79,20 @@ const foldKaraokeEntered = Update.foldChildStep({
   ...karaokeChild,
 })
 
+const songsChild = {
+  read: (model: Model) => Option.some(model.songs),
+  write: (model: Model, nextSongs: Songs.Model) =>
+    modifyFields(model, { songs: () => nextSongs }),
+  toParentMessage: (message: Songs.Message): Message =>
+    Message.GotSongsMessage({ message }),
+}
+
+const foldSongs = Update.foldChild({ update: Songs.update, ...songsChild })
+const foldSongsEntered = Update.foldChildStep({
+  update: Songs.entered,
+  ...songsChild,
+})
+
 export const subscriptions = Subscription.lift(Karaoke.subscriptions)<
   Model,
   Message
@@ -88,6 +106,7 @@ const enterRoute = (model: Model): UpdateReturn =>
   AppRoute.match<UpdateReturn>(model.route, {
     NotFound: () => ({ model }),
     Radio: () => foldKaraokeEntered(model),
+    Songs: () => foldSongsEntered(model),
   })
 
 export const update = (model: Model, message: Message) =>
@@ -120,10 +139,13 @@ export const update = (model: Model, message: Message) =>
               : enterRoute,
             layers,
           ])
-        : { model: nextModel }
+        : nextRoute._tag === model.route._tag
+          ? { model: nextModel }
+          : enterRoute(nextModel)
     },
 
     GotKaraokeMessage: ({ message }) => foldKaraoke(model, message),
+    GotSongsMessage: ({ message }) => foldSongs(model, message),
   })
 
 // INIT
@@ -132,6 +154,7 @@ export const init: Runtime.RoutingApplicationInit<Model, Message> = url => {
   const start = {
     route: urlToAppRoute(url),
     karaoke: Karaoke.init(),
+    songs: Songs.init(),
   }
   return start.route._tag === 'Radio'
     ? Update.combine(start, [
@@ -157,10 +180,18 @@ const routeView = (
         toParentMessage: message => Message.GotKaraokeMessage({ message }),
       }),
     ],
+    Songs: () => [
+      h.submodel({
+        slotId: 'songs',
+        model: model.songs,
+        view: songsView,
+        toParentMessage: message => Message.GotSongsMessage({ message }),
+      }),
+    ],
   })
 
 export const view = (model: Model, h: HtmlBuilder<Message>): Document => ({
-  title: 'Fio Radio',
+  title: model.route._tag === 'Songs' ? 'Songs | Fio Radio' : 'Fio Radio',
   body: h.div(
     [h.Class('relative flex min-h-screen flex-col overflow-x-hidden')],
     [

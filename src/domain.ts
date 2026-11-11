@@ -6,6 +6,12 @@ export type VideoKind = typeof VideoKind.Type
 export const KaraokeSong = Schema.Struct({
   id: Schema.String,
   song_title: Schema.String,
+  artist: Schema.String.pipe(
+    Schema.withDecodingDefaultTypeKey(Effect.succeed('')),
+  ),
+  original_title: Schema.String.pipe(
+    Schema.withDecodingDefaultTypeKey(Effect.succeed('')),
+  ),
   timestamp: Schema.String,
   created_at: Schema.String,
 })
@@ -61,3 +67,15 @@ export const timestampToSeconds = (timestamp: string): number => {
     .reduce((total, part) => total * 60 + part, 0)
   return Number.isNaN(seconds) ? 0 : seconds
 }
+
+export const SongbookSong = Schema.Struct({
+  title: Schema.String,
+  language: Schema.String,
+})
+export type SongbookSong = typeof SongbookSong.Type
+
+export const Songbook = Schema.Struct({
+  songs: Schema.Array(SongbookSong),
+  requests: Schema.Array(Schema.String),
+})
+export type Songbook = typeof Songbook.Type

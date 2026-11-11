@@ -26,6 +26,8 @@ const song = (
 ): PlayableSong => ({
   id,
   song_title: title,
+  artist: '',
+  original_title: '',
   timestamp,
   created_at: 'x',
   video_url: video,

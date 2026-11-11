@@ -992,6 +992,31 @@ const journeys = {
     await tabB.close();
   },
 
+  async songs(page) {
+    const { body: songbook } = await api('/api/get-songbook');
+    check('songs', 'the api serves songs and requests from the sheet', songbook.songs.length > 0 && songbook.requests.length > 0, `${songbook.songs.length} songs, ${songbook.requests.length} requests`);
+    await page.goto(BASE + '/');
+    await page.getByRole('link', { name: 'Song list' }).click();
+    await page.getByRole('heading', { name: 'Songs Fiona can sing' }).waitFor();
+    check('songs', 'the radio header links to /songs', new URL(page.url()).pathname === '/songs');
+    const rows = page.locator('main li');
+    await rows.first().waitFor();
+    const shown = await rows.count();
+    check('songs', 'every song and request is listed', shown === songbook.songs.length + songbook.requests.length, `${shown} rows`);
+    check('songs', 'the tab title names the page', (await page.title()) === 'Songs | Fio Radio');
+    await page.screenshot({ path: join(out, 'songs.png'), fullPage: true });
+    const pick = songbook.songs[songbook.songs.length - 1].title;
+    await page.getByRole('searchbox', { name: 'Search songs' }).fill(pick);
+    await step('songs', 'searching hides the songs that do not match', () => page.waitForFunction((all) => document.querySelectorAll('main li').length < all, shown));
+    check('songs', 'searching keeps the matching song', (await page.locator('main li', { hasText: pick }).count()) > 0, `${await rows.count()} rows for "${pick}"`);
+    await page.getByRole('searchbox', { name: 'Search songs' }).fill('zzzzqqq');
+    await step('songs', 'a search with no match says so', () => page.getByText('No song matches that search.').waitFor());
+    await page.getByRole('link', { name: 'Fio Radio' }).click();
+    await videoRows(page).first().waitFor();
+    check('songs', 'the page links back to the radio', new URL(page.url()).pathname === '/');
+    check('songs', '/songs answers 200 on a cold load', (await rawRequest('/songs')).status === 200);
+  },
+
   async navigation(page) {
     await page.goto(BASE + '/nope');
     await step('navigation', 'an unknown path shows the 404 page', () => page.getByText('This page could not be found.').waitFor());
