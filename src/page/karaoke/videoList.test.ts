@@ -1,4 +1,4 @@
-import { Option } from 'effect'
+import { DateTime, Option } from 'effect'
 import { expect, test } from 'vitest'
 
 import type { PlayableSong } from '../../domain.ts'
@@ -25,6 +25,7 @@ const song = (
   video_url: video,
   title_text: videoTitle,
   membership: false,
+  published_at: DateTime.makeUnsafe('2026-09-29T12:24:01Z'),
   kind: 'karaoke',
 })
 
@@ -146,4 +147,10 @@ test('with nothing chosen the first video shows, and an empty search shows none'
   expect(
     Option.isNone(resolveSelection([], Option.some('new')).maybeVideo),
   ).toBe(true)
+})
+
+test('a video group carries the publish date of its songs', () => {
+  expect(groups.map(group => DateTime.formatIso(group.publishedAt))).toEqual(
+    groups.map(() => '2026-09-29T12:24:01.000Z'),
+  )
 })

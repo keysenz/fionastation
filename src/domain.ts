@@ -1,4 +1,4 @@
-import { Effect, Schema } from 'effect'
+import { DateTime, Effect, Schema } from 'effect'
 
 export const VideoKind = Schema.Literals(['karaoke', 'cover', 'original'])
 export type VideoKind = typeof VideoKind.Type
@@ -26,21 +26,47 @@ export const KaraokeVideo = Schema.Struct({
   video_url: Schema.String,
   membership: Schema.Boolean,
   is_gone: Schema.Boolean,
+  published_at: Schema.DateTimeUtcFromString,
   kind: VideoKind,
   karaoke_song: Schema.Array(KaraokeSong),
 })
 export type KaraokeVideo = typeof KaraokeVideo.Type
+export type KaraokeVideoJson = typeof KaraokeVideo.Encoded
 
 export const PlayableSong = Schema.Struct({
   ...KaraokeSong.fields,
   video_url: Schema.String,
   title_text: Schema.String,
   membership: Schema.Boolean,
+  // NOTE: queues saved before this field existed lack it, so it decodes as the epoch. Only the archive's songs are shown with a date.
+  published_at: Schema.DateTimeUtcFromString.pipe(
+    Schema.withDecodingDefaultTypeKey(Effect.succeed(DateTime.makeUnsafe(0))),
+  ),
   kind: VideoKind.pipe(
     Schema.withDecodingDefaultTypeKey(Effect.succeed('karaoke' as const)),
   ),
 })
 export type PlayableSong = typeof PlayableSong.Type
+
+const MONTHS = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+] as const
+
+export const formatPublishDate = (publishedAt: DateTime.Utc): string => {
+  const { day, month, year } = DateTime.toPartsUtc(publishedAt)
+  return `${day} ${MONTHS[month - 1]} ${year}`
+}
 
 export const songLabel = ({
   song_title,
@@ -60,6 +86,7 @@ export const toPlayableSongs = (
       video_url: video.video_url,
       title_text: video.video_title,
       membership: video.membership,
+      published_at: video.published_at,
       kind: video.kind,
     })),
   )

@@ -1,4 +1,4 @@
-import { Option, Schema } from 'effect'
+import { DateTime, Option, Schema } from 'effect'
 import { expect, test } from 'vitest'
 
 import type { PlayableSong } from './domain.ts'
@@ -35,6 +35,7 @@ const song = (
   video_url: video,
   title_text: 'Stream',
   membership: false,
+  published_at: DateTime.makeUnsafe('2026-09-29T12:24:01Z'),
   kind: 'karaoke',
 })
 
