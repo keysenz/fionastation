@@ -1053,6 +1053,47 @@ const journeys = {
     check('songs', 'every song and request is listed', shown === songbook.songs.length + songbook.requests.length, `${shown} rows`);
     check('songs', 'the tab title names the page', (await page.title()) === 'Songs | Fio Radio');
     await page.screenshot({ path: join(out, 'songs.png'), fullPage: true });
+    await step('songs', 'the page is one screen tall and only the song list scrolls', async () => {
+      const layout = await page.evaluate(() => {
+        const list = document.querySelector('main .overflow-y-auto');
+        return { page: document.documentElement.scrollHeight, inner: innerHeight, listScrolls: list.scrollHeight > list.clientHeight };
+      });
+      if (layout.page > layout.inner || !layout.listScrolls) throw new Error(JSON.stringify(layout));
+    });
+    const notesButton = page.getByRole('button', { name: /^lagi nyatet jangan ditagih/ });
+    const notesDialog = page.getByRole('dialog');
+    const focusedId = () => page.evaluate(() => document.activeElement?.id);
+    await step('songs', 'lagi nyatet opens a centered popup with every catatan song, and Escape returns focus to the button', async () => {
+      await notesButton.click();
+      await notesDialog.waitFor();
+      await page.waitForTimeout(300);
+      const listed = await notesDialog.locator('li').count();
+      if (listed !== songbook.notes.length) throw new Error(`${listed} of ${songbook.notes.length} notes listed`);
+      if ((await focusedId()) !== 'songbook-notes-panel') throw new Error(`focus is on ${await focusedId()}`);
+      const box = await notesDialog.boundingBox();
+      if (Math.abs(box.x + box.width / 2 - 640) > 2 || Math.abs(box.y + box.height / 2 - 400) > 2) throw new Error(`popup box ${JSON.stringify(box)}`);
+      await page.screenshot({ path: join(out, 'songs-notes-desktop.png') });
+      await page.keyboard.press('Escape');
+      await notesDialog.waitFor({ state: 'detached' });
+      if ((await focusedId()) !== 'songbook-notes-button') throw new Error(`focus is on ${await focusedId()}`);
+    });
+    await step('songs', 'on a phone the popup slides up as a bottom sheet and a tap on the backdrop closes it', async () => {
+      await page.setViewportSize({ width: 375, height: 667 });
+      try {
+        await notesButton.click();
+        await notesDialog.waitFor();
+        const animation = await notesDialog.evaluate((el) => getComputedStyle(el).animationName);
+        if (animation !== 'sheet-up') throw new Error(`animation is ${animation}`);
+        await page.waitForTimeout(400);
+        const box = await notesDialog.boundingBox();
+        if (box.x !== 0 || box.width !== 375 || Math.abs(box.y + box.height - 667) > 1) throw new Error(`sheet box ${JSON.stringify(box)}`);
+        await page.screenshot({ path: join(out, 'songs-notes-375.png') });
+        await page.mouse.click(187, 10);
+        await notesDialog.waitFor({ state: 'detached' });
+      } finally {
+        await page.setViewportSize({ width: 1280, height: 800 });
+      }
+    });
     const pick = songbook.songs[songbook.songs.length - 1].title;
     await page.getByRole('searchbox', { name: 'Search songs' }).fill(pick);
     await step('songs', 'searching hides the songs that do not match', () => page.waitForFunction((all) => document.querySelectorAll('main li').length < all, shown));

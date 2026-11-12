@@ -1,4 +1,4 @@
-import { Array } from 'effect'
+import { Array, Option } from 'effect'
 import { AsyncData, Submodel } from 'foldkit'
 import { type Html, type HtmlBuilder } from 'foldkit/html'
 
@@ -8,6 +8,8 @@ import {
   type LanguageGroup,
   Message,
   type Model,
+  NOTES_BUTTON_ID,
+  NOTES_PANEL_ID,
   visibleGroups,
   visibleNotes,
   visibleRequests,
@@ -81,76 +83,143 @@ const requestsSection = (
     ],
   )
 
-const notesView = (
+const NOTES_TITLE_ID = 'songbook-notes-title'
+
+const notesButton = (isOpen: boolean, h: HtmlBuilder<Message>): Html =>
+  h.button(
+    [
+      h.Type('button'),
+      h.Id(NOTES_BUTTON_ID),
+      h.AriaHasPopup('dialog'),
+      h.AriaExpanded(isOpen),
+      h.OnClick(Message.ClickedOpenNotes()),
+      h.Class(
+        'mx-auto flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-gray-400 hover:bg-white/10 hover:text-gray-200',
+      ),
+    ],
+    [
+      'lagi nyatet jangan ditagih',
+      h.img([h.Src('/FioTSKR.webp'), h.Alt(':<'), h.Class('h-5 w-5')]),
+    ],
+  )
+
+const notesModal = (
   notes: ReadonlyArray<string>,
-  isOpen: boolean,
   h: HtmlBuilder<Message>,
 ): Html =>
   h.div(
-    [h.Class('flex flex-col items-center gap-3 pt-2')],
     [
-      h.button(
+      h.Class(
+        'fixed inset-0 z-[70] flex items-end justify-center sm:items-center sm:p-4',
+      ),
+      h.OnKeyDownPreventDefault(key =>
+        key === 'Escape'
+          ? Option.some(Message.ClickedCloseNotes())
+          : Option.none(),
+      ),
+    ],
+    [
+      h.div([
+        h.Class('absolute inset-0 bg-black/60 motion-safe:animate-fade-in'),
+        h.AriaHidden(true),
+        h.OnClick(Message.ClickedCloseNotes()),
+      ]),
+      h.div(
         [
-          h.Type('button'),
-          h.AriaExpanded(isOpen),
-          h.OnClick(Message.ToggledNotes()),
+          h.Id(NOTES_PANEL_ID),
+          h.Role('dialog'),
+          h.AriaModal(true),
+          h.AriaLabelledBy(NOTES_TITLE_ID),
+          h.Tabindex(-1),
           h.Class(
-            'flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-gray-400 hover:bg-white/10 hover:text-gray-200',
+            'relative flex max-h-[85dvh] w-full flex-col rounded-t-2xl border-t border-white/10 bg-neutral-950/95 pb-[env(safe-area-inset-bottom)] text-white shadow-2xl outline-none backdrop-blur-xl motion-safe:animate-sheet-up sm:max-w-md sm:rounded-xl sm:border sm:pb-0 sm:motion-safe:animate-pop-in',
           ),
         ],
         [
-          'lagi nyatet jangan ditagih',
-          h.img([h.Src('/FioTSKR.webp'), h.Alt(':<'), h.Class('h-5 w-5')]),
+          h.div([
+            h.Class(
+              'mx-auto mt-2 h-1.5 w-10 rounded-full bg-white/25 sm:hidden',
+            ),
+            h.AriaHidden(true),
+          ]),
+          h.div(
+            [
+              h.Class(
+                'flex items-center justify-between gap-3 border-b border-white/10 px-5 py-3',
+              ),
+            ],
+            [
+              h.h2(
+                [
+                  h.Id(NOTES_TITLE_ID),
+                  h.Class(
+                    'flex items-center gap-2 text-lg font-black uppercase tracking-tight text-[#7fb0d8]',
+                  ),
+                ],
+                [
+                  'Lagi nyatet',
+                  h.span(
+                    [h.Class('text-xs font-semibold text-gray-400')],
+                    [`${notes.length}`],
+                  ),
+                ],
+              ),
+              h.button(
+                [
+                  h.Type('button'),
+                  h.AriaLabel('Close'),
+                  h.OnClick(Message.ClickedCloseNotes()),
+                  h.Class(
+                    'flex size-9 items-center justify-center rounded-full border border-white/15 bg-white/10 hover:bg-white/20',
+                  ),
+                ],
+                [h.i([h.Class('fas fa-times'), h.AriaHidden(true)])],
+              ),
+            ],
+          ),
+          h.p(
+            [h.Class('px-5 pt-3 text-xs text-gray-400')],
+            [
+              'Songs Fiona is still noting down. Not ready yet, so no hounding :<',
+            ],
+          ),
+          h.div(
+            [
+              h.Class(
+                'min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-5',
+              ),
+            ],
+            [titleList(notes, h)],
+          ),
         ],
       ),
-      isOpen
-        ? h.ul(
-            [h.Class('grid w-full max-w-md gap-y-1 text-center')],
-            notes.map(title =>
-              h.li([h.Class('py-1 text-xs text-gray-400')], [title]),
-            ),
-          )
-        : h.empty,
     ],
   )
 
 const songbookView = (
   songbook: Songbook,
   search: string,
-  isNotesOpen: boolean,
   h: HtmlBuilder<Message>,
 ): Html => {
-  const notes = visibleNotes(songbook, search)
   const groups = visibleGroups(songbook, search).filter(group =>
     Array.isReadonlyArrayNonEmpty(group.songs),
   )
   const requests = visibleRequests(songbook, search)
-  return h.div(
-    [h.Class('space-y-8')],
-    [
-      Array.isReadonlyArrayEmpty(groups) && Array.isReadonlyArrayEmpty(requests)
-        ? h.p(
-            [h.Class('py-10 text-center text-sm text-gray-300')],
-            ['No song matches that search.'],
-          )
-        : h.div(
-            [
-              h.Class(
-                'grid items-start gap-8 md:auto-cols-fr md:grid-flow-col',
-              ),
-            ],
-            [
-              ...groups.map(group => languageSection(group, h)),
-              Array.isReadonlyArrayNonEmpty(requests)
-                ? requestsSection(requests, h)
-                : h.empty,
-            ],
-          ),
-      Array.isReadonlyArrayNonEmpty(notes)
-        ? notesView(notes, isNotesOpen, h)
-        : h.empty,
-    ],
-  )
+  return Array.isReadonlyArrayEmpty(groups) &&
+    Array.isReadonlyArrayEmpty(requests)
+    ? h.p(
+        [h.Class('py-10 text-center text-sm text-gray-300')],
+        ['No song matches that search.'],
+      )
+    : h.div(
+        [h.Class('grid items-start gap-8 md:auto-cols-fr md:grid-flow-col')],
+        [
+          ...groups.map(group => languageSection(group, h)),
+          Array.isReadonlyArrayNonEmpty(requests)
+            ? requestsSection(requests, h)
+            : h.empty,
+        ],
+      )
 }
 
 const errorView = (error: string, h: HtmlBuilder<Message>): Html =>
@@ -195,14 +264,18 @@ const searchView = (search: string, h: HtmlBuilder<Message>): Html =>
     ),
   ])
 
-export const view = Submodel.defineView<Model, Message>((model, h): Html =>
-  h.main(
-    [h.Class('w-full grow px-4 py-4')],
+export const view = Submodel.defineView<Model, Message>((model, h): Html => {
+  const notes = Option.match(AsyncData.getData(model.songbook), {
+    onNone: () => [],
+    onSome: songbook => visibleNotes(songbook, model.search),
+  })
+  return h.main(
+    [h.Class('flex h-dvh w-full flex-col p-4')],
     [
       h.div(
         [
           h.Class(
-            'space-y-5 rounded-xl border border-white/10 bg-black/75 p-5 text-white shadow-2xl backdrop-blur-xl',
+            'flex min-h-0 flex-1 flex-col gap-5 rounded-xl border border-white/10 bg-black/75 p-5 text-white shadow-2xl backdrop-blur-xl',
           ),
         ],
         [
@@ -232,14 +305,28 @@ export const view = Submodel.defineView<Model, Message>((model, h): Html =>
             ],
           ),
           searchView(model.search, h),
-          AsyncData.matchData(model.songbook, {
-            onEmpty: () => spinnerView(h),
-            onFailure: error => errorView(error, h),
-            onData: songbook =>
-              songbookView(songbook, model.search, model.isNotesOpen, h),
-          }),
+          h.div(
+            [
+              h.Class(
+                '-mr-2 min-h-0 flex-1 overflow-y-auto overscroll-contain pr-2',
+              ),
+            ],
+            [
+              AsyncData.matchData(model.songbook, {
+                onEmpty: () => spinnerView(h),
+                onFailure: error => errorView(error, h),
+                onData: songbook => songbookView(songbook, model.search, h),
+              }),
+            ],
+          ),
+          Array.isReadonlyArrayNonEmpty(notes)
+            ? notesButton(model.isNotesOpen, h)
+            : h.empty,
         ],
       ),
+      model.isNotesOpen && Array.isReadonlyArrayNonEmpty(notes)
+        ? notesModal(notes, h)
+        : h.empty,
     ],
-  ),
-)
+  )
+})

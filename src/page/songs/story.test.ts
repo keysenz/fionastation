@@ -5,6 +5,8 @@ import { expect, test } from 'vitest'
 import type { Songbook } from '../../domain.ts'
 import {
   FetchSongbook,
+  FocusNotesButton,
+  FocusNotesPanel,
   Message,
   init,
   update,
@@ -87,14 +89,16 @@ test('languages keep sheet order and a search filters songs and requests', () =>
   expect(visibleNotes(songbook, 'homura')).toEqual([])
 })
 
-test('the notes toggle opens and closes', () => {
+test('opening the notes focuses the popup, and closing returns focus to the button', () => {
   story(
     update,
     given(init()),
     model(current => expect(current.isNotesOpen).toBe(false)),
-    message(Message.ToggledNotes()),
+    message(Message.ClickedOpenNotes()),
     model(current => expect(current.isNotesOpen).toBe(true)),
-    message(Message.ToggledNotes()),
+    Command.resolve(FocusNotesPanel, Message.CompletedFocusNotesPanel()),
+    message(Message.ClickedCloseNotes()),
     model(current => expect(current.isNotesOpen).toBe(false)),
+    Command.resolve(FocusNotesButton, Message.CompletedFocusNotesButton()),
   )
 })
