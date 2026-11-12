@@ -9,6 +9,7 @@ import {
   Message,
   type Model,
   visibleGroups,
+  visibleNotes,
   visibleRequests,
 } from './songs'
 
@@ -80,30 +81,76 @@ const requestsSection = (
     ],
   )
 
+const notesView = (
+  notes: ReadonlyArray<string>,
+  isOpen: boolean,
+  h: HtmlBuilder<Message>,
+): Html =>
+  h.div(
+    [h.Class('flex flex-col items-center gap-3 pt-2')],
+    [
+      h.button(
+        [
+          h.Type('button'),
+          h.AriaExpanded(isOpen),
+          h.OnClick(Message.ToggledNotes()),
+          h.Class(
+            'flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-gray-400 hover:bg-white/10 hover:text-gray-200',
+          ),
+        ],
+        [
+          'lagi nyatet jangan ditagih',
+          h.img([h.Src('/FioTSKR.webp'), h.Alt(':<'), h.Class('h-5 w-5')]),
+        ],
+      ),
+      isOpen
+        ? h.ul(
+            [h.Class('grid w-full max-w-md gap-y-1 text-center')],
+            notes.map(title =>
+              h.li([h.Class('py-1 text-xs text-gray-400')], [title]),
+            ),
+          )
+        : h.empty,
+    ],
+  )
+
 const songbookView = (
   songbook: Songbook,
   search: string,
+  isNotesOpen: boolean,
   h: HtmlBuilder<Message>,
 ): Html => {
+  const notes = visibleNotes(songbook, search)
   const groups = visibleGroups(songbook, search).filter(group =>
     Array.isReadonlyArrayNonEmpty(group.songs),
   )
   const requests = visibleRequests(songbook, search)
-  return Array.isReadonlyArrayEmpty(groups) &&
-    Array.isReadonlyArrayEmpty(requests)
-    ? h.p(
-        [h.Class('py-10 text-center text-sm text-gray-300')],
-        ['No song matches that search.'],
-      )
-    : h.div(
-        [h.Class('grid items-start gap-8 md:auto-cols-fr md:grid-flow-col')],
-        [
-          ...groups.map(group => languageSection(group, h)),
-          Array.isReadonlyArrayNonEmpty(requests)
-            ? requestsSection(requests, h)
-            : h.empty,
-        ],
-      )
+  return h.div(
+    [h.Class('space-y-8')],
+    [
+      Array.isReadonlyArrayEmpty(groups) && Array.isReadonlyArrayEmpty(requests)
+        ? h.p(
+            [h.Class('py-10 text-center text-sm text-gray-300')],
+            ['No song matches that search.'],
+          )
+        : h.div(
+            [
+              h.Class(
+                'grid items-start gap-8 md:auto-cols-fr md:grid-flow-col',
+              ),
+            ],
+            [
+              ...groups.map(group => languageSection(group, h)),
+              Array.isReadonlyArrayNonEmpty(requests)
+                ? requestsSection(requests, h)
+                : h.empty,
+            ],
+          ),
+      Array.isReadonlyArrayNonEmpty(notes)
+        ? notesView(notes, isNotesOpen, h)
+        : h.empty,
+    ],
+  )
 }
 
 const errorView = (error: string, h: HtmlBuilder<Message>): Html =>
@@ -188,7 +235,8 @@ export const view = Submodel.defineView<Model, Message>((model, h): Html =>
           AsyncData.matchData(model.songbook, {
             onEmpty: () => spinnerView(h),
             onFailure: error => errorView(error, h),
-            onData: songbook => songbookView(songbook, model.search, h),
+            onData: songbook =>
+              songbookView(songbook, model.search, model.isNotesOpen, h),
           }),
         ],
       ),

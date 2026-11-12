@@ -89,5 +89,6 @@ export type SongbookSong = typeof SongbookSong.Type
 export const Songbook = Schema.Struct({
   songs: Schema.Array(SongbookSong),
   requests: Schema.Array(Schema.String),
+  notes: Schema.Array(Schema.String),
 })
 export type Songbook = typeof Songbook.Type

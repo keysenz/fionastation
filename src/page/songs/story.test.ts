@@ -9,6 +9,7 @@ import {
   init,
   update,
   visibleGroups,
+  visibleNotes,
   visibleRequests,
 } from './songs'
 
@@ -19,6 +20,7 @@ const songbook: Songbook = {
     { title: 'Tabako', language: 'JP' },
   ],
   requests: ['phoebe - crown'],
+  notes: ['hanako oku kawaranai mono'],
 }
 
 test('loading fetches the sheet and shows the songs it returns', () => {
@@ -79,4 +81,20 @@ test('languages keep sheet order and a search filters songs and requests', () =>
   ).toEqual([1, 0])
   expect(visibleRequests(songbook, 'crown')).toEqual(['phoebe - crown'])
   expect(visibleRequests(songbook, 'homura')).toEqual([])
+  expect(visibleNotes(songbook, 'hanako')).toEqual([
+    'hanako oku kawaranai mono',
+  ])
+  expect(visibleNotes(songbook, 'homura')).toEqual([])
+})
+
+test('the notes toggle opens and closes', () => {
+  story(
+    update,
+    given(init()),
+    model(current => expect(current.isNotesOpen).toBe(false)),
+    message(Message.ToggledNotes()),
+    model(current => expect(current.isNotesOpen).toBe(true)),
+    message(Message.ToggledNotes()),
+    model(current => expect(current.isNotesOpen).toBe(false)),
+  )
 })

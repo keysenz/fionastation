@@ -50,8 +50,11 @@ export const parseCsv = (text: string): string[][] => {
 const isRequestLabel = (label: string) =>
   label === '' || /^requests?$/i.test(label)
 
+const isNotesLabel = (label: string) => /^cat[ae]tan/i.test(label)
+
 /** The first row with any text is the header. A labelled column holds the songs
- *  of that language, and the unlabelled column holds viewer requests. */
+ *  of that language, the unlabelled or Request column holds viewer requests, and
+ *  a catatan column holds songs Fiona is still noting down. */
 export const toSongbook = (
   rows: ReadonlyArray<ReadonlyArray<string>>,
 ): Songbook => {
@@ -59,7 +62,7 @@ export const toSongbook = (
     row.some(cell => cell.trim() !== ''),
   )
   if (headerIndex === -1) {
-    return { songs: [], requests: [] }
+    return { songs: [], requests: [], notes: [] }
   }
   const labels = (rows[headerIndex] ?? []).map(cell => cell.trim())
   const body = rows.slice(headerIndex + 1)
@@ -72,12 +75,15 @@ export const toSongbook = (
   }))
   return {
     songs: columns
-      .filter(({ label }) => !isRequestLabel(label))
+      .filter(({ label }) => !isRequestLabel(label) && !isNotesLabel(label))
       .flatMap(({ label, titles }) =>
         titles.map(title => ({ title, language: label })),
       ),
     requests: columns
       .filter(({ label }) => isRequestLabel(label))
+      .flatMap(({ titles }) => titles),
+    notes: columns
+      .filter(({ label }) => isNotesLabel(label))
       .flatMap(({ titles }) => titles),
   }
 }
