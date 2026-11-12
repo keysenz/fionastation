@@ -75,6 +75,7 @@ import {
   enqueue,
   enqueueAll,
   failLoad,
+  firstSongOfEachOtherLiveVideo,
   markPlayerReady,
   moveInQueue,
   nextRepeat,
@@ -789,6 +790,19 @@ const continuationOf = (model: Model): Continuation => {
   }
 }
 
+const pickAnotherVideo = (model: Model): UpdateReturn =>
+  Option.match(model.setlist.maybeNowPlaying, {
+    onNone: () => ({ model }),
+    onSome: ({ playId, song }) =>
+      Array.match(firstSongOfEachOtherLiveVideo(continuationOf(model), song), {
+        onEmpty: () => ({ model }),
+        onNonEmpty: candidates => ({
+          model,
+          commands: [PickRandomVideo({ playId, candidates, cause: 'Ended' })],
+        }),
+      }),
+  })
+
 /** Only a saved "false" turns autoplay off, so missing or corrupt data keeps it on. */
 const parseAutoplay = (maybeValue: Option.Option<string>): boolean =>
   !Option.contains(maybeValue, 'false')
@@ -1011,9 +1025,9 @@ const updateModel = (model: Model, message: Message) =>
 
     ClickedPlayPause: () => changeSetlist(model, togglePlaying(model.setlist)),
     ClickedNext: () =>
-      seekBeside(model, 1, () =>
-        changeSetlist(model, playNext(model.setlist, model.repeat)),
-      ),
+      Array.isReadonlyArrayNonEmpty(model.setlist.queue)
+        ? changeSetlist(model, playNext(model.setlist, model.repeat))
+        : seekBeside(model, 1, () => pickAnotherVideo(model)),
     ClickedPrevious: () =>
       seekBeside(model, -1, () =>
         changeSetlist(model, playPrevious(model.setlist)),

@@ -239,7 +239,7 @@ const nextSongInVideo = (
       ),
   )
 
-const firstSongOfEachOtherLiveVideo = (
+export const firstSongOfEachOtherLiveVideo = (
   { archive, isGone }: Continuation,
   current: PlayableSong,
 ): ReadonlyArray<PlayableSong> =>

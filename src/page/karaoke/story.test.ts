@@ -1517,12 +1517,39 @@ test('previous jumps back to the start of the song before it in the same video',
   expect(back.model.setlist).toEqual(inLast.setlist)
 })
 
-test('next on the last song of a video plays the queue as before', () => {
-  const inLast = tick(playingStream(), 310).model
-  const next = update(inLast, Message.ClickedNext())
+test('next with a queue plays the queue head even when the video has a next song', () => {
+  const queued = makeSong('queued', 'elsewhere')
+  const inFirst = tick(playingStream(), 70).model
+  const withQueue = update(
+    inFirst,
+    Message.ClickedAddToQueue({ song: queued }),
+  ).model
+  const next = update(withQueue, Message.ClickedNext())
   expect(next.commands?.some(({ name }) => name === SeekPlayer.name)).toBe(
     false,
   )
+  expect(
+    Option.map(next.model.setlist.maybeNowPlaying, ({ song }) => song.id),
+  ).toEqual(Option.some('queued'))
+})
+
+test('next on the last song of a video with an empty queue picks another live video', () => {
+  const other = makeSong('other', 'elsewhere')
+  const fetched = update(
+    init(),
+    Message.SucceededFetchSongs({
+      songs: [early, late, other],
+      goneVideoIds: [],
+    }),
+  ).model
+  const inLast = tick(
+    update(fetched, Message.ClickedSong({ song: early })).model,
+    310,
+  ).model
+  const next = update(inLast, Message.ClickedNext())
+  expect(next.commands?.map(({ name, args }) => [name, args])).toEqual([
+    [PickRandomVideo.name, { playId: 1, candidates: [other], cause: 'Ended' }],
+  ])
 })
 
 test('a position before the first song fetches nothing and sings nothing', () => {
