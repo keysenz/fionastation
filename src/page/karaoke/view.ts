@@ -51,11 +51,22 @@ const songCountText = (count: number): string =>
 
 type Playback = {
   maybeNowPlaying: Option.Option<NowPlaying>
+  maybeShownSongId: Option.Option<string>
   isPlaying: boolean
 }
 
+const shownSongOf = (model: Model, nowPlaying: NowPlaying): PlayableSong =>
+  Option.match(nowSingingOf(model), {
+    onNone: () => nowPlaying.song,
+    onSome: ({ segment }) => segment.song,
+  })
+
 const playbackOf = (model: Model): Playback => ({
   maybeNowPlaying: model.setlist.maybeNowPlaying,
+  maybeShownSongId: Option.map(
+    model.setlist.maybeNowPlaying,
+    nowPlaying => shownSongOf(model, nowPlaying).id,
+  ),
   isPlaying: Option.exists(
     model.setlist.maybeNowPlaying,
     nowPlaying => nowPlaying.status === 'Playing',
@@ -604,9 +615,9 @@ const setlistPaneView = (
               ),
             ],
             group.songs.map(song => {
-              const isCurrent = Option.exists(
-                playback.maybeNowPlaying,
-                nowPlaying => nowPlaying.song.id === song.id,
+              const isCurrent = Option.contains(
+                playback.maybeShownSongId,
+                song.id,
               )
               return lazySongRow(song.id, songRowView, [
                 song,
@@ -1197,9 +1208,10 @@ const playerBarView = (
   h: HtmlBuilder<Message>,
 ): Html => {
   const isPlayerReady = nowPlaying.player === 'Ready'
+  const shownSong = shownSongOf(model, nowPlaying)
   const maybeLine = Option.flatMap(nowSingingOf(model), currentLineOf)
   const subline = Option.getOrElse(nowPlaying.maybeLoadError, () =>
-    kindLabel(nowPlaying.song.kind),
+    kindLabel(shownSong.kind),
   )
   return h.div(
     [
@@ -1288,7 +1300,7 @@ const playerBarView = (
             [
               h.h3(
                 [h.Class('font-bold text-sm truncate drop-shadow-sm')],
-                [songLabel(nowPlaying.song)],
+                [songLabel(shownSong)],
               ),
               h.p(
                 [h.Class('hidden sm:block text-xs text-gray-300 truncate')],
@@ -1683,7 +1695,7 @@ const playerView = (
                     'text-xl sm:text-2xl md:text-3xl font-bold text-center mb-1 sm:mb-2 drop-shadow-lg',
                   ),
                 ],
-                [songLabel(nowPlaying.song)],
+                [songLabel(shownSongOf(model, nowPlaying))],
               ),
               h.p(
                 [h.Class('text-center text-gray-400 mb-4')],
