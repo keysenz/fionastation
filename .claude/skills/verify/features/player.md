@@ -27,7 +27,7 @@ Preconditions:
 - **Autoplay.** The `player` journey expects the switch on by default and inside a 375px bar with a touch target of at least 40px. It also starts the last song of a live video with more than one song, seeks near the end, and expects the player on the first song (at its timestamp) of a different live video. Then it turns the switch off, seeks near the end, and expects the same song, paused, in the same iframe. After a reload `karaoke-autoplay` is `false` and the switch is off. A page with blocked storage still renders with the switch on.
 - **Proof.** Open `player-expanded.png` and `results.json` in the evidence folder.
 
-- **Strict autoplay.** Run `node drive.mjs strictAutoplay`. The journey launches its own Chromium with `--autoplay-policy=user-gesture-required`. It plays the first song of a live stream with three or more songs and expects the bar to show the play button within 10 seconds, because that browser blocks the first play. Then it expands the player and clicks the middle of the video once. Then it plays the third song of that stream and the second song of another such stream. Each must reach YouTube state 1 (playing) within 15 seconds of its timestamp, with the pause icon in the bar. A 50ms sampler expects one iframe element for the whole run. `strict-autoplay.png` holds the screenshot.
+- **Strict autoplay.** Run `node drive.mjs strictAutoplay`. The journey opens its own agent-browser session with `--args --autoplay-policy=user-gesture-required`. It plays the first song of a live stream with three or more songs and expects the bar to show the play button within 10 seconds, because that browser blocks the first play. Then it expands the player and clicks the middle of the video once. Then it plays the third song of that stream and the second song of another such stream. Each must reach YouTube state 1 (playing) within 15 seconds of its timestamp, with the pause icon in the bar. A 50ms sampler expects one iframe element for the whole run. `strict-autoplay.png` holds the screenshot.
 
 - **Loading.** The `player` journey holds YouTube's script, plays a song, and expects the expand button disabled. It then plays the next song while the script is still held and expects that later song to load once the script arrives.
 
@@ -35,7 +35,7 @@ Preconditions:
 
 ## Gotchas
 
-- Headless Chromium can block autoplay, so the journey calls `playVideo` itself before it seeks.
+- Headless Chrome can block autoplay, so the journey calls `playVideo` itself before it seeks.
 - The same-video end check starts from a song that is not the last of its video, because the last one picks a random video. The random check can land on any other live video, so it accepts any live first song.
 - The toast lasts 6 seconds, so the journey checks it before any slower step. A later private video turns the text plural.
 - Several consecutive rows can share a title, so the end check reads the loaded video and its time through `window.YT.get`, not the iframe `src`.

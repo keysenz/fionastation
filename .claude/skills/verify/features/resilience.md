@@ -20,7 +20,7 @@ Preconditions:
 
 - Doctor reports non-zero counts.
 
-- **All.** Run `node drive.mjs fetchFailure storage navigation paths mobile`. The journeys replace API responses with `page.route` and make `localStorage` throw with an init script.
+- **All.** Run `node drive.mjs fetchFailure storage navigation paths mobile`. `fetchFailure` aborts `/api/get-karaoke` with `agent-browser network route --abort`, then removes the route before Try again. The other journeys make `localStorage` throw with a per-tab init script.
 - **Proof.** Open `results.json` in the evidence folder.
 
 ## Gotchas
