@@ -14,12 +14,14 @@ const SongbookData = AsyncData.Schema(Songbook, Schema.String)
 export const Model = Schema.Struct({
   songbook: SongbookData.schema,
   search: Schema.String,
+  isNotesOpen: Schema.Boolean,
 })
 export type Model = typeof Model.Type
 
 export const init = (): Model => ({
   songbook: SongbookData.Idle(),
   search: '',
+  isNotesOpen: false,
 })
 
 // MESSAGE
@@ -29,6 +31,7 @@ export const Message = defineMessageUnion({
   FailedFetchSongbook: { error: Schema.String },
   ClickedRetryFetch: {},
   UpdatedSearch: { value: Schema.String },
+  ToggledNotes: {},
 })
 export type Message = typeof Message.Type
 
@@ -75,6 +78,9 @@ export const update = (model: Model, message: Message) =>
     UpdatedSearch: ({ value }) => ({
       model: modifyFields(model, { search: () => value }),
     }),
+    ToggledNotes: () => ({
+      model: modifyFields(model, { isNotesOpen: isOpen => !isOpen }),
+    }),
   })
 
 // QUERIES
@@ -85,7 +91,7 @@ export type LanguageGroup = Readonly<{
 }>
 
 const searchSongs = makeFuzzySearch<SongbookSong>(['title'], 0.3)
-const searchRequests = makeFuzzySearch<string>([], 0.3)
+const searchTitles = makeFuzzySearch<string>([], 0.3)
 
 /** Groups keep the sheet's column order, so the language Fiona put first stays first. */
 export const visibleGroups = (
@@ -104,4 +110,9 @@ export const visibleGroups = (
 export const visibleRequests = (
   songbook: Songbook,
   query: string,
-): ReadonlyArray<string> => searchRequests(songbook.requests, query)
+): ReadonlyArray<string> => searchTitles(songbook.requests, query)
+
+export const visibleNotes = (
+  songbook: Songbook,
+  query: string,
+): ReadonlyArray<string> => searchTitles(songbook.notes, query)
