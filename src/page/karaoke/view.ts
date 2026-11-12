@@ -314,9 +314,10 @@ const videoListItemView = (
                   [songCountText(totalSongs)],
                 )
               : kindPillView(group.kind, h),
+            h.span([h.Class('text-gray-200'), h.AriaHidden(true)], ['·']),
             h.span(
               [h.Class('text-gray-200 whitespace-nowrap')],
-              [`· ${formatPublishDate(group.publishedAt)}`],
+              [formatPublishDate(group.publishedAt)],
             ),
             group.isGone ? goneBadgeView(h) : h.empty,
           ],
