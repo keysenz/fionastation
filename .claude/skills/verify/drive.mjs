@@ -811,6 +811,62 @@ const journeys = {
     }
   },
 
+  async segmentSkip(page) {
+    const { body: videos } = await pageVideos();
+    const video = videos.find((v) => !v.is_gone && v.karaoke_song.length >= 3);
+    if (!video) throw new Error('no live video with three songs');
+    const sorted = songRows([video]).toSorted((a, b) => secondsOf(a.timestamp) - secondsOf(b.timestamp));
+    const [first, second, third] = sorted;
+    const last = sorted.at(-1);
+    const currentTime = () =>
+      page.evaluate(() => window.YT.get(document.querySelector('iframe[src*="youtube"]').id).getCurrentTime());
+    const timeNear = (seconds) =>
+      page.waitForFunction(
+        (want) => {
+          const t = window.YT.get(document.querySelector('iframe[src*="youtube"]').id).getCurrentTime();
+          return t >= want - 1 && t < want + 10;
+        },
+        seconds,
+        { timeout: 20000 },
+      ).catch(async () => {
+        throw new Error(`wanted about ${seconds}s, saw ${await currentTime()}s`);
+      });
+    await page.goto(BASE + '/');
+    await videoRows(page).first().waitFor();
+    await (await songRowOf(page, videos, second)).click();
+    await playerReady(page);
+    await playVideo(page);
+    await videoLoads(page, [video.video_url], { startSeconds: secondsOf(second.timestamp), isPlaying: true });
+    await page.waitForTimeout(2000);
+    await step('segmentSkip', 'next jumps to the next song timestamp in the same video', async () => {
+      await barButton(page, 'fa-step-forward').click();
+      await timeNear(secondsOf(third.timestamp));
+      if ((await loadedVideoId(page)) !== video.video_url) throw new Error('the video changed');
+    });
+    await page.screenshot({ path: join(out, 'segment-skip-next.png') });
+    await step('segmentSkip', 'previous jumps back to the start of the song before', async () => {
+      await page.waitForTimeout(2000);
+      await barButton(page, 'fa-step-backward').click();
+      await timeNear(secondsOf(second.timestamp));
+    });
+    await step('segmentSkip', 'previous again reaches the first song of the video', async () => {
+      await page.waitForTimeout(2000);
+      await barButton(page, 'fa-step-backward').click();
+      await timeNear(secondsOf(first.timestamp));
+    });
+    check('segmentSkip', 'only one player exists after seeking', (await page.locator('iframe[src*="youtube"]').count()) === 1);
+    await step('segmentSkip', 'next on the last song of a video does not seek within it', async () => {
+      await (await songRowOf(page, videos, last)).click();
+      await playerReady(page);
+      await playVideo(page);
+      await videoLoads(page, [video.video_url], { startSeconds: secondsOf(last.timestamp), isPlaying: true });
+      await page.waitForTimeout(2000);
+      await barButton(page, 'fa-step-forward').click();
+      await page.waitForTimeout(2000);
+      const t = await currentTime();
+      if (t < secondsOf(last.timestamp)) throw new Error(`seeked back to ${t}s`);
+    });
+  },
   async queueReorder(page) {
     await queueReorderJourney(page, 'queueReorder', { touch: false });
   },

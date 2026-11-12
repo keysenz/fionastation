@@ -39,11 +39,11 @@ import {
   type Segment,
   cursorAt,
   msIntoLyrics,
-  nextSegmentSong,
   nudge,
   nudgeOf,
   parseNudges,
   segmentAt,
+  segmentSongBeside,
   toNudgesJson,
 } from '../../lyrics.ts'
 import {
@@ -171,7 +171,6 @@ export const Message = defineMessageUnion({
   ClickedRemoveFromQueue: { index: Schema.Number },
   ClickedPlayPause: {},
   ClickedNext: {},
-  ClickedSkipSong: {},
   ClickedPrevious: {},
   ClickedToggleExpanded: {},
   ClickedCollapse: {},
@@ -710,12 +709,29 @@ export const nowSingingOf = (model: Model): Option.Option<NowSinging> =>
     return { segment, maybeLyrics, nudge: nudgeSteps, maybeCursor }
   })
 
-export const nextSegmentStartSeconds = (model: Model): Option.Option<number> =>
-  Option.map(
-    Option.flatMap(nowSingingOf(model), ({ segment }) =>
-      nextSegmentSong(allSongs(model), segment),
-    ),
-    song => timestampToSeconds(song.timestamp),
+const seekBeside = (
+  model: Model,
+  by: 1 | -1,
+  otherwise: () => UpdateReturn,
+): UpdateReturn =>
+  Option.match(
+    Option.all({
+      song: Option.flatMap(nowSingingOf(model), ({ segment }) =>
+        segmentSongBeside(allSongs(model), segment, by),
+      ),
+      nowPlaying: model.setlist.maybeNowPlaying,
+    }),
+    {
+      onNone: otherwise,
+      onSome: ({ song, nowPlaying }) => {
+        const seconds = timestampToSeconds(song.timestamp)
+        const moved = progressed(model, nowPlaying.playId, seconds)
+        return {
+          model: moved.model,
+          commands: [...(moved.commands ?? []), SeekPlayer({ seconds })],
+        }
+      },
+    },
   )
 
 const ensureLyrics = (
@@ -743,7 +759,10 @@ const currentAndNextSongIds = (model: Model): ReadonlyArray<string> =>
     onSome: ({ segment }) => [
       segment.song.id,
       ...Option.toArray(
-        Option.map(nextSegmentSong(allSongs(model), segment), song => song.id),
+        Option.map(
+          segmentSongBeside(allSongs(model), segment, 1),
+          song => song.id,
+        ),
       ),
     ],
   })
@@ -992,24 +1011,12 @@ const updateModel = (model: Model, message: Message) =>
 
     ClickedPlayPause: () => changeSetlist(model, togglePlaying(model.setlist)),
     ClickedNext: () =>
-      changeSetlist(model, playNext(model.setlist, model.repeat)),
-    ClickedPrevious: () => changeSetlist(model, playPrevious(model.setlist)),
-    ClickedSkipSong: () =>
-      Option.match(
-        Option.all({
-          seconds: nextSegmentStartSeconds(model),
-          nowPlaying: model.setlist.maybeNowPlaying,
-        }),
-        {
-          onNone: () => ({ model }),
-          onSome: ({ seconds, nowPlaying }) => {
-            const moved = progressed(model, nowPlaying.playId, seconds)
-            return {
-              model: moved.model,
-              commands: [...(moved.commands ?? []), SeekPlayer({ seconds })],
-            }
-          },
-        },
+      seekBeside(model, 1, () =>
+        changeSetlist(model, playNext(model.setlist, model.repeat)),
+      ),
+    ClickedPrevious: () =>
+      seekBeside(model, -1, () =>
+        changeSetlist(model, playPrevious(model.setlist)),
       ),
 
     ClickedToggleExpanded: () => ({

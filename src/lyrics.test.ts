@@ -10,11 +10,11 @@ import {
   Nudges,
   cursorAt,
   msIntoLyrics,
-  nextSegmentSong,
   nudge,
   nudgeOf,
   parseNudges,
   segmentAt,
+  segmentSongBeside,
   toNudgesJson,
 } from './lyrics.ts'
 
@@ -86,13 +86,17 @@ test('a video missing from the archive falls back to the clicked song alone', ()
   expect(segmentAt(archive, orphan, 10)).toEqual(Option.none())
 })
 
-test('the next segment song is the following one in the same video', () => {
+test('the songs beside a segment are its neighbours in the same video', () => {
   const segment = Option.getOrThrow(segmentAt(archive, first, 100))
-  expect(Option.map(nextSegmentSong(archive, segment), ({ id }) => id)).toEqual(
-    Option.some('b'),
-  )
+  expect(
+    Option.map(segmentSongBeside(archive, segment, 1), ({ id }) => id),
+  ).toEqual(Option.some('b'))
+  expect(segmentSongBeside(archive, segment, -1)).toEqual(Option.none())
   const last = Option.getOrThrow(segmentAt(archive, first, 4000))
-  expect(nextSegmentSong(archive, last)).toEqual(Option.none())
+  expect(segmentSongBeside(archive, last, 1)).toEqual(Option.none())
+  expect(
+    Option.map(segmentSongBeside(archive, last, -1), ({ id }) => id),
+  ).not.toEqual(Option.none())
 })
 
 const lines = (...times: number[]): [LyricLine, ...LyricLine[]] => {

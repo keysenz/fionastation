@@ -15,7 +15,6 @@ import {
   SONG_LIST_ID,
   type SkipToast,
   allSongs,
-  nextSegmentStartSeconds,
   nowSingingOf,
   queueHandleId,
 } from './karaoke'
@@ -1346,24 +1345,6 @@ const playerBarView = (
                   ]),
                 ],
               ),
-              Option.isSome(nextSegmentStartSeconds(model))
-                ? h.button(
-                    [
-                      h.Type('button'),
-                      h.AriaLabel('Skip to next song in this video'),
-                      h.OnClick(Message.ClickedSkipSong()),
-                      h.Class(
-                        'flex items-center justify-center min-h-10 min-w-10 text-gray-300 hover:text-white transition hover:scale-110 active:scale-95',
-                      ),
-                    ],
-                    [
-                      h.i([
-                        h.Class('fas fa-forward fa-lg drop-shadow-md'),
-                        h.AriaHidden(true),
-                      ]),
-                    ],
-                  )
-                : h.empty,
               h.button(
                 [
                   h.OnClick(Message.ClickedNext()),
@@ -1610,17 +1591,6 @@ const phoneControlsView = (
           ]),
         ],
       ),
-      Option.isSome(nextSegmentStartSeconds(model))
-        ? h.button(
-            [
-              h.Type('button'),
-              h.AriaLabel('Skip to next song in this video'),
-              h.OnClick(Message.ClickedSkipSong()),
-              h.Class(sideButtonClass),
-            ],
-            [h.i([h.Class('fas fa-forward fa-lg'), h.AriaHidden(true)])],
-          )
-        : h.empty,
       h.button(
         [
           h.Type('button'),
