@@ -49,6 +49,7 @@ import {
 import {
   PlayerEvent,
   runPlayer,
+  seekTo,
   setPlaying,
   setVolume,
   videoEvents,
@@ -170,6 +171,7 @@ export const Message = defineMessageUnion({
   ClickedRemoveFromQueue: { index: Schema.Number },
   ClickedPlayPause: {},
   ClickedNext: {},
+  ClickedSkipSong: {},
   ClickedPrevious: {},
   ClickedToggleExpanded: {},
   ClickedCollapse: {},
@@ -184,6 +186,7 @@ export const Message = defineMessageUnion({
   CompletedLoadVolume: { maybeValue: Schema.Option(Schema.String) },
   CompletedSaveVolume: {},
   CompletedApplyVolume: {},
+  CompletedSeekPlayer: {},
   CompletedMountPlayer: {},
   SucceededFetchLyrics: { songId: Schema.String, lyrics: Lyrics },
   FailedFetchLyrics: { songId: Schema.String, error: Schema.String },
@@ -409,6 +412,15 @@ export const SyncUrl = Command.define('SyncUrl', {
       }
       return Message.CompletedSyncUrl()
     }),
+})
+
+export const SeekPlayer = Command.define('SeekPlayer', {
+  args: { seconds: Schema.Number },
+  messages: [Message.CompletedSeekPlayer],
+  execute: ({ seconds }) =>
+    seekTo(PLAYER_HOST_ID, seconds).pipe(
+      Effect.as(Message.CompletedSeekPlayer()),
+    ),
 })
 
 export const ApplyVolume = Command.define('ApplyVolume', {
@@ -698,6 +710,14 @@ export const nowSingingOf = (model: Model): Option.Option<NowSinging> =>
     return { segment, maybeLyrics, nudge: nudgeSteps, maybeCursor }
   })
 
+export const nextSegmentStartSeconds = (model: Model): Option.Option<number> =>
+  Option.map(
+    Option.flatMap(nowSingingOf(model), ({ segment }) =>
+      nextSegmentSong(allSongs(model), segment),
+    ),
+    song => timestampToSeconds(song.timestamp),
+  )
+
 const ensureLyrics = (
   model: Model,
   songIds: ReadonlyArray<string>,
@@ -974,6 +994,23 @@ const updateModel = (model: Model, message: Message) =>
     ClickedNext: () =>
       changeSetlist(model, playNext(model.setlist, model.repeat)),
     ClickedPrevious: () => changeSetlist(model, playPrevious(model.setlist)),
+    ClickedSkipSong: () =>
+      Option.match(
+        Option.all({
+          seconds: nextSegmentStartSeconds(model),
+          nowPlaying: model.setlist.maybeNowPlaying,
+        }),
+        {
+          onNone: () => ({ model }),
+          onSome: ({ seconds, nowPlaying }) => {
+            const moved = progressed(model, nowPlaying.playId, seconds)
+            return {
+              model: moved.model,
+              commands: [...(moved.commands ?? []), SeekPlayer({ seconds })],
+            }
+          },
+        },
+      ),
 
     ClickedToggleExpanded: () => ({
       model: modifyFields(model, { isExpanded: isExpanded => !isExpanded }),
@@ -1187,6 +1224,7 @@ const updateModel = (model: Model, message: Message) =>
 
     CompletedSaveVolume: () => ({ model }),
     CompletedApplyVolume: () => ({ model }),
+    CompletedSeekPlayer: () => ({ model }),
     CompletedMountPlayer: () => ({ model }),
 
     SucceededFetchLyrics: ({ songId, lyrics }) => ({

@@ -29,6 +29,7 @@ import {
   SaveVolume,
   ScrollListToTop,
   ScrollSetlistToTop,
+  SeekPlayer,
   SyncUrl,
   type UpdateReturn,
   WaitBeforeDismissToast,
@@ -1489,6 +1490,26 @@ test("the first position inside a song fetches its lyrics and the next song's, a
   expect(second.model.maybePlayhead).toEqual(
     Option.some({ playId: 1, seconds: 72 }),
   )
+})
+
+test('skipping jumps to the next song in the same video and moves the playhead', () => {
+  const inFirst = tick(playingStream(), 70).model
+  const skipped = update(inFirst, Message.ClickedSkipSong())
+  expect(
+    skipped.commands?.map(({ name, args }) => [name, args]),
+  ).toContainEqual([SeekPlayer.name, { seconds: 300 }])
+  expect(skipped.model.maybePlayhead).toEqual(
+    Option.some({ playId: 1, seconds: 300 }),
+  )
+  expect(singingId(skipped.model)).toEqual(Option.some('late'))
+  expect(skipped.model.setlist).toEqual(inFirst.setlist)
+})
+
+test('skipping on the last song of a video does nothing', () => {
+  const inLast = tick(playingStream(), 310).model
+  const skipped = update(inLast, Message.ClickedSkipSong())
+  expect(skipped.model).toBe(inLast)
+  expect(skipped.commands).toBeUndefined()
 })
 
 test('a position before the first song fetches nothing and sings nothing', () => {
