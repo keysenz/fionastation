@@ -5,16 +5,16 @@ description: Launch and drive the Fiona Station website (the Fio Radio page with
 
 # Verify Fiona Station
 
-The user surface is a web site. `drive.mjs` drives it with Playwright, using the real pages and real song data. There are no mocks. The local app reads a snapshot of the discord bot's database. The deployed app reads the live database.
+The user surface is a web site. `drive.mjs` drives it with [agent-browser](https://github.com/vercel-labs/agent-browser), using the real pages and real song data. There are no mocks. The local app reads a snapshot of the discord bot's database. The deployed app reads the live database.
 
 Run every command from the repository root. First-time setup, once per checkout:
 
 ```sh
 source ~/.nvm/nvm.sh && nvm use
-(cd .claude/skills/verify && npm install && npx playwright install chromium)
+npm i -g agent-browser && agent-browser install
 ```
 
-Playwright stays at 1.49.1 because later releases do not support this machine's Ubuntu 20.04.
+`browser.mjs` gives the journeys a small page and locator API built on `agent-browser` commands. Clicks, fills, keys and mouse moves go through agent-browser's real input. Locators resolve inside the page with `agent-browser eval`. Each journey runs in its own `--session`, which is an isolated browser, so `localStorage` starts empty. Touch drags, holding a request mid-load, and a per-tab init script go over the CDP URL that `agent-browser get cdp-url` returns, because the CLI has no command for them.
 
 ## Launch
 

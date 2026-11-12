@@ -3,7 +3,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { chromium } from 'playwright';
+import { Session } from './browser.mjs';
 
 const BASE = process.env.BASE_URL ?? `http://localhost:${process.env.VERIFY_PORT ?? 3456}`;
 const wanted = process.argv.slice(2);
@@ -266,7 +266,7 @@ const queueReorderJourney = async (page, feature, { touch }) => {
     const box = await locator.boundingBox();
     return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
   };
-  const cdp = touch ? await page.context().newCDPSession(page) : undefined;
+  const cdp = touch ? await page.cdp() : undefined;
   const touchEvent = (type, point) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: point ? [{ x: point.x, y: point.y }] : [] });
   const dragGrip = async (drawer, fromIndex, toIndex, shotName) => {
     const start = await centerOf(grips(drawer).nth(fromIndex));
@@ -579,12 +579,7 @@ const journeys = {
     const otherFirsts = rows.filter((r, i) => !r.is_gone && r.video_url !== lastRow.video_url && rows.findIndex((x) => x.video_url === r.video_url) === i);
     if (!otherFirsts.length) throw new Error('no other live video to pick');
 
-    let releaseApi;
-    const apiHeld = new Promise((resolve) => (releaseApi = resolve));
-    await page.route('**/iframe_api*', async (route) => {
-      await apiHeld;
-      await route.continue();
-    });
+    const releaseApi = await page.holdRequests('*iframe_api*');
     await page.goto(BASE + '/');
     await videoRows(page).first().waitFor();
     await (await songRowOf(page, videos, rows[start])).click();
@@ -599,13 +594,12 @@ const journeys = {
     await step('player', 'a song clicked while the player loads is the one that plays once it has loaded', async () => {
       await (await songRowOf(page, videos, nextRow)).click();
       await bar.getByRole('heading', { name: nextRow.song_title }).waitFor();
-      releaseApi();
-      await page.unroute('**/iframe_api*');
+      await releaseApi();
       await playerReady(page);
       await videoLoads(page, [nextRow.video_url], { startSeconds: secondsOf(nextRow.timestamp) });
       await page.waitForFunction(() => !document.querySelector('[data-player-bar] button:has(i.fa-expand)').disabled);
     });
-    releaseApi();
+    await releaseApi();
     await (await songRowOf(page, videos, rows[start])).click();
     await bar.getByRole('heading', { name: rows[start].song_title }).waitFor();
     await videoLoads(page, [rows[start].video_url], { startSeconds: secondsOf(rows[start].timestamp) });
@@ -754,11 +748,9 @@ const journeys = {
     const [first, second] = videos.filter((v) => !v.is_gone && v.karaoke_song.length > 2);
     if (!second) throw new Error('the data has fewer than two live streams with three songs');
     const songOf = (video, index) => ({ ...video.karaoke_song[index], video_url: video.video_url });
-    const strict = await chromium.launch({ args: ['--autoplay-policy=user-gesture-required'] });
+    const strict = await Session.open('verify-strict-autoplay', { args: '--autoplay-policy=user-gesture-required' });
     try {
-      const page = await strict.newPage({ viewport: { width: 1280, height: 800 } });
-      const errors = [];
-      page.on('pageerror', (e) => errors.push(e.message));
+      const page = await strict.newPage();
       await page.goto(BASE + '/');
       await videoRows(page).first().waitFor();
       await page.evaluate(() => {
@@ -805,7 +797,8 @@ const journeys = {
       const frames = await page.evaluate(() => ({ max: window.__frames.max, distinct: window.__frames.seen.size }));
       check('strictAutoplay', 'one YouTube iframe served every song', frames.max === 1 && frames.distinct === 1, JSON.stringify(frames));
       await page.screenshot({ path: join(out, 'strict-autoplay.png') });
-      check('strictAutoplay', 'the strict browser logged no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
+      const { errors } = await page.problems();
+      check('strictAutoplay', 'the strict browser logged no page errors', errors.length === 0, JSON.stringify(errors.slice(0, 3)));
     } finally {
       await strict.close();
     }
@@ -872,7 +865,7 @@ const journeys = {
   },
 
   async queueReorderTouch(page) {
-    const context = await browser.newContext({ viewport: { width: 375, height: 667 }, hasTouch: true, isMobile: true });
+    const context = await Session.open('verify-touch', { viewport: { width: 375, height: 667 }, touch: true });
     const touchPage = await context.newPage();
     try {
       await queueReorderJourney(touchPage, 'queueReorderTouch', { touch: true });
@@ -992,11 +985,10 @@ const journeys = {
   },
 
   async fetchFailure(page) {
-    let blocked = true;
-    await page.route('**/api/get-karaoke', (route) => (blocked ? route.fulfill({ status: 500, body: '{}' }) : route.continue()));
+    await page.route('**/api/get-karaoke', { abort: true });
     await page.goto(BASE + '/');
     await step('fetchFailure', 'a failed fetch says so instead of showing an empty list', () => page.getByText('Could not load Fio Radio').waitFor());
-    blocked = false;
+    await page.unroute('**/api/get-karaoke');
     await step('fetchFailure', 'try again recovers without a reload', async () => {
       await page.getByRole('button', { name: 'Try again' }).click();
       await videoRows(page).first().waitFor();
@@ -1054,7 +1046,7 @@ const journeys = {
     await page.goto(BASE + '/');
     await page.getByRole('link', { name: 'Song list' }).click();
     await page.getByRole('heading', { name: 'Songs Fiona can sing' }).waitFor();
-    check('songs', 'the radio header links to /songs', new URL(page.url()).pathname === '/songs');
+    check('songs', 'the radio header links to /songs', new URL(await page.url()).pathname === '/songs');
     const rows = page.locator('main li');
     await rows.first().waitFor();
     const shown = await rows.count();
@@ -1069,7 +1061,7 @@ const journeys = {
     await step('songs', 'a search with no match says so', () => page.getByText('No song matches that search.').waitFor());
     await page.getByRole('link', { name: 'Fio Radio' }).click();
     await videoRows(page).first().waitFor();
-    check('songs', 'the page links back to the radio', new URL(page.url()).pathname === '/');
+    check('songs', 'the page links back to the radio', new URL(await page.url()).pathname === '/');
     check('songs', '/songs answers 200 on a cold load', (await rawRequest('/songs')).status === 200);
   },
 
@@ -1078,10 +1070,10 @@ const journeys = {
     await step('navigation', 'an unknown path shows the 404 page', () => page.getByText('This page could not be found.').waitFor());
     await page.getByRole('link', { name: 'Back to Fio Radio' }).click();
     await videoRows(page).first().waitFor();
-    check('navigation', 'the 404 link returns to the radio at /', new URL(page.url()).pathname === '/');
+    check('navigation', 'the 404 link returns to the radio at /', new URL(await page.url()).pathname === '/');
     await page.goBack();
     await page.getByText('This page could not be found.').waitFor();
-    check('navigation', 'browser back returns to the 404 page', page.url().endsWith('/nope'));
+    check('navigation', 'browser back returns to the 404 page', (await page.url()).endsWith('/nope'));
   },
 
   async paths() {
@@ -1604,11 +1596,11 @@ const journeys = {
       await showList(page);
       await rowOfVideo(multi).locator('button').first().click();
       await setlistOf(page).waitFor({ state: 'visible' });
-      if (!page.url().includes('v=')) throw new Error(`url ${page.url()}`);
+      if (!(await page.url()).includes('v=')) throw new Error(`url ${await page.url()}`);
       await page.goBack();
       await page.locator(STREAMS).waitFor({ state: 'visible' });
       if (await setlistOf(page).isVisible()) throw new Error('the setlist is still open');
-      if (!page.url().startsWith(BASE)) throw new Error(`left the site: ${page.url()}`);
+      if (!(await page.url()).startsWith(BASE)) throw new Error(`left the site: ${await page.url()}`);
     });
     await step('mobile', 'Back closes the queue drawer, still on the site', async () => {
       await queueHandle(page).click();
@@ -1617,7 +1609,7 @@ const journeys = {
       await page.waitForTimeout(500);
       const drawerBox = await queueDrawerOf(page).boundingBox();
       if (drawerBox.x < 375 - 1) throw new Error(`the drawer is still on screen at x ${drawerBox.x}`);
-      if (!page.url().startsWith(BASE)) throw new Error(`left the site: ${page.url()}`);
+      if (!(await page.url()).startsWith(BASE)) throw new Error(`left the site: ${await page.url()}`);
     });
     await step('mobile', 'closing a layer with its own button removes its history entry', async () => {
       const fresh = await page.context().newPage();
@@ -1630,7 +1622,7 @@ const journeys = {
       await fresh.locator(STREAMS).waitFor({ state: 'visible' });
       await fresh.waitForFunction((n) => !location.search, null);
       await fresh.goBack();
-      if (fresh.url().startsWith(BASE)) throw new Error(`a stale entry remains: ${fresh.url()}`);
+      if ((await fresh.url()).startsWith(BASE)) throw new Error(`a stale entry remains: ${await fresh.url()}`);
       await fresh.close();
       if (before < 1) throw new Error('no history');
     });
@@ -1666,28 +1658,25 @@ try {
 } catch (e) {
   check('setup', 'the server has learned which streams are gone', false, e.message);
 }
-const browser = await chromium.launch();
+const IGNORED_CONSOLE = /youtube|google|doubleclick|fontawesome|ERR_|Failed to load resource/i;
 for (const [name, journey] of Object.entries(journeys)) {
   if (wanted.length && !wanted.includes(name)) continue;
-  const context = await browser.newContext({
-    viewport: { width: 1280, height: 800 },
-  });
+  const context = await Session.open(`verify-${name}`);
   const page = await context.newPage();
-  const logged = [];
-  page.on('pageerror', (e) => logged.push(`pageerror: ${e.message}`));
-  page.on('console', (m) => {
-    if (m.type() === 'error' && !/youtube|google|doubleclick|fontawesome|ERR_|Failed to load resource/i.test(m.text() + m.location().url)) logged.push(`console: ${m.text()}`);
-  });
   try {
     await journey(page, context);
   } catch (e) {
     check(name, 'journey completed', false, e.message.split('\n')[0]);
     await page.screenshot({ path: join(out, `${name}-failure.png`) }).catch(() => {});
   }
+  const { errors, messages } = await page.problems().catch((e) => ({ errors: [`could not read errors: ${e.message}`], messages: [] }));
+  const logged = [
+    ...errors.map((e) => `pageerror: ${e.text ?? e.message ?? JSON.stringify(e)}`),
+    ...messages.filter((m) => m.type === 'error' && !IGNORED_CONSOLE.test(`${m.text} ${m.url ?? m.location?.url ?? ''}`)).map((m) => `console: ${m.text}`),
+  ];
   check(name, 'no page errors', logged.length === 0, logged.slice(0, 3).join(' | ').slice(0, 400));
   await context.close();
 }
-await browser.close();
 
 writeFileSync(join(out, 'results.json'), JSON.stringify({ base: BASE, results }, null, 2));
 const failed = results.filter((r) => !r.ok).length;
