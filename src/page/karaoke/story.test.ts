@@ -1,4 +1,4 @@
-import { Option } from 'effect'
+import { DateTime, Option } from 'effect'
 import { Command, given, message, model, story } from 'foldkit/story'
 import { expect, test } from 'vitest'
 
@@ -64,6 +64,7 @@ const makeSong = (
   video_url: video,
   title_text: 'Stream',
   membership: false,
+  published_at: DateTime.makeUnsafe('2026-09-29T12:24:01Z'),
   kind,
 })
 const [a, b] = [makeSong('a'), makeSong('b')]

@@ -1,4 +1,4 @@
-import { Array, Option } from 'effect'
+import { Array, type DateTime, Option } from 'effect'
 
 import type { PlayableSong, VideoKind } from '../../domain.ts'
 import { makeFuzzySearch } from '../../fuzzySearch'
@@ -8,6 +8,7 @@ export type VideoGroup = {
   title: string
   kind: VideoKind
   isGone: boolean
+  publishedAt: DateTime.Utc
   songs: ReadonlyArray<PlayableSong>
 }
 
@@ -42,6 +43,7 @@ export const groupByVideo = (
             title: first.title_text,
             kind: first.kind,
             isGone: goneIds.has(videoId),
+            publishedAt: first.published_at,
             songs: videoSongs,
           },
         ],

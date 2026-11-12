@@ -3,7 +3,12 @@ import { AsyncData, Submodel } from 'foldkit'
 import { type Html, type HtmlBuilder, createKeyedLazy } from 'foldkit/html'
 import { twMerge } from 'tailwind-merge'
 
-import { type PlayableSong, type VideoKind, songLabel } from '../../domain.ts'
+import {
+  type PlayableSong,
+  type VideoKind,
+  formatPublishDate,
+  songLabel,
+} from '../../domain.ts'
 import { songsRouter } from '../../route'
 import { thumbnailUrl } from '../../youtube'
 import { infoButtonView, infoPanelView } from './info.ts'
@@ -309,6 +314,10 @@ const videoListItemView = (
                   [songCountText(totalSongs)],
                 )
               : kindPillView(group.kind, h),
+            h.span(
+              [h.Class('text-gray-200 whitespace-nowrap')],
+              [`· ${formatPublishDate(group.publishedAt)}`],
+            ),
             group.isGone ? goneBadgeView(h) : h.empty,
           ],
         ),
@@ -451,6 +460,7 @@ const setlistHeaderView = (
   const countText = isSearching
     ? `${group.songs.length} of ${totalSongs} songs match`
     : songCountText(totalSongs)
+  const dateText = `${group.kind === 'karaoke' ? 'Streamed' : 'Released'} ${formatPublishDate(group.publishedAt)}`
   return h.header(
     [
       h.Class(
@@ -516,8 +526,8 @@ const setlistHeaderView = (
                 [h.Class('text-sm text-gray-100')],
                 [
                   group.isGone
-                    ? `${countText}. This stream is gone, so its songs cannot be played.`
-                    : countText,
+                    ? `${countText} · ${dateText}. This stream is gone, so its songs cannot be played.`
+                    : `${countText} · ${dateText}`,
                 ],
               ),
               group.isGone

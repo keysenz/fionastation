@@ -3,7 +3,7 @@
 // Reads the database named by DATABASE_PATH unless --from is given.
 import { readFileSync } from 'node:fs'
 
-import type { KaraokeVideo } from '../src/domain.ts'
+import type { KaraokeVideoJson } from '../src/domain.ts'
 import { LrclibUnavailable, searchTracks } from './lrclib.ts'
 import {
   type LrclibTrack,
@@ -29,7 +29,9 @@ const loadOverrides = (): Overrides =>
     ),
   )
 
-async function loadVideos(from: string | undefined): Promise<KaraokeVideo[]> {
+async function loadVideos(
+  from: string | undefined,
+): Promise<KaraokeVideoJson[]> {
   if (from === undefined) {
     const { listKaraokeVideos } = await import('./db.ts')
     return listKaraokeVideos().map(video => ({ ...video, is_gone: false }))
@@ -40,7 +42,7 @@ async function loadVideos(from: string | undefined): Promise<KaraokeVideo[]> {
   return JSON.parse(text)
 }
 
-const songsOf = (videos: ReadonlyArray<KaraokeVideo>): SongForLyrics[] =>
+const songsOf = (videos: ReadonlyArray<KaraokeVideoJson>): SongForLyrics[] =>
   videos.flatMap(video =>
     video.karaoke_song.map(song => ({
       id: song.id,
