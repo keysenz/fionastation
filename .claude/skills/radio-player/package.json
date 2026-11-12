@@ -1,0 +1,8 @@
+{
+  "name": "radio-player-check",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=26.13"
+  }
+}
