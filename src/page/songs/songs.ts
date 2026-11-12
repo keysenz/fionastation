@@ -1,5 +1,5 @@
 import { Array, Effect, Option, Result, Schema } from 'effect'
-import { AsyncData, Command, type Update } from 'foldkit'
+import { AsyncData, Command, Dom, type Update } from 'foldkit'
 import { defineMessageUnion } from 'foldkit/message'
 import { modifyFields } from 'foldkit/struct'
 
@@ -8,6 +8,9 @@ import { Songbook, type SongbookSong } from '../../domain.ts'
 import { makeFuzzySearch } from '../../fuzzySearch'
 
 // MODEL
+
+export const NOTES_BUTTON_ID = 'songbook-notes-button'
+export const NOTES_PANEL_ID = 'songbook-notes-panel'
 
 const SongbookData = AsyncData.Schema(Songbook, Schema.String)
 
@@ -31,7 +34,10 @@ export const Message = defineMessageUnion({
   FailedFetchSongbook: { error: Schema.String },
   ClickedRetryFetch: {},
   UpdatedSearch: { value: Schema.String },
-  ToggledNotes: {},
+  ClickedOpenNotes: {},
+  ClickedCloseNotes: {},
+  CompletedFocusNotesPanel: {},
+  CompletedFocusNotesButton: {},
 })
 export type Message = typeof Message.Type
 
@@ -44,6 +50,22 @@ export const FetchSongbook = Command.define('FetchSongbook', {
       onFailure: error => Message.FailedFetchSongbook({ error }),
       onSuccess: songbook => Message.SucceededFetchSongbook({ songbook }),
     }),
+  ),
+})
+
+export const FocusNotesPanel = Command.define('FocusNotesPanel', {
+  messages: [Message.CompletedFocusNotesPanel],
+  execute: Dom.focus(`#${NOTES_PANEL_ID}`).pipe(
+    Effect.ignore,
+    Effect.as(Message.CompletedFocusNotesPanel()),
+  ),
+})
+
+export const FocusNotesButton = Command.define('FocusNotesButton', {
+  messages: [Message.CompletedFocusNotesButton],
+  execute: Dom.focus(`#${NOTES_BUTTON_ID}`).pipe(
+    Effect.ignore,
+    Effect.as(Message.CompletedFocusNotesButton()),
   ),
 })
 
@@ -78,9 +100,19 @@ export const update = (model: Model, message: Message) =>
     UpdatedSearch: ({ value }) => ({
       model: modifyFields(model, { search: () => value }),
     }),
-    ToggledNotes: () => ({
-      model: modifyFields(model, { isNotesOpen: isOpen => !isOpen }),
+    ClickedOpenNotes: () => ({
+      model: modifyFields(model, { isNotesOpen: () => true }),
+      commands: [FocusNotesPanel()],
     }),
+    ClickedCloseNotes: () =>
+      model.isNotesOpen
+        ? {
+            model: modifyFields(model, { isNotesOpen: () => false }),
+            commands: [FocusNotesButton()],
+          }
+        : { model },
+    CompletedFocusNotesPanel: () => ({ model }),
+    CompletedFocusNotesButton: () => ({ model }),
   })
 
 // QUERIES
