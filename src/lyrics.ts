@@ -125,15 +125,16 @@ export const segmentAt = (
     segment => segment.startSeconds <= seconds,
   )
 
-export const nextSegmentSong = (
+export const segmentSongBeside = (
   archive: ReadonlyArray<PlayableSong>,
   segment: Segment,
+  by: 1 | -1,
 ): Option.Option<PlayableSong> => {
   const spans = spansOf(archive, segment.song)
   return Option.map(
     Option.flatMap(
       Array.findFirstIndex(spans, span => span.song.id === segment.song.id),
-      index => Array.get(spans, index + 1),
+      index => Array.get(spans, index + by),
     ),
     span => span.song,
   )

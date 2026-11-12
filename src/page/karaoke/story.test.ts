@@ -29,6 +29,7 @@ import {
   SaveVolume,
   ScrollListToTop,
   ScrollSetlistToTop,
+  SeekPlayer,
   SyncUrl,
   type UpdateReturn,
   WaitBeforeDismissToast,
@@ -1488,6 +1489,38 @@ test("the first position inside a song fetches its lyrics and the next song's, a
   expect(fetchedIds(second)).toEqual([])
   expect(second.model.maybePlayhead).toEqual(
     Option.some({ playId: 1, seconds: 72 }),
+  )
+})
+
+test('next jumps to the next song in the same video and leaves the queue alone', () => {
+  const inFirst = tick(playingStream(), 70).model
+  const skipped = update(inFirst, Message.ClickedNext())
+  expect(
+    skipped.commands?.map(({ name, args }) => [name, args]),
+  ).toContainEqual([SeekPlayer.name, { seconds: 300 }])
+  expect(skipped.model.maybePlayhead).toEqual(
+    Option.some({ playId: 1, seconds: 300 }),
+  )
+  expect(singingId(skipped.model)).toEqual(Option.some('late'))
+  expect(skipped.model.setlist).toEqual(inFirst.setlist)
+})
+
+test('previous jumps back to the start of the song before it in the same video', () => {
+  const inLast = tick(playingStream(), 310).model
+  const back = update(inLast, Message.ClickedPrevious())
+  expect(back.commands?.map(({ name, args }) => [name, args])).toContainEqual([
+    SeekPlayer.name,
+    { seconds: 60 },
+  ])
+  expect(singingId(back.model)).toEqual(Option.some('early'))
+  expect(back.model.setlist).toEqual(inLast.setlist)
+})
+
+test('next on the last song of a video plays the queue as before', () => {
+  const inLast = tick(playingStream(), 310).model
+  const next = update(inLast, Message.ClickedNext())
+  expect(next.commands?.some(({ name }) => name === SeekPlayer.name)).toBe(
+    false,
   )
 })
 

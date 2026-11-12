@@ -39,16 +39,17 @@ import {
   type Segment,
   cursorAt,
   msIntoLyrics,
-  nextSegmentSong,
   nudge,
   nudgeOf,
   parseNudges,
   segmentAt,
+  segmentSongBeside,
   toNudgesJson,
 } from '../../lyrics.ts'
 import {
   PlayerEvent,
   runPlayer,
+  seekTo,
   setPlaying,
   setVolume,
   videoEvents,
@@ -184,6 +185,7 @@ export const Message = defineMessageUnion({
   CompletedLoadVolume: { maybeValue: Schema.Option(Schema.String) },
   CompletedSaveVolume: {},
   CompletedApplyVolume: {},
+  CompletedSeekPlayer: {},
   CompletedMountPlayer: {},
   SucceededFetchLyrics: { songId: Schema.String, lyrics: Lyrics },
   FailedFetchLyrics: { songId: Schema.String, error: Schema.String },
@@ -409,6 +411,15 @@ export const SyncUrl = Command.define('SyncUrl', {
       }
       return Message.CompletedSyncUrl()
     }),
+})
+
+export const SeekPlayer = Command.define('SeekPlayer', {
+  args: { seconds: Schema.Number },
+  messages: [Message.CompletedSeekPlayer],
+  execute: ({ seconds }) =>
+    seekTo(PLAYER_HOST_ID, seconds).pipe(
+      Effect.as(Message.CompletedSeekPlayer()),
+    ),
 })
 
 export const ApplyVolume = Command.define('ApplyVolume', {
@@ -698,6 +709,31 @@ export const nowSingingOf = (model: Model): Option.Option<NowSinging> =>
     return { segment, maybeLyrics, nudge: nudgeSteps, maybeCursor }
   })
 
+const seekBeside = (
+  model: Model,
+  by: 1 | -1,
+  otherwise: () => UpdateReturn,
+): UpdateReturn =>
+  Option.match(
+    Option.all({
+      song: Option.flatMap(nowSingingOf(model), ({ segment }) =>
+        segmentSongBeside(allSongs(model), segment, by),
+      ),
+      nowPlaying: model.setlist.maybeNowPlaying,
+    }),
+    {
+      onNone: otherwise,
+      onSome: ({ song, nowPlaying }) => {
+        const seconds = timestampToSeconds(song.timestamp)
+        const moved = progressed(model, nowPlaying.playId, seconds)
+        return {
+          model: moved.model,
+          commands: [...(moved.commands ?? []), SeekPlayer({ seconds })],
+        }
+      },
+    },
+  )
+
 const ensureLyrics = (
   model: Model,
   songIds: ReadonlyArray<string>,
@@ -723,7 +759,10 @@ const currentAndNextSongIds = (model: Model): ReadonlyArray<string> =>
     onSome: ({ segment }) => [
       segment.song.id,
       ...Option.toArray(
-        Option.map(nextSegmentSong(allSongs(model), segment), song => song.id),
+        Option.map(
+          segmentSongBeside(allSongs(model), segment, 1),
+          song => song.id,
+        ),
       ),
     ],
   })
@@ -972,8 +1011,13 @@ const updateModel = (model: Model, message: Message) =>
 
     ClickedPlayPause: () => changeSetlist(model, togglePlaying(model.setlist)),
     ClickedNext: () =>
-      changeSetlist(model, playNext(model.setlist, model.repeat)),
-    ClickedPrevious: () => changeSetlist(model, playPrevious(model.setlist)),
+      seekBeside(model, 1, () =>
+        changeSetlist(model, playNext(model.setlist, model.repeat)),
+      ),
+    ClickedPrevious: () =>
+      seekBeside(model, -1, () =>
+        changeSetlist(model, playPrevious(model.setlist)),
+      ),
 
     ClickedToggleExpanded: () => ({
       model: modifyFields(model, { isExpanded: isExpanded => !isExpanded }),
@@ -1187,6 +1231,7 @@ const updateModel = (model: Model, message: Message) =>
 
     CompletedSaveVolume: () => ({ model }),
     CompletedApplyVolume: () => ({ model }),
+    CompletedSeekPlayer: () => ({ model }),
     CompletedMountPlayer: () => ({ model }),
 
     SucceededFetchLyrics: ({ songId, lyrics }) => ({

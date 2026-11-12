@@ -16,6 +16,7 @@ type YouTubePlayer = Readonly<{
   playVideo: () => void
   pauseVideo: () => void
   setVolume: (level: number) => void
+  seekTo: (seconds: number, allowSeekAhead: boolean) => void
   mute: () => void
   unMute: () => void
   getCurrentTime: () => number
@@ -306,6 +307,11 @@ export const setPlaying = (
     } else {
       host?.player.pauseVideo()
     }
+  })
+
+export const seekTo = (hostId: string, seconds: number): Effect.Effect<void> =>
+  Effect.sync(() => {
+    currentHost(hostId)?.player.seekTo(seconds, true)
   })
 
 /** iOS Safari ignores a page's volume, so there only mute has an effect. */
