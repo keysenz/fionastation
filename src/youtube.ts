@@ -242,12 +242,16 @@ export const runPlayer = (
  *  reports until the pause it asked for lands, so the wrap looks like an end. */
 type Ending = 'WaitingToPlay' | 'Watching' | 'PausingAtWrap' | 'Ended'
 
+// NOTE: a replaced load can still tick after the next one starts, and it would read the new video's time against its own.
+const currentLoadOf = new WeakMap<YouTubePlayer, object>()
+
 const loadedVideoEvents = (
   host: Host,
   video: Readonly<{ videoId: string; startSeconds: number }>,
 ): Stream.Stream<PlayerEvent> =>
   Stream.callback<PlayerEvent>(queue =>
     Effect.gen(function* () {
+      const load = {}
       const progress: {
         isLoaded: boolean
         lastSeconds: number
@@ -269,6 +273,7 @@ const loadedVideoEvents = (
       const offerProgress = (isForced: boolean) => {
         const seconds = host.player.getCurrentTime()
         if (
+          currentLoadOf.get(host.player) !== load ||
           !progress.isLoaded ||
           !Number.isFinite(seconds) ||
           progress.ending === 'PausingAtWrap'
@@ -356,6 +361,7 @@ const loadedVideoEvents = (
       yield* Effect.acquireRelease(
         Effect.sync(() => {
           host.listeners.add(listener)
+          currentLoadOf.set(host.player, load)
           host.player.loadVideoById(video)
         }),
         () => Effect.sync(() => host.listeners.delete(listener)),

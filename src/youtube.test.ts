@@ -246,3 +246,23 @@ test('a new load that first reads the previous video at its end does not end', a
   expect(tagsOf(events)).not.toContain('Ended')
   expect(clock.pauses).toBe(0)
 })
+
+test('a play near its end that another load replaced does not pause the new video', async () => {
+  const { mount, play } = await start()
+  mount()
+  play()
+  const youTube = answerScript(scriptRequests[0], 'Arrives')
+  await vi.waitFor(() => expect(youTube.loadedVideos).toHaveLength(1))
+  const report = (state: number, seconds: number) => {
+    youTube.clock.seconds = seconds
+    youTube.players[0]?.onStateChange({ data: state })
+  }
+  report(PLAYING, 40)
+  report(PLAYING, DURATION - 0.3)
+  const next = play()
+  await vi.waitFor(() => expect(youTube.loadedVideos).toHaveLength(2))
+  report(BUFFERING, 0)
+  report(PLAYING, 0.2)
+  await vi.waitFor(() => expect(progressedTo(next, 0.2)).toBe(true))
+  expect(youTube.clock.pauses).toBe(0)
+})
