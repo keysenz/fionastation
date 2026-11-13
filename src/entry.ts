@@ -1,6 +1,9 @@
 import '@fortawesome/fontawesome-free/css/all.min.css'
 import { Runtime } from 'foldkit'
 
+import { inject } from '@vercel/analytics'
+import { injectSpeedInsights } from '@vercel/speed-insights'
+
 import { Message, Model, init, subscriptions, update, view } from './main'
 
 const application = Runtime.makeApplication({
@@ -20,3 +23,5 @@ const application = Runtime.makeApplication({
 })
 
 Runtime.run(application)
+inject()
+injectSpeedInsights()
