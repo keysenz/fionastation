@@ -1,7 +1,3 @@
-"""Align each song's LRCLIB lines to Fiona's singing and write server/lyrics-aligned.json.
-
-See README.md for setup and usage.
-"""
 import argparse
 import json
 import os

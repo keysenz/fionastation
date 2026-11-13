@@ -305,8 +305,6 @@ export function judgeCandidates(
     : UNSURE
 }
 
-/** LRCLIB lines retimed to Fiona's singing by scripts/align-lyrics. Only a
- *  song's `Aligned` entries are kept; `Rejected` ones exist for the batch. */
 export type AlignedSong = Readonly<{
   songTitle: string
   lrclibId: number

@@ -1,4 +1,3 @@
-"""Which aligned lines Fiona actually sang, and the lines to serve for them."""
 import re
 from dataclasses import dataclass
 from statistics import median
@@ -61,8 +60,7 @@ def keep(segments: list[Segment]) -> Kept | Rejected:
     """Indices of the segments Fiona sang, or why the song is rejected.
 
     The aligner squeezes text that was never sung into a sliver, and it gives a
-    sung line a low probability now and then, so only a run of weak lines means
-    a section was cut from the middle.
+    sung line a low probability now and then.
     """
     survivors = [i for i, s in enumerate(segments) if s.dur_ms >= MIN_DURATION_MS]
     strong = [i for i in survivors if segments[i].prob >= SUNG_PROB]
@@ -85,32 +83,22 @@ def keep(segments: list[Segment]) -> Kept | Rejected:
 def aligned_lines(
     lines: list[LrcLine], segments: list[Segment], kept: Kept
 ) -> list[dict]:
-    """The lines to serve, each at its aligned time.
+    sung_positions = [i for i, line in enumerate(lines) if line.text.strip()]
+    retimed = {sung_positions[k]: segments[k].start_ms for k in kept.indices}
+    return breaks_follow_the_line_before(lines, retimed)
 
-    `segments` pairs with the sung lines of `lines` in order. A blank line between
-    two kept lines marks a break in the music, so it moves with the line before it.
-    """
-    shifted: list[dict] = []
-    kept_set = set(kept.indices)
-    sung_index = -1
-    shift = 0
-    for line in lines:
-        if not line.text.strip():
-            shifted.append({"atMs": line.at_ms + shift, "text": line.text})
-            continue
-        sung_index += 1
-        if sung_index in kept_set:
-            segment = segments[sung_index]
-            shift = segment.start_ms - line.at_ms
-            shifted.append({"atMs": segment.start_ms, "text": line.text})
 
-    result: list[dict] = []
-    for i, line in enumerate(shifted):
-        if line["text"].strip():
-            result.append(line)
-            continue
-        before = next((l["atMs"] for l in reversed(result) if l["text"].strip()), None)
-        after = next((l["atMs"] for l in shifted[i + 1:] if l["text"].strip()), None)
-        if before is not None and after is not None and before < line["atMs"] < after:
-            result.append(line)
-    return result
+def breaks_follow_the_line_before(lines: list[LrcLine], retimed: dict[int, int]) -> list[dict]:
+    out: list[dict] = []
+    shift: int | None = None
+    pending_break: int | None = None
+    for position, line in enumerate(lines):
+        if position in retimed:
+            if pending_break is not None and pending_break < retimed[position]:
+                out.append({"atMs": pending_break, "text": ""})
+            pending_break = None
+            shift = retimed[position] - line.at_ms
+            out.append({"atMs": retimed[position], "text": line.text})
+        elif not line.text.strip() and shift is not None:
+            pending_break = line.at_ms + shift
+    return out
