@@ -38,7 +38,7 @@ The run uses one worker thread for each autoplay and repeat setting.
 - `--depth <n>` changes the bound. The default is 6, and each extra step costs about 5 times more time. The stale-timer case of `skip-toast-always-clears` needs exactly six steps, so a lower depth leaves it to the random walks.
 - `--walks <n>` sets the number of random walks for each setting. The default is 300.
 
-Exit code 0 means that every property passes, except the known findings below, which print `FINDING`. Exit code 1 means that a property failed. `--mutants` exits with 0 only when every mutant is caught.
+Exit code 0 means that every property passes, except any known findings listed below, which print `FINDING`. Exit code 1 means that a property failed. `--mutants` exits with 0 only when every mutant is caught.
 
 ## Bounds and assumptions
 
@@ -60,7 +60,7 @@ Exit code 0 means that every property passes, except the known findings below, w
   - Every other Command's result message returns the model unchanged in `update`, so it is not delivered.
   - A refetch (`SucceededFetchSongs`) that newly reports `single` as gone can arrive while a pick is pending.
 - **Left out.** Lyrics, volume, layers, search and queue drags are not in the state, and the explorer sends none of their messages. No setlist branch reads them.
-- **Depth 6, measured at 36bbeed.** About 1.1 million distinct states and 3.8 million steps in 40 to 60 s, then 72,000 random-walk steps of 40 actions each.
+- **Depth 6, measured at 455fb32.** About 1.1 million distinct states and 3.9 million steps in 25 to 60 s, then 72,000 random-walk steps of 40 actions each.
 
 ## What it checks
 
@@ -120,11 +120,11 @@ A `FAIL` prints the property's promise, the steps in message names (`ClickedSong
 
 ## Coverage record
 
-The check was last confirmed to describe the code at commit `36bbeed283a24211d89f18a2bc739bd7c54bc651`. It covers these files and functions:
+The check was last confirmed to describe the code at commit `455fb32073bd9613de1df0fb2c92707697c79cfb`. It covers these files and functions:
 
 - `src/page/karaoke/karaoke.ts`: `update`, `updateModel` (every setlist and player branch), `seekBeside`, `playheadOf`, `progressed`, `nowSingingOf`, `pickAnotherVideo`, `continuationOf`, `changeSetlist`, `recordFromPlayer`, `withSkipToast`, and the Commands `PickRandomVideo`, `SeekPlayer`, `ApplyPlayback`, `SaveSetlist` and `WaitBeforeDismissToast`.
 - `src/page/karaoke/setlist.ts`: `play`, `playNext`, `playPrevious`, `playFromQueue`, `planAdvance`, `applyAdvance`, `planSkip`, `applySkip` and `firstSongOfEachOtherLiveVideo`.
 - `src/lyrics.ts`: `segmentAt` and `songBeside`.
 - `src/youtube.ts`: `PlayerEvent`, and `loadedVideoEvents` for the order of events.
 
-To find changes since then, run `git log 36bbeed283a24211d89f18a2bc739bd7c54bc651..HEAD -- src/page/karaoke/karaoke.ts src/page/karaoke/setlist.ts src/lyrics.ts src/youtube.ts`. Move this commit forward only after you have read those changes, confirmed that `transitions()` and the properties still describe the code, and run both commands. The `/maintain-formal-verification-skill` skill does this pass.
+To find changes since then, run `git log 455fb32073bd9613de1df0fb2c92707697c79cfb..HEAD -- src/page/karaoke/karaoke.ts src/page/karaoke/setlist.ts src/lyrics.ts src/youtube.ts`. Move this commit forward only after you have read those changes, confirmed that `transitions()` and the properties still describe the code, and run both commands. The `/maintain-formal-verification-skill` skill does this pass.
