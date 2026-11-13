@@ -1,3 +1,4 @@
+import '@fortawesome/fontawesome-free/css/all.min.css'
 import { Runtime } from 'foldkit'
 
 import { Message, Model, init, subscriptions, update, view } from './main'
