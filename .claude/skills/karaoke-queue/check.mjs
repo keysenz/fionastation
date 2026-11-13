@@ -3,7 +3,7 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { Option } from 'effect';
+import { DateTime, Option } from 'effect';
 import fc from 'fast-check';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -15,7 +15,7 @@ const RUNS = Number(process.env.RUNS ?? 1000);
 const S = await import(pathToFileURL(modulePath).href);
 
 const makeSong = (n) => ({
-  id: `song-${n}`, song_title: `Song ${n}`, artist: '', original_title: '', version: '', note: '', timestamp: '00:00:01', created_at: 'x', video_url: `v${Math.ceil(n / 4)}`, title_text: 'Stream', membership: false, kind: ['karaoke', 'cover', 'original'][Math.ceil(n / 4) % 3],
+  id: `song-${n}`, song_title: `Song ${n}`, artist: '', original_title: '', version: '', note: '', timestamp: '00:00:01', created_at: 'x', video_url: `v${Math.ceil(n / 4)}`, title_text: 'Stream', membership: false, published_at: DateTime.makeUnsafe(0), kind: ['karaoke', 'cover', 'original'][Math.ceil(n / 4) % 3],
 });
 const archive = Array.from({ length: 12 }, (_, i) => makeSong(i + 1));
 const song = fc.integer({ min: 1, max: 12 }).map(makeSong);
