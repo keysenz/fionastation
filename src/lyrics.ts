@@ -115,6 +115,22 @@ const spansOf = (
   }))
 }
 
+// NOTE: songs carry no duration, so a stream's last song has no end in the data. Six minutes is a judgment that covers most songs, not a measurement.
+const LAST_SONG_SECONDS = 360
+
+export const endSecondsOf = (segment: Segment): number =>
+  Option.getOrElse(
+    segment.maybeEndSeconds,
+    () => segment.startSeconds + LAST_SONG_SECONDS,
+  )
+
+export const segmentOf = (
+  archive: ReadonlyArray<PlayableSong>,
+  playing: PlayableSong,
+  songId: string,
+): Option.Option<Segment> =>
+  Array.findFirst(spansOf(archive, playing), ({ song }) => song.id === songId)
+
 export const segmentAt = (
   archive: ReadonlyArray<PlayableSong>,
   clicked: PlayableSong,

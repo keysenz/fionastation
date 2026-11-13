@@ -1081,6 +1081,80 @@ const journeys = {
     }, page);
   },
 
+  async lyricsRetry(page) {
+    const { body: videos } = await pageVideos();
+    const video = videos.find((v) => !v.is_gone && v.karaoke_song.length >= 3);
+    if (!video) throw new Error('no live video with three songs');
+    const [first, second] = songRows([video]).toSorted((a, b) => secondsOf(a.timestamp) - secondsOf(b.timestamp));
+    const lyricRequests = (songId) =>
+      page.evaluate(
+        (id) =>
+          performance.getEntriesByType('resource').filter((entry) => {
+            const url = new URL(entry.name);
+            return url.pathname === '/api/get-lyrics' && url.searchParams.get('song') === id;
+          }).length,
+        String(songId),
+      );
+    const requestsReach = (songId, count, timeout) =>
+      page
+        .waitForFunction(
+          ([id, want]) =>
+            performance.getEntriesByType('resource').filter((entry) => {
+              const url = new URL(entry.name);
+              return url.pathname === '/api/get-lyrics' && url.searchParams.get('song') === id;
+            }).length >= want,
+          [String(songId), count],
+          { timeout, polling: 250 },
+        )
+        .catch(async () => {
+          throw new Error(`${await lyricRequests(songId)} lyrics requests for the song, wanted ${count} within ${timeout / 1000}s`);
+        });
+    const currentTime = () => page.evaluate(() => window.YT.get(document.querySelector('iframe[src*="youtube"]').id).getCurrentTime());
+    const waiting = page.locator('[data-lyrics-retry="Waiting"]').first();
+    await page.routeBody('**/api/get-lyrics*', 'not lyrics');
+    await page.goto(BASE + '/');
+    await videoRows(page).first().waitFor();
+    await (await songRowOf(page, videos, first)).click();
+    await playerReady(page);
+    await playVideo(page);
+    await videoLoads(page, [video.video_url], { startSeconds: secondsOf(first.timestamp), isPlaying: true });
+    await page.locator('[data-player-bar]').getByRole('button', { name: 'Expand player' }).click();
+    await step('lyricsRetry', 'lyrics that fail to load show a retry on its way, with a Try again button', async () => {
+      await waiting.waitFor({ timeout: 15000 });
+      await waiting.getByRole('button', { name: 'Try again' }).waitFor();
+      await page.screenshot({ path: join(out, 'lyrics-retry-waiting.png') });
+    }, page);
+    await step('lyricsRetry', 'the radio fetches the sung song\'s lyrics again by itself while it is sung', async () => {
+      await requestsReach(first.id, 2, 25000);
+    }, page);
+    let afterEnd = 0;
+    await step('lyricsRetry', 'once the playhead passes the song\'s end, the radio stops retrying its lyrics', async () => {
+      const target = secondsOf(second.timestamp) + 5;
+      await page.evaluate((seconds) => window.YT.get(document.querySelector('iframe[src*="youtube"]').id).seekTo(seconds, true), target);
+      await page.waitForFunction((want) => window.YT.get(document.querySelector('iframe[src*="youtube"]').id).getCurrentTime() >= want - 1, target, { timeout: 15000 });
+      await page.waitForTimeout(2000);
+      afterEnd = await lyricRequests(first.id);
+      await page.waitForTimeout(20000);
+      const later = await lyricRequests(first.id);
+      if (later !== afterEnd) throw new Error(`${later - afterEnd} lyrics requests for the first song after the playhead passed its end`);
+      if ((await currentTime()) < target + 15) throw new Error('the video did not keep playing past the song');
+    }, page);
+    await step('lyricsRetry', 'going back to the song fetches its lyrics again at once', async () => {
+      await barButton(page, 'fa-step-backward').click();
+      await requestsReach(first.id, afterEnd + 1, 8000);
+      await waiting.waitFor({ timeout: 10000 });
+    }, page);
+    await page.unroute('**/api/get-lyrics*');
+    await step('lyricsRetry', 'Try again, once the server answers, replaces the retry with the lyrics', async () => {
+      const before = await lyricRequests(first.id);
+      await waiting.getByRole('button', { name: 'Try again' }).click();
+      await requestsReach(first.id, before + 1, 15000);
+      await page.waitForTimeout(1000);
+      if (await page.locator('[data-lyrics-retry]').count()) throw new Error('the retry still shows after the server answered');
+      await page.screenshot({ path: join(out, 'lyrics-retry-loaded.png') });
+    }, page);
+  },
+
   async fetchFailure(page) {
     await page.routeAbort('**/api/get-karaoke');
     await page.goto(BASE + '/');
