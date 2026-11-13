@@ -6,7 +6,12 @@ import { extname, join, resolve, sep } from 'node:path'
 import { gzipSync } from 'node:zlib'
 
 import { findSongForLyrics, listKaraokeVideos, listSongIds } from './db.ts'
-import { loadOverrides, lookupLyrics, warnAboutUnknownSongs } from './lyrics.ts'
+import {
+  loadAlignments,
+  loadOverrides,
+  lookupLyrics,
+  warnAboutUnknownSongs,
+} from './lyrics.ts'
 import { loadSongbook } from './songbook.ts'
 import { isGone, startRefreshing } from './videoStatus.ts'
 
@@ -56,6 +61,9 @@ const LYRICS_CACHE = 'public, max-age=3600, s-maxage=3600'
 const lyricsOverrides = loadOverrides(
   join(import.meta.dirname, 'lyrics-overrides.json'),
 )
+const lyricsAlignments = loadAlignments(
+  join(import.meta.dirname, 'lyrics-aligned.json'),
+)
 
 const lyricsRoute = async (songId: string | null): Promise<ApiReply> => {
   if (!songId) {
@@ -73,7 +81,7 @@ const lyricsRoute = async (songId: string | null): Promise<ApiReply> => {
       cacheControl: NO_CACHE,
     }
   }
-  const lookup = await lookupLyrics(song, lyricsOverrides)
+  const lookup = await lookupLyrics(song, lyricsOverrides, lyricsAlignments)
   return lookup.kind === 'Answered'
     ? { status: 200, body: lookup.lyrics, cacheControl: LYRICS_CACHE }
     : {

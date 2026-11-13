@@ -1,8 +1,9 @@
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 
 import type { Lyrics } from '../src/lyrics.ts'
 import { LrclibUnavailable, getTrack, searchTracks } from './lrclib.ts'
 import {
+  type Alignments,
   type LookupPlan,
   type LrclibTrack,
   type Overrides,
@@ -10,12 +11,15 @@ import {
   type Verdict,
   isExactSyncedTitle,
   judgeCandidates,
+  noAlignments,
   normalizeTitle,
+  parseAlignments,
   parseOverrides,
   planKey,
   planLookup,
   toLyrics,
   verdictForChosenTrack,
+  withAlignment,
 } from './lyricsMatch.ts'
 
 export type LyricsLookup =
@@ -32,6 +36,18 @@ export function loadOverrides(path: string): Overrides {
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error)
     throw new Error(`Invalid lyrics overrides in ${path}: ${reason}`, {
+      cause: error,
+    })
+  }
+}
+
+export function loadAlignments(path: string): Alignments {
+  if (!existsSync(path)) return noAlignments
+  try {
+    return parseAlignments(JSON.parse(readFileSync(path, 'utf8')))
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error)
+    throw new Error(`Invalid lyrics alignments in ${path}: ${reason}`, {
       cause: error,
     })
   }
@@ -141,6 +157,7 @@ async function tracksFor(
 export async function lookupLyrics(
   song: SongForLyrics,
   overrides: Overrides,
+  alignments: Alignments,
 ): Promise<LyricsLookup> {
   const { plan, offsetMs, ignoredSongFix } = planLookup(song, overrides)
   if (ignoredSongFix) {
@@ -160,7 +177,13 @@ export async function lookupLyrics(
           ? verdictForChosenTrack(chosen)
           : notFound
         : judgeCandidates(plan, tracks, song.spanSeconds)
-    return { kind: 'Answered', lyrics: toLyrics(verdict, offsetMs) }
+    return {
+      kind: 'Answered',
+      lyrics: toLyrics(
+        withAlignment(verdict, song, alignments.get(song.id)),
+        offsetMs,
+      ),
+    }
   } catch (error) {
     if (error instanceof LrclibUnavailable) return { kind: 'Unavailable' }
     throw error

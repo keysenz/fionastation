@@ -305,6 +305,34 @@ export function judgeCandidates(
     : UNSURE
 }
 
+/** LRCLIB lines retimed to Fiona's singing by scripts/align-lyrics. Only a
+ *  song's `Aligned` entries are kept; `Rejected` ones exist for the batch. */
+export type AlignedSong = Readonly<{
+  songTitle: string
+  lrclibId: number
+  lines: SyncedLines
+}>
+
+export type Alignments = ReadonlyMap<string, AlignedSong>
+
+export const noAlignments: Alignments = new Map()
+
+export function withAlignment(
+  verdict: Verdict,
+  song: SongForLyrics,
+  aligned: AlignedSong | undefined,
+): Verdict {
+  if (
+    verdict.kind !== 'Picked' ||
+    aligned === undefined ||
+    aligned.lrclibId !== verdict.track.id ||
+    normalizeTitle(aligned.songTitle) !== normalizeTitle(song.title)
+  ) {
+    return verdict
+  }
+  return { ...verdict, lines: aligned.lines }
+}
+
 export function toLyrics(verdict: Verdict, offsetMs: number): Lyrics {
   if (verdict.kind === 'Missing') {
     return { _tag: 'Missing', reason: verdict.reason }
@@ -410,4 +438,54 @@ export function parseOverrides(json: unknown): Overrides {
     songs.set(id, { ...parseFix(value, path), songTitle })
   }
   return { titles, songs }
+}
+
+const parseAlignedLines = (value: unknown, path: string): SyncedLines => {
+  if (!Array.isArray(value)) throw new Error(`${path}: expected an array`)
+  const lines = value.map((line: unknown, index) => {
+    const linePath = `${path}[${index}]`
+    if (!isRecord(line)) throw new Error(`${linePath}: expected an object`)
+    const { atMs, text } = line
+    if (typeof atMs !== 'number' || !Number.isSafeInteger(atMs)) {
+      throw new Error(`${linePath}.atMs: expected an integer`)
+    }
+    if (typeof text !== 'string') {
+      throw new Error(`${linePath}.text: expected a string`)
+    }
+    return { atMs, text }
+  })
+  if (!isNonEmpty(lines)) throw new Error(`${path}: expected at least one line`)
+  const outOfOrder = lines.findIndex(
+    (line, index) => index > 0 && (lines[index - 1]?.atMs ?? 0) > line.atMs,
+  )
+  if (outOfOrder !== -1) {
+    throw new Error(`${path}[${outOfOrder}].atMs: lines must be in time order`)
+  }
+  return lines
+}
+
+export function parseAlignments(json: unknown): Alignments {
+  if (!isRecord(json)) throw new Error('$: expected an object')
+  const alignments = new Map<string, AlignedSong>()
+  for (const [id, entry] of Object.entries(json)) {
+    const path = `$[${JSON.stringify(id)}]`
+    if (!isRecord(entry)) throw new Error(`${path}: expected an object`)
+    const { status, songTitle, lrclibId, lines } = entry
+    if (typeof songTitle !== 'string') {
+      throw new Error(`${path}.songTitle: expected a string`)
+    }
+    if (typeof lrclibId !== 'number' || !Number.isSafeInteger(lrclibId)) {
+      throw new Error(`${path}.lrclibId: expected an integer`)
+    }
+    if (status === 'Aligned') {
+      alignments.set(id, {
+        songTitle,
+        lrclibId,
+        lines: parseAlignedLines(lines, `${path}.lines`),
+      })
+    } else if (status !== 'Rejected') {
+      throw new Error(`${path}.status: expected Aligned or Rejected`)
+    }
+  }
+  return alignments
 }

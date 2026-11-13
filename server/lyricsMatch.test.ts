@@ -12,11 +12,14 @@ import {
   judgeCandidates,
   noOverrides,
   normalizeTitle,
+  parseAlignments,
   parseLrc,
   parseOverrides,
   planKey,
   planLookup,
   toLyrics,
+  verdictForChosenTrack,
+  withAlignment,
 } from './lyricsMatch.ts'
 
 const fixture = (name: string): LrclibTrack[] =>
@@ -325,4 +328,113 @@ test('the real overrides file parses', () => {
     readFileSync(new URL('./lyrics-overrides.json', import.meta.url), 'utf8'),
   )
   expect(() => parseOverrides(raw)).not.toThrow()
+})
+
+const pretenderLrclib = verdictForChosenTrack(
+  track(3821917, 'Pretender', 'Official髭男dism', 326, {
+    syncedLyrics: '[00:32.13]君とのラブストーリー\n[00:35.43]それは予想通り',
+  }),
+)
+
+const pretenderAligned = {
+  songTitle: 'Pretender',
+  lrclibId: 3821917,
+  lines: [
+    { atMs: 4380, text: '君とのラブストーリー' },
+    { atMs: 7160, text: 'それは予想通り' },
+  ],
+} as const
+
+const lrclibTiming = [32130, 35430]
+
+const servedTimes = (lyrics: ReturnType<typeof toLyrics>) =>
+  lyrics._tag === 'Synced' ? lyrics.lines.map(line => line.atMs) : []
+
+test('an alignment for the picked track and current title replaces the LRCLIB timing', () => {
+  const lyrics = toLyrics(
+    withAlignment(pretenderLrclib, song('Pretender'), pretenderAligned),
+    -1500,
+  )
+  expect(servedTimes(lyrics)).toEqual([4380, 7160])
+  expect(lyrics).toMatchObject({
+    offsetMs: -1500,
+    credit: { lrclibId: 3821917 },
+  })
+})
+
+test('a title that normalizes the same still takes the alignment', () => {
+  const lyrics = toLyrics(
+    withAlignment(
+      pretenderLrclib,
+      song('PRETENDER (short ver.)'),
+      pretenderAligned,
+    ),
+    0,
+  )
+  expect(servedTimes(lyrics)).toEqual([4380, 7160])
+})
+
+test('an alignment is ignored unless it was made for this track and this title', () => {
+  for (const [current, aligned] of [
+    [song('Pretender'), undefined],
+    [song('Pretender'), { ...pretenderAligned, lrclibId: 999 }],
+    [song('Betelgeuse'), pretenderAligned],
+  ] as const) {
+    expect(
+      servedTimes(
+        toLyrics(withAlignment(pretenderLrclib, current, aligned), 0),
+      ),
+    ).toEqual(lrclibTiming)
+  }
+})
+
+test('an alignment never turns missing lyrics into lyrics', () => {
+  expect(
+    toLyrics(
+      withAlignment(
+        { kind: 'Missing', reason: 'Unsure' },
+        song('Pretender'),
+        pretenderAligned,
+      ),
+      0,
+    ),
+  ).toEqual({ _tag: 'Missing', reason: 'Unsure' })
+})
+
+test('parseAlignments keeps aligned songs and skips rejected ones', () => {
+  const alignments = parseAlignments({
+    a: { ...pretenderAligned, status: 'Aligned', aligner: 'x' },
+    b: {
+      songTitle: 'Blue Jeans',
+      lrclibId: 1,
+      status: 'Rejected',
+      reason: 'weak',
+      aligner: 'x',
+    },
+  })
+  expect([...alignments.keys()]).toEqual(['a'])
+  expect(alignments.get('a')?.lines).toEqual(pretenderAligned.lines)
+})
+
+test('parseAlignments rejects bad files with a path', () => {
+  const aligned = (lines: unknown) => ({
+    a: { songTitle: 'S', lrclibId: 1, status: 'Aligned', lines },
+  })
+  expect(() => parseAlignments(aligned([]))).toThrow(
+    /\$\["a"\]\.lines.*at least one/,
+  )
+  expect(() =>
+    parseAlignments(
+      aligned([
+        { atMs: 5, text: 'b' },
+        { atMs: 1, text: 'a' },
+      ]),
+    ),
+  ).toThrow(/time order/)
+  expect(() => parseAlignments(aligned([{ atMs: 1.5, text: 'a' }]))).toThrow(
+    /atMs: expected an integer/,
+  )
+  expect(() =>
+    parseAlignments({ a: { songTitle: 'S', lrclibId: 1, status: 'Maybe' } }),
+  ).toThrow(/status/)
 })
