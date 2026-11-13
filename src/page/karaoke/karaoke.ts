@@ -498,14 +498,13 @@ export const WaitBeforeDismissToast = Command.define('WaitBeforeDismissToast', {
     ),
 })
 
-// NOTE: a YouTube script that fails to load is reported to each play by `videoEvents`, so the Mount ignores it.
 export const MountPlayer = Mount.define('MountPlayer', {
   messages: [Message.CompletedMountPlayer],
   execute: ({ element }) =>
     runPlayer(element, {
       hostId: PLAYER_HOST_ID,
       playerVars: { controls: 1, modestbranding: 1 },
-    }).pipe(Effect.ignore, Effect.as(Message.CompletedMountPlayer())),
+    }).pipe(Effect.as(Message.CompletedMountPlayer())),
 })
 
 // SUBSCRIPTION

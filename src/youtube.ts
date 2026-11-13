@@ -1,5 +1,4 @@
 import {
-  Cause,
   Duration,
   Effect,
   Option,
@@ -104,13 +103,50 @@ const loadApiScript = (): Promise<YouTubeApi> =>
     }
     const script = document.createElement('script')
     script.src = 'https://www.youtube.com/iframe_api'
-    script.onerror = () =>
+    script.onerror = () => {
+      script.remove()
       reject(new Error('Could not load the YouTube player'))
+    }
     document.head.append(script)
   })
 
-// NOTE: the page loads YouTube's script once, however many players mount.
-const loadApi = Effect.runSync(Effect.cached(Effect.tryPromise(loadApiScript)))
+const apiRef = Effect.runSync(SubscriptionRef.make(Option.none<YouTubeApi>()))
+
+const apiLoad = { maybeAttempt: Option.none<Promise<YouTubeApi>>() }
+
+// NOTE: the page loads YouTube's script once, however many players mount. A failed attempt is forgotten, so the next play asks for the script again.
+const attemptApi = (): Promise<YouTubeApi> =>
+  Option.getOrElse(apiLoad.maybeAttempt, () => {
+    const attempt = loadApiScript()
+    apiLoad.maybeAttempt = Option.some(attempt)
+    attempt.then(
+      api => Effect.runSync(SubscriptionRef.set(apiRef, Option.some(api))),
+      () => {
+        apiLoad.maybeAttempt = Option.none()
+      },
+    )
+    return attempt
+  })
+
+const loadApi = Effect.tryPromise(attemptApi)
+
+/** The API once any attempt has loaded it. A player that mounts while the
+ *  script is failing waits here, and the play that retries the script wakes it. */
+const loadedApi: Effect.Effect<YouTubeApi> = loadApi.pipe(
+  Effect.ignore,
+  Effect.andThen(
+    SubscriptionRef.changes(apiRef).pipe(
+      Stream.filter(Option.isSome),
+      Stream.runHead,
+    ),
+  ),
+  Effect.flatMap(maybeApi =>
+    Option.match(Option.flatten(maybeApi), {
+      onNone: () => Effect.never,
+      onSome: api => Effect.succeed(api),
+    }),
+  ),
+)
 
 type PlayerReport =
   | Readonly<{ kind: 'StateChanged'; state: number }>
@@ -160,9 +196,9 @@ const stateChangeToEvent = (state: number): Option.Option<PlayerEvent> => {
 export const runPlayer = (
   element: Element,
   options: Readonly<{ hostId: string; playerVars: PlayerVars }>,
-): Effect.Effect<void, Cause.UnknownError, Scope.Scope> =>
+): Effect.Effect<void, never, Scope.Scope> =>
   Effect.gen(function* () {
-    const api = yield* loadApi
+    const api = yield* loadedApi
     const ref = hostRef(options.hostId)
     const listeners = new Set<(report: PlayerReport) => void>()
     const report = (playerReport: PlayerReport) =>
