@@ -504,7 +504,7 @@ export const WaitBeforeDismissToast = Command.define('WaitBeforeDismissToast', {
     ),
 })
 
-// NOTE: a player that never appears and a video that never starts loading send no event at all, so a play that is still loading after this long counts as a failed load. A slow phone connection loads the script and the player well inside it.
+// NOTE: a player that never appears and a video that never starts loading send no event at all, so a play that is still loading after this long counts as a failed load. The length is a judgment, not a measurement: too short reloads a video that was only slow.
 const LOAD_TIMEOUT_SECONDS = 20
 
 export const WaitBeforeLoadTimeout = Command.define('WaitBeforeLoadTimeout', {

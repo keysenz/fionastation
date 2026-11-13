@@ -1299,7 +1299,9 @@ const playerBarView = (
   model: Model,
   h: HtmlBuilder<Message>,
 ): Html => {
-  const isPlayerReady = Phase.isAnyOf(['Playing', 'Paused'])(nowPlaying.phase)
+  // NOTE: only a loaded video has something to expand, but an open player must always close, whatever became of its video.
+  const canToggleExpanded =
+    model.isExpanded || Phase.isAnyOf(['Playing', 'Paused'])(nowPlaying.phase)
   const shownSong = songOnBar(model, nowPlaying)
   const maybeLine = Option.flatMap(nowSingingOf(model), currentLineOf)
   const maybeTrouble = troubleOf(nowPlaying)
@@ -1352,10 +1354,10 @@ const playerBarView = (
               h.Class(
                 twMerge(
                   'relative group',
-                  isPlayerReady ? 'cursor-pointer' : 'cursor-default',
+                  canToggleExpanded ? 'cursor-pointer' : 'cursor-default',
                 ),
               ),
-              ...(isPlayerReady
+              ...(canToggleExpanded
                 ? [h.OnClick(Message.ClickedToggleExpanded())]
                 : []),
             ],
@@ -1414,7 +1416,7 @@ const playerBarView = (
           ),
           h.button([
             h.Type('button'),
-            h.Disabled(!isPlayerReady),
+            h.Disabled(!canToggleExpanded),
             h.AriaLabel(model.isExpanded ? 'Collapse player' : 'Expand player'),
             h.OnClick(Message.ClickedToggleExpanded()),
             h.Class('absolute inset-0 !ml-0 sm:hidden'),
@@ -1487,16 +1489,18 @@ const playerBarView = (
           h.button(
             [
               h.Type('button'),
-              h.Disabled(!isPlayerReady),
+              h.Disabled(!canToggleExpanded),
               h.AriaLabel(
                 model.isExpanded ? 'Collapse player' : 'Expand player',
               ),
               h.Title(
-                isPlayerReady
+                canToggleExpanded
                   ? model.isExpanded
                     ? 'Collapse player'
                     : 'Expand player'
-                  : 'Player is loading',
+                  : nowPlaying.phase._tag === 'Loading'
+                    ? 'Player is loading'
+                    : 'This video cannot play',
               ),
               h.OnClick(Message.ClickedToggleExpanded()),
               h.Class(
