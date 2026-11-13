@@ -20,10 +20,10 @@ Preconditions:
 
 - Doctor reports non-zero counts.
 
-- **All.** Run `node drive.mjs fetchFailure storage navigation paths mobile`. `fetchFailure` aborts `/api/get-karaoke` with `agent-browser network route --abort`, then removes the route before Try again. The other journeys make `localStorage` throw with a per-tab init script.
+- **All.** Run `node drive.mjs fetchFailure storage navigation paths mobile`. `fetchFailure` makes the API request fail with `network route --abort`, and the journeys with blocked storage run in a second session launched with `--init-script` that makes `localStorage` throw.
 - **Proof.** Open `results.json` in the evidence folder.
 
 ## Gotchas
 
-- Only the journey's browser sees replaced responses. The server is untouched.
+- Only the journey's browser sees the failed request. The server is untouched. `agent-browser network route` cannot set a status code, so the failure is a network error, not an HTTP 500.
 - `paths` uses `node:http`, because `fetch` normalizes paths before sending them.

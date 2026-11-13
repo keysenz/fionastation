@@ -5,16 +5,17 @@ description: Launch and drive the Fiona Station website (the Fio Radio page with
 
 # Verify Fiona Station
 
-The user surface is a web site. `drive.mjs` drives it with [agent-browser](https://github.com/vercel-labs/agent-browser), using the real pages and real song data. There are no mocks. The local app reads a snapshot of the discord bot's database. The deployed app reads the live database.
+The user surface is a web site. `drive.mjs` drives it with the `agent-browser` CLI, using the real pages and real song data. There are no mocks. The local app reads a snapshot of the discord bot's database. The deployed app reads the live database.
 
-Run every command from the repository root. First-time setup, once per checkout:
+`ab.mjs` is the driver's only link to the browser. It gives each journey its own `agent-browser` session (named `fio-<pid>-<journey>`), so journeys never share cookies, tabs or storage, and closes that session when the journey ends. It resolves locators in the page and sends every click, key press, fill and screenshot through `agent-browser`.
+
+Run every command from the repository root. First-time setup, once per machine: install `agent-browser` (`npm i -g agent-browser && agent-browser install`), then load Node for the repository:
 
 ```sh
 source ~/.nvm/nvm.sh && nvm use
-npm i -g agent-browser && agent-browser install
 ```
 
-`browser.mjs` gives the journeys a small page and locator API built on `agent-browser` commands. Clicks, fills, keys and mouse moves go through agent-browser's real input. Locators resolve inside the page with `agent-browser eval`. Each journey runs in its own `--session`, which is an isolated browser, so `localStorage` starts empty. Touch drags, holding a request mid-load, and a per-tab init script go over the CDP URL that `agent-browser get cdp-url` returns, because the CLI has no command for them.
+The driver has no npm dependencies of its own, so there is nothing to install in this directory.
 
 ## Launch
 
@@ -48,7 +49,9 @@ Require `server: ours`, the expected Foldkit version, and a non-zero count of so
 (cd .claude/skills/verify && node drive.mjs karaoke info)   # chosen journeys
 ```
 
-The journeys are `site`, `radio`, `karaoke`, `songs`, `player`, `strictAutoplay`, `queueReorder`, `queueReorderTouch`, `unavailable`, `fetchFailure`, `storage`, `navigation`, `paths`, `info`, `mobile`, and `api`. `features/README.md` maps each one to what it proves. The exit code is non-zero if any check fails.
+The journeys are `site`, `radio`, `karaoke`, `songs`, `player`, `segmentSkip`, `strictAutoplay`, `queueReorder`, `queueReorderTouch`, `unavailable`, `fetchFailure`, `storage`, `navigation`, `paths`, `info`, `volume`, `mobilePlayer`, `mobile`, and `api`. `features/README.md` maps each one to what it proves. The exit code is non-zero if any check fails. A failed `step` that passes its page saves `<journey>-step-<n>-failure.png`.
+
+Three journeys use `agent-browser` in a different way than a plain page. `player` holds YouTube's `iframe_api` script with `network route --body` and releases it by running the real script. `fetchFailure` makes `/api/get-karaoke` fail with `network route --abort`. The blocked-storage checks in `player` and `storage` and the `strictAutoplay` and `queueReorderTouch` journeys each start a second session, because launch flags (`--init-script`, `--args`) apply only to a session's first command.
 
 ## Evidence
 
@@ -62,7 +65,7 @@ A proof must exercise the real user path and show both the action and the result
 .claude/skills/verify/cleanup.sh
 ```
 
-This stops the process group that `launch.sh` started, removes the snapshot and logs, and lists recent evidence. Close a tunnel with `ssh -S /tmp/fio-tunnel -O exit devbox`.
+This stops the process group that `launch.sh` started, closes any `fio-*` browser session a crashed run left behind, removes the snapshot and logs, and lists recent evidence. Close a tunnel with `ssh -S /tmp/fio-tunnel -O exit devbox`.
 
 ## Safety
 

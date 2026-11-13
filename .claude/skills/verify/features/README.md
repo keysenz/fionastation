@@ -5,7 +5,7 @@ This directory is the maintained source for verifying the user-facing behavior o
 ## Baseline preconditions
 
 - Launch and check the app as `../SKILL.md` describes.
-- Each journey starts in its own agent-browser session, so `localStorage` is empty.
+- Each journey starts in a new `agent-browser` session, so `localStorage` is empty.
 - The song data is real and changes when the bot's `/setlist` runs, so journeys read expected values from the API.
 
 ## Driving conventions

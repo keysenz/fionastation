@@ -21,7 +21,7 @@ Preconditions:
 - Doctor reports `server: ours`, or `BASE_URL` is set.
 
 - **Home.** Run `node drive.mjs site`. The `Background` image has a non-zero natural width.
-- **Info.** Run `node drive.mjs info`. The journey opens the panel with the button, reads both headings and every credited name, checks that each link has `target="_blank"` and a `noopener noreferrer` rel, closes it with Escape, the `Close` button and the backdrop, and checks `document.activeElement` after each. It then repeats at 375x667, where the panel stays inside the screen, scrolls to its end, and keeps a visible 40px `Close` button. Open `info-desktop.png`, `info-375.png` and `info-375-scrolled.png`.
+- **Info.** Run `node drive.mjs info`. The journey opens the panel with the button, reads both headings, checks that each link has `target="_blank"` and a `noopener noreferrer` rel, closes it with Escape, the `Close` button and the backdrop, and checks `document.activeElement` after each. It then repeats at 375x667, where the panel stays inside the screen, scrolls to its end, and keeps a visible 40px `Close` button. Open `info-desktop.png`, `info-375.png` and `info-375-scrolled.png`.
 - **Redirects.** Run `node drive.mjs paths`. Each old path answers 301 with `Location: /?x=1` for the query `?x=1`, `/` answers 200 and an unknown path answers 404.
 - **Headers.** The `site` journey fetches `/`. `X-Frame-Options` is `SAMEORIGIN`.
 - **Proof.** Open the screenshots and `results.json` in the evidence folder.
