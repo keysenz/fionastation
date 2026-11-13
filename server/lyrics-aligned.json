@@ -1,0 +1,433 @@
+{
+  "09de370b-fe2f-4753-8634-2d5ddb95eafb": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lines": [
+      {
+        "atMs": 2240,
+        "text": "空にある何かを見つめてたら"
+      },
+      {
+        "atMs": 7660,
+        "text": "それは星だって君がおしえてくれた"
+      },
+      {
+        "atMs": 12780,
+        "text": "まるでそれは僕らみたいに 寄り添ってる"
+      },
+      {
+        "atMs": 18140,
+        "text": "それを泣いたり笑ったり繋いでいく"
+      },
+      {
+        "atMs": 23860,
+        "text": "何十回 何百回 ぶつかりあって"
+      },
+      {
+        "atMs": 29100,
+        "text": "何十年 何百年 昔の光が"
+      },
+      {
+        "atMs": 33880,
+        "text": "星自身も忘れたころに"
+      },
+      {
+        "atMs": 39360,
+        "text": "僕らに届いてる"
+      },
+      {
+        "atMs": 44260,
+        "text": "僕ら見つけあって 手繰りあって 同じ空"
+      },
+      {
+        "atMs": 49380,
+        "text": "輝くのだって 二人だって 約束した"
+      },
+      {
+        "atMs": 54780,
+        "text": "遥か遠く終わらないべテルギウス"
+      },
+      {
+        "atMs": 60120,
+        "text": "誰かに繋ぐ魔法"
+      },
+      {
+        "atMs": 65660,
+        "text": "僕ら 肩並べ 手取り合って 進んでく"
+      },
+      {
+        "atMs": 70760,
+        "text": "辛い時だって 泣かないって 誓っただろう"
+      },
+      {
+        "atMs": 76100,
+        "text": "遥か遠く終わらないべテルギウス"
+      },
+      {
+        "atMs": 81440,
+        "text": "君にも見えるだろう 祈りが"
+      },
+      {
+        "atMs": 88060,
+        "text": "記憶を辿るたび 蘇るよ"
+      },
+      {
+        "atMs": 95360,
+        "text": "君がいつだってそこに居てくれること"
+      },
+      {
+        "atMs": 100120,
+        "text": "まるでそれは星の光と 同じように"
+      },
+      {
+        "atMs": 106060,
+        "text": "今日に泣いたり笑ったり繋いでいく"
+      },
+      {
+        "atMs": 111720,
+        "text": "何十回 何百回 ぶつかりあって"
+      },
+      {
+        "atMs": 117040,
+        "text": "何十年 何百年 昔の光が"
+      },
+      {
+        "atMs": 121940,
+        "text": "僕自身も忘れたころに"
+      },
+      {
+        "atMs": 127360,
+        "text": "僕らを照らしてる"
+      },
+      {
+        "atMs": 132360,
+        "text": "僕ら見つけあって 手繰りあって 同じ空"
+      },
+      {
+        "atMs": 137420,
+        "text": "輝くのだって 二人だって 約束した"
+      },
+      {
+        "atMs": 142820,
+        "text": "遥か遠く終わらないべテルギウス"
+      },
+      {
+        "atMs": 148140,
+        "text": "誰かに繋ぐ魔法"
+      },
+      {
+        "atMs": 154100,
+        "text": "どこまで いつまで 生きられるか"
+      },
+      {
+        "atMs": 159420,
+        "text": "君が不安になるたびに強がるんだ"
+      },
+      {
+        "atMs": 164060,
+        "text": "大丈夫 僕が横にいるよ"
+      },
+      {
+        "atMs": 169420,
+        "text": "見えない線を繋ごう"
+      },
+      {
+        "atMs": 175740,
+        "text": "僕ら見つけあって 手繰りあって 同じ空"
+      },
+      {
+        "atMs": 180420,
+        "text": "輝くのだって 二人だって 約束した"
+      },
+      {
+        "atMs": 185500,
+        "text": "遥か遠く終わらないべテルギウス"
+      },
+      {
+        "atMs": 190820,
+        "text": "誰かに繋ぐ魔法"
+      },
+      {
+        "atMs": 196360,
+        "text": "僕ら 肩並べ 手取り合って 進んでく"
+      },
+      {
+        "atMs": 201460,
+        "text": "辛い時だって 二人だって 誓っただろう"
+      },
+      {
+        "atMs": 206540,
+        "text": "遥か遠く終わらないべテルギウス"
+      },
+      {
+        "atMs": 212080,
+        "text": "君にも見えるだろう 祈りが"
+      },
+      {
+        "atMs": 221860,
+        "text": "空にある何かを見つめてたら"
+      },
+      {
+        "atMs": 226120,
+        "text": "それは星だって君がおしえてくれた"
+      }
+    ],
+    "lrclibId": 36491869,
+    "songTitle": "Betelgeuse",
+    "status": "Aligned"
+  },
+  "416972eb-f867-5615-b865-774d022474ab": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lrclibId": 33754340,
+    "reason": "no line was sung clearly",
+    "songTitle": "Unwavering Startorch",
+    "status": "Rejected"
+  },
+  "baa8310f-f3b6-47b3-a81d-b80ad7de5099": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lines": [
+      {
+        "atMs": 4600,
+        "text": "君の心へ"
+      },
+      {
+        "atMs": 6880,
+        "text": "届け届け届け"
+      },
+      {
+        "atMs": 7760,
+        "text": "君の心へ"
+      },
+      {
+        "atMs": 19540,
+        "text": "届くように"
+      },
+      {
+        "atMs": 19900,
+        "text": "だいたいいつも通りに"
+      },
+      {
+        "atMs": 23700,
+        "text": "その角を曲がれば"
+      },
+      {
+        "atMs": 27900,
+        "text": "人波に紛れ込み"
+      },
+      {
+        "atMs": 32920,
+        "text": "溶けて消えていく"
+      },
+      {
+        "atMs": 37780,
+        "text": "僕は道を無くし"
+      },
+      {
+        "atMs": 42040,
+        "text": "言葉すら無くしてしまう"
+      },
+      {
+        "atMs": 46780,
+        "text": "だけど一つだけは"
+      },
+      {
+        "atMs": 50680,
+        "text": "残ってた残ってた"
+      },
+      {
+        "atMs": 55720,
+        "text": "君の声が"
+      },
+      {
+        "atMs": 60540,
+        "text": "笑う顔も"
+      },
+      {
+        "atMs": 62600,
+        "text": "怒る顔も全て"
+      },
+      {
+        "atMs": 65320,
+        "text": "僕を歩かせる"
+      },
+      {
+        "atMs": 69880,
+        "text": "雲が切れた先を"
+      },
+      {
+        "atMs": 72600,
+        "text": "見たらきっと"
+      },
+      {
+        "atMs": 74740,
+        "text": "ねえ わかるでしょ?"
+      }
+    ],
+    "lrclibId": 29786483,
+    "songTitle": "Michi ~to you all",
+    "status": "Aligned"
+  },
+  "c7cec101-d93a-5f8a-b3d5-a9c0c08cebee": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lines": [
+      {
+        "atMs": 4380,
+        "text": "君とのラブストーリー"
+      },
+      {
+        "atMs": 7160,
+        "text": "それは予想通り"
+      },
+      {
+        "atMs": 9840,
+        "text": "いざ始まればひとり芝居だ"
+      },
+      {
+        "atMs": 14100,
+        "text": "ずっとそばにいたって"
+      },
+      {
+        "atMs": 16640,
+        "text": "結局ただの観客だ"
+      },
+      {
+        "atMs": 19640,
+        "text": "感情のないアイムソーリー"
+      },
+      {
+        "atMs": 22700,
+        "text": "それはいつも通り"
+      },
+      {
+        "atMs": 25500,
+        "text": "慣れてしまえば悪くはないけど"
+      },
+      {
+        "atMs": 29800,
+        "text": "君とのロマンスは人生柄"
+      },
+      {
+        "atMs": 33260,
+        "text": "続きはしないことを知った"
+      },
+      {
+        "atMs": 40140,
+        "text": "もっと違う設定で もっと違う関係で"
+      },
+      {
+        "atMs": 45280,
+        "text": "出会える世界線 選べたらよかった"
+      },
+      {
+        "atMs": 50560,
+        "text": "もっと違う性格で もっと違う価値観で"
+      },
+      {
+        "atMs": 55820,
+        "text": "愛を伝えられたらいいな そう願っても無駄だから"
+      },
+      {
+        "atMs": 65500,
+        "text": "グッバイ"
+      },
+      {
+        "atMs": 66600,
+        "text": "君の運命のヒトは僕じゃない"
+      },
+      {
+        "atMs": 71040,
+        "text": "辛いけど否めない でも離れ難いのさ"
+      },
+      {
+        "atMs": 77720,
+        "text": "その髪に触れただけで 痛いや"
+      },
+      {
+        "atMs": 83060,
+        "text": "いやでも 甘いな いやいや"
+      },
+      {
+        "atMs": 86480,
+        "text": "グッバイ"
+      },
+      {
+        "atMs": 87480,
+        "text": "それじゃ僕にとって君は何？"
+      },
+      {
+        "atMs": 92220,
+        "text": "答えは分からない 分かりたくもないのさ"
+      },
+      {
+        "atMs": 97980,
+        "text": "たったひとつ確かなことがあるとするのならば"
+      },
+      {
+        "atMs": 106400,
+        "text": "「君は綺麗だ」"
+      }
+    ],
+    "lrclibId": 3821917,
+    "songTitle": "Pretender",
+    "status": "Aligned"
+  },
+  "cb3b8e05-9818-5059-89fd-8fe87d14977d": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lines": [
+      {
+        "atMs": 2360,
+        "text": "Itsu datte jishin ga nakute"
+      },
+      {
+        "atMs": 4400,
+        "text": "Pretty girls tachi ni shitto shite"
+      },
+      {
+        "atMs": 6340,
+        "text": "Kidzuita toki ni wa mou hinekurete"
+      },
+      {
+        "atMs": 8460,
+        "text": "Tekitou ni ikite mata dekakete"
+      },
+      {
+        "atMs": 10600,
+        "text": "All right"
+      },
+      {
+        "atMs": 12480,
+        "text": "Itsumodoori no night, yeah"
+      },
+      {
+        "atMs": 16920,
+        "text": "Uso mitai ni kireina, yeah"
+      },
+      {
+        "atMs": 20800,
+        "text": "Ano yoru ano jikan kimi ga koishita"
+      },
+      {
+        "atMs": 25900,
+        "text": "Blue jeans, furui suniikaa"
+      },
+      {
+        "atMs": 28880,
+        "text": "My hair was mess, kuzureta make"
+      },
+      {
+        "atMs": 32800,
+        "text": "Shin ya ichiji, blue jeans, furui suniikaa"
+      },
+      {
+        "atMs": 37680,
+        "text": "Chikadzuite, kimi want you, baby"
+      },
+      {
+        "atMs": 41500,
+        "text": "Kirei hina hitoda, blue jeans, furui suniikaa"
+      }
+    ],
+    "lrclibId": 28719152,
+    "songTitle": "Blue Jeans",
+    "status": "Aligned"
+  }
+}

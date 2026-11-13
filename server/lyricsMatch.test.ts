@@ -416,6 +416,13 @@ test('parseAlignments keeps aligned songs and skips rejected ones', () => {
   expect(alignments.get('a')?.lines).toEqual(pretenderAligned.lines)
 })
 
+test('the real alignments file parses', () => {
+  const raw: unknown = JSON.parse(
+    readFileSync(new URL('./lyrics-aligned.json', import.meta.url), 'utf8'),
+  )
+  expect(parseAlignments(raw).size).toBeGreaterThan(0)
+})
+
 test('parseAlignments rejects bad files with a path', () => {
   const aligned = (lines: unknown) => ({
     a: { songTitle: 'S', lrclibId: 1, status: 'Aligned', lines },
