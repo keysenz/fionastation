@@ -1212,8 +1212,8 @@ const repeatButtonView = (
   )
 
 const LOAD_FAILURE_TEXT: Record<LoadFailure, string> = {
-  PlayerUnavailable: 'Could not load the YouTube player',
-  VideoUnplayable: 'Could not load this video',
+  PlayerUnavailable: 'YouTube did not load',
+  VideoUnplayable: 'This video did not load',
 }
 
 /** What the bar says in place of the song's kind while the song cannot sound. */
@@ -1221,15 +1221,14 @@ const troubleOf = ({ phase, attempt }: NowPlaying): Option.Option<string> =>
   Phase.matchOrElse(
     phase,
     {
-      MovingOn: () => Option.some('This stream is gone. Finding another video'),
+      MovingOn: () => Option.some('Stream gone. Finding another video'),
       Gone: () => Option.some('This stream is gone'),
       LoadFailed: ({ reason }) =>
         Option.some(
           Option.match(loadRetryDelaySeconds(attempt), {
-            onNone: () =>
-              `${LOAD_FAILURE_TEXT[reason]}. Tried ${attempt} times`,
+            onNone: () => `${LOAD_FAILURE_TEXT[reason]} after ${attempt} tries`,
             onSome: delaySeconds =>
-              `${LOAD_FAILURE_TEXT[reason]}. Try ${attempt} failed, trying again in ${delaySeconds} s`,
+              `${LOAD_FAILURE_TEXT[reason]}. Try ${attempt + 1} in ${delaySeconds}s`,
           }),
         ),
     },
@@ -1397,7 +1396,10 @@ const playerBarView = (
                 [songLabel(shownSong)],
               ),
               h.p(
-                [h.Class('hidden sm:block text-xs text-gray-300 truncate')],
+                [
+                  h.Class('hidden sm:block text-xs text-gray-300 truncate'),
+                  h.Title(subline),
+                ],
                 [subline],
               ),
               h.p(
