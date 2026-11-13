@@ -1916,6 +1916,111 @@ test('automatic retries stop after three, and a manual retry starts the count ag
   ])
 })
 
+const waitElapsed = (args: Record<string, unknown>) =>
+  Message.ElapsedLyricsRetryDelay({ songId: String(args['songId']) })
+
+const lyricsWaitOf = (result: UpdateReturn) => {
+  const waits = (result.commands ?? []).filter(
+    ({ name }) => name === WaitBeforeRetryLyrics.name,
+  )
+  expect(waits).toHaveLength(1)
+  return waitElapsed(waits[0]?.args ?? {})
+}
+
+const failLyrics = (current: Model, songId: string) =>
+  update(current, Message.FailedFetchLyrics({ songId, error: 'down' }))
+
+test('a lyrics retry that waits past the song gives up, and singing the song again fetches its lyrics', () => {
+  const failed = failLyrics(tick(playingStream(), 70).model, 'early')
+  const elapsed = lyricsWaitOf(failed)
+  const pastIt = tick(failed.model, 400).model
+  const late = update(pastIt, elapsed)
+  expect(fetchedIds(late) ?? []).toEqual([])
+  expect(fetchedIds(tick(late.model, 70))).toEqual(['early'])
+})
+
+test("a lyrics retry fires for a song that is neither sung nor next, as long as the playhead is before the song's end", () => {
+  const songs = [
+    lyricSong('one', '00:01:00'),
+    lyricSong('two', '00:03:00'),
+    lyricSong('three', '00:05:00'),
+  ]
+  const fetched = update(
+    init(),
+    Message.SucceededFetchSongs({ songs, goneVideoIds: [] }),
+  ).model
+  const inTwo = tick(
+    update(fetched, Message.ClickedSong({ song: songs[1] })).model,
+    200,
+  ).model
+  const failed = failLyrics(inTwo, 'three')
+  const backInOne = tick(failed.model, 70).model
+  expect(fetchedIds(update(backInOne, lyricsWaitOf(failed)))).toEqual(['three'])
+})
+
+test("the last song's lyrics retry until six minutes after its start", () => {
+  const failed = failLyrics(tick(playingStream(), 310).model, 'late')
+  const elapsed = lyricsWaitOf(failed)
+  expect(fetchedIds(update(tick(failed.model, 650).model, elapsed))).toEqual([
+    'late',
+  ])
+  expect(
+    fetchedIds(update(tick(failed.model, 670).model, elapsed)) ?? [],
+  ).toEqual([])
+})
+
+test('a lyrics retry wait that a later failure replaced fetches nothing', () => {
+  const first = failLyrics(tick(playingStream(), 70).model, 'early')
+  const retried = update(
+    first.model,
+    Message.ClickedRetryLyrics({ songId: 'early' }),
+  )
+  const second = failLyrics(retried.model, 'early')
+  const stale = update(second.model, lyricsWaitOf(first))
+  expect(fetchedIds(stale) ?? []).toEqual([])
+  expect(fetchedIds(update(stale.model, lyricsWaitOf(second)))).toEqual([
+    'early',
+  ])
+})
+
+test('a lyrics retry wait fetches nothing once another video plays', () => {
+  const other = makeSong('other', 'elsewhere')
+  const fetched = update(
+    init(),
+    Message.SucceededFetchSongs({
+      songs: [early, late, other],
+      goneVideoIds: [],
+    }),
+  ).model
+  const failed = failLyrics(
+    tick(update(fetched, Message.ClickedSong({ song: early })).model, 70).model,
+    'early',
+  )
+  const moved = update(failed.model, Message.ClickedSong({ song: other }))
+  expect(fetchedIds(update(moved.model, lyricsWaitOf(failed))) ?? []).toEqual(
+    [],
+  )
+})
+
+test('after the automatic retries run out, later ticks in the same song fetch nothing, and the retry button still fetches', () => {
+  const exhausted = Array.from({ length: 3 }).reduce<UpdateReturn>(
+    retry =>
+      failLyrics(update(retry.model, lyricsWaitOf(retry)).model, 'early'),
+    failLyrics(tick(playingStream(), 70).model, 'early'),
+  )
+  expect(
+    exhausted.commands?.filter(
+      ({ name }) => name === WaitBeforeRetryLyrics.name,
+    ),
+  ).toEqual([])
+  expect(fetchedIds(tick(exhausted.model, 80)) ?? []).toEqual([])
+  expect(
+    fetchedIds(
+      update(exhausted.model, Message.ClickedRetryLyrics({ songId: 'early' })),
+    ),
+  ).toEqual(['early'])
+})
+
 const failLoadOf = (playId: number) =>
   Message.ReceivedPlayerEvent({
     playId,
