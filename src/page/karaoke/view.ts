@@ -1058,7 +1058,7 @@ const queuePanelView = (model: Model, h: HtmlBuilder<Message>): Html =>
         [
           h.i([
             h.Class(
-              `fas fa-chevron-${model.isQueueOpen ? 'right' : 'left'} text-white/80 group-hover:text-white transition-colors`,
+              `fas ${model.isQueueOpen ? 'fa-chevron-right' : 'fa-chevron-left'} text-white/80 group-hover:text-white transition-colors`,
             ),
           ]),
           h.span(
