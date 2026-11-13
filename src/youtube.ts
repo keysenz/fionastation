@@ -80,7 +80,7 @@ export type PlayerEvent = typeof PlayerEvent.Type
 const PROGRESS_INTERVAL = Duration.millis(250)
 const PROGRESS_EPSILON_SECONDS = 0.05
 
-// NOTE: an embedded YouTube Short never reports its end. It jumps back to its start and plays again, so a jump from this close to the end to this close to the start counts as the end.
+// NOTE: an embedded YouTube Short may never report its end. It jumps back to its start and plays again, so a jump from this close to the end to this close to the start counts as the end.
 const WRAP_MARGIN_SECONDS = 1.5
 
 // NOTE: YouTube's onError codes for a video that is removed, private or not embeddable. Every other code can pass on a later load.
@@ -237,13 +237,13 @@ export const runPlayer = (
     )
   })
 
-/** How a load stands toward its end. It waits for its own first play, so the
- *  previous video's end time cannot read as a wrap. After a wrap it swallows
- *  reports until the pause it asked for lands, so the wrap looks like an end. */
-type Ending = 'WaitingToPlay' | 'Watching' | 'PausingAtWrap' | 'Ended'
+type Ending =
+  | 'WaitingForOwnFirstPlay'
+  | 'Watching'
+  | 'SwallowingUntilOwnPause'
+  | 'Ended'
 
-// NOTE: a replaced load can still tick after the next one starts, and it would read the new video's time against its own.
-const currentLoadOf = new WeakMap<YouTubePlayer, object>()
+const loadOwningPlayer = new WeakMap<YouTubePlayer, object>()
 
 const loadedVideoEvents = (
   host: Host,
@@ -261,7 +261,7 @@ const loadedVideoEvents = (
         isLoaded: false,
         lastSeconds: Number.NEGATIVE_INFINITY,
         unstartedTicks: 0,
-        ending: 'WaitingToPlay',
+        ending: 'WaitingForOwnFirstPlay',
       }
       const isNearEnd = (seconds: number) => {
         const duration = host.player.getDuration()
@@ -273,10 +273,10 @@ const loadedVideoEvents = (
       const offerProgress = (isForced: boolean) => {
         const seconds = host.player.getCurrentTime()
         if (
-          currentLoadOf.get(host.player) !== load ||
+          loadOwningPlayer.get(host.player) !== load ||
           !progress.isLoaded ||
           !Number.isFinite(seconds) ||
-          progress.ending === 'PausingAtWrap'
+          progress.ending === 'SwallowingUntilOwnPause'
         ) {
           return
         }
@@ -285,7 +285,7 @@ const loadedVideoEvents = (
           seconds <= WRAP_MARGIN_SECONDS &&
           isNearEnd(progress.lastSeconds)
         ) {
-          progress.ending = 'PausingAtWrap'
+          progress.ending = 'SwallowingUntilOwnPause'
           progress.lastSeconds = seconds
           host.player.pauseVideo()
           Queue.offerUnsafe(queue, PlayerEvent.Ended())
@@ -314,7 +314,7 @@ const loadedVideoEvents = (
       const listener = (report: PlayerReport) => {
         if (report.kind === 'PlayRequested') {
           progress.unstartedTicks = 0
-          if (progress.ending === 'PausingAtWrap') {
+          if (progress.ending === 'SwallowingUntilOwnPause') {
             progress.ending = 'Ended'
           }
           return
@@ -338,7 +338,7 @@ const loadedVideoEvents = (
         }
         // NOTE: a seek made with YouTube's own controls changes the state, so this reports it before the next tick.
         offerProgress(true)
-        if (progress.ending === 'PausingAtWrap') {
+        if (progress.ending === 'SwallowingUntilOwnPause') {
           if (report.state === STATE_PAUSED) {
             progress.ending = 'Ended'
           }
@@ -346,7 +346,7 @@ const loadedVideoEvents = (
         }
         if (
           report.state === STATE_PLAYING &&
-          progress.ending === 'WaitingToPlay'
+          progress.ending === 'WaitingForOwnFirstPlay'
         ) {
           progress.ending = 'Watching'
         }
@@ -361,7 +361,7 @@ const loadedVideoEvents = (
       yield* Effect.acquireRelease(
         Effect.sync(() => {
           host.listeners.add(listener)
-          currentLoadOf.set(host.player, load)
+          loadOwningPlayer.set(host.player, load)
           host.player.loadVideoById(video)
         }),
         () => Effect.sync(() => host.listeners.delete(listener)),

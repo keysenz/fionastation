@@ -109,8 +109,8 @@ export type Selection = {
   isChosen: boolean
 }
 
-/** A choice the search hides falls back to the playing video, then to the
- *  first shown video, and comes back when the search clears. */
+/** With no choice shown, the pane shows the playing video, else the first
+ *  shown video. A choice the search hides comes back when the search clears. */
 export const resolveSelection = (
   shown: ReadonlyArray<VideoGroup>,
   maybeSelectedVideoId: Option.Option<string>,
