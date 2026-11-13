@@ -47,8 +47,31 @@ const fontAwesomeSubset = (): Plugin => ({
   },
 })
 
+const APP_STYLESHEET =
+  /<link rel="stylesheet" crossorigin href="(\/assets\/[^"]+\.css)">/
+
+/** The loading frame in index.html styles itself inline, so the app stylesheet
+ *  downloads as a preload instead of blocking the first paint. src/entry.ts
+ *  applies it before the app mounts. */
+const nonBlockingAppStylesheet = (): Plugin => ({
+  name: 'non-blocking-app-stylesheet',
+  apply: 'build',
+  transformIndexHtml: {
+    order: 'post',
+    handler(html) {
+      if (!APP_STYLESHEET.test(html)) {
+        throw new Error('index.html has no app stylesheet link to preload')
+      }
+      return html.replace(
+        APP_STYLESHEET,
+        '<link rel="preload" as="style" crossorigin href="$1">',
+      )
+    },
+  },
+})
+
 export default defineConfig({
-  plugins: [fontAwesomeSubset(), foldkit()],
+  plugins: [fontAwesomeSubset(), nonBlockingAppStylesheet(), foldkit()],
   optimizeDeps: {
     entries: ['src/entry.ts'],
   },

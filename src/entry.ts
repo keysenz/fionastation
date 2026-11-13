@@ -22,6 +22,26 @@ const application = Runtime.makeApplication({
   },
 })
 
-Runtime.run(application)
+const appStylesheetLoaded = (): Promise<void> => {
+  const preload = document.querySelector<HTMLLinkElement>(
+    'link[rel="preload"][as="style"]',
+  )
+  if (preload === null) {
+    return Promise.resolve()
+  }
+  const stylesheet = Object.assign(document.createElement('link'), {
+    rel: 'stylesheet',
+    href: preload.href,
+    crossOrigin: preload.crossOrigin,
+  })
+  const loaded = new Promise<void>(resolve => {
+    stylesheet.addEventListener('load', () => resolve(), { once: true })
+    stylesheet.addEventListener('error', () => resolve(), { once: true })
+  })
+  document.head.append(stylesheet)
+  return loaded
+}
+
+void appStylesheetLoaded().then(() => Runtime.run(application))
 inject()
 injectSpeedInsights()

@@ -13,17 +13,26 @@
         document.head.append(preload)
       }
     </script>
+    <style>
+      body { margin: 0; background: #d5c2ac; }
+      .boot { position: relative; display: flex; min-height: 100vh; align-items: center; justify-content: center; font-family: ui-sans-serif, system-ui, sans-serif; }
+      .boot img { position: absolute; inset: 0; z-index: -10; width: 100%; height: 100%; object-fit: cover; object-position: left; }
+      @media (min-width: 1024px) { .boot img { object-position: center; } }
+      .boot-chip { display: flex; align-items: center; gap: 0.75rem; border-radius: 9999px; background: rgb(0 0 0 / 0.6); padding: 0.75rem 1.25rem; font-size: 0.875rem; line-height: 1.25rem; font-weight: 600; color: #fff; backdrop-filter: blur(12px); }
+      .boot-spinner { width: 1.25rem; height: 1.25rem; box-sizing: border-box; border: 0 solid #fff; border-bottom-width: 2px; border-radius: 9999px; animation: boot-spin 1s linear infinite; }
+      @keyframes boot-spin { to { transform: rotate(360deg); } }
+    </style>
     <meta property="twitter:title" content="Fio Radio: Fiona Clearesta karaoke, covers and originals" />
     <meta property="twitter:description" content="Fan-made Website to navigate through Fiona's karaoke, covers and originals on Fio Radio, you can play them or just find them" />
     <meta property="twitter:card" content="summary_large_image" />
     <meta property="description" content="Fan-made Website to navigate through Fiona's karaoke, covers and originals on Fio Radio, you can play them or just find them" />
   </head>
-  <body class="bg-[#d5c2ac]">
+  <body>
     <div id="root">
-      <div class="relative flex min-h-screen items-center justify-center">
-        <img alt="" src="/pio_karaoke.webp" fetchpriority="high" class="absolute inset-0 -z-10 h-full w-full object-cover object-left lg:object-center" />
-        <div class="flex items-center gap-3 rounded-full bg-black/60 px-5 py-3 text-sm font-semibold text-white backdrop-blur-md">
-          <div class="h-5 w-5 animate-spin rounded-full border-b-2 border-white"></div>
+      <div class="boot">
+        <img alt="" src="/pio_karaoke.webp" fetchpriority="high" />
+        <div class="boot-chip">
+          <div class="boot-spinner"></div>
           Loading Fio Radio
         </div>
       </div>
