@@ -47,6 +47,7 @@ import {
   toNudgesJson,
 } from '../../lyrics.ts'
 import {
+  type LoadFailure,
   PlayerEvent,
   runPlayer,
   seekTo,
@@ -65,7 +66,6 @@ import {
   Advance,
   type Continuation,
   type NowPlaying,
-  PickCause,
   Repeat,
   Setlist,
   Volume,
@@ -77,10 +77,12 @@ import {
   enqueueAll,
   failLoad,
   firstSongOfEachOtherLiveVideo,
-  markPlayerReady,
+  intentOf,
+  loadRetryDelaySeconds,
   moveInQueue,
   nextRepeat,
   parseVolume,
+  pause,
   planAdvance,
   planSkip,
   play,
@@ -88,9 +90,13 @@ import {
   playNext,
   playPrevious,
   removeFromQueue,
+  reportPaused,
+  reportPlaying,
+  reportReady,
   restoreSaved,
+  retryLoad,
   setLevel,
-  setStatus,
+  settleGone,
   toPersistedJson,
   toVolumeJson,
   toggleMute,
@@ -102,7 +108,6 @@ const AUTOPLAY_KEY = 'karaoke-autoplay'
 const REPEAT_KEY = 'karaoke-repeat'
 const VOLUME_KEY = 'karaoke-volume'
 const LYRIC_NUDGES_KEY = 'karaoke-lyric-nudges'
-export const STREAM_GONE = 'This stream is gone'
 const PLAYER_HOST_ID = 'karaoke'
 export const SONG_LIST_ID = 'karaoke-song-list'
 export const SETLIST_PANE_ID = 'karaoke-setlist-pane'
@@ -171,6 +176,7 @@ export const Message = defineMessageUnion({
   ClickedQueuedSong: { index: Schema.Number },
   ClickedRemoveFromQueue: { index: Schema.Number },
   ClickedPlayPause: {},
+  ClickedRetryLoad: {},
   ClickedNext: {},
   ClickedPrevious: {},
   ClickedToggleExpanded: {},
@@ -223,9 +229,10 @@ export const Message = defineMessageUnion({
   CompletedPickRandomVideo: {
     playId: Schema.Number,
     song: PlayableSong,
-    cause: PickCause,
   },
   CompletedWaitBeforeDismissToast: { dismissId: Schema.Number },
+  CompletedWaitBeforeLoadTimeout: { playId: Schema.Number },
+  CompletedWaitBeforeRetryLoad: { playId: Schema.Number },
 })
 export type Message = typeof Message.Type
 
@@ -478,14 +485,11 @@ export const PickRandomVideo = Command.define('PickRandomVideo', {
   args: {
     playId: Schema.Number,
     candidates: Schema.NonEmptyArray(PlayableSong),
-    cause: PickCause,
   },
   messages: [Message.CompletedPickRandomVideo],
-  execute: ({ playId, candidates, cause }) =>
+  execute: ({ playId, candidates }) =>
     Random.choice(candidates).pipe(
-      Effect.map(song =>
-        Message.CompletedPickRandomVideo({ playId, song, cause }),
-      ),
+      Effect.map(song => Message.CompletedPickRandomVideo({ playId, song })),
     ),
 })
 
@@ -500,14 +504,34 @@ export const WaitBeforeDismissToast = Command.define('WaitBeforeDismissToast', {
     ),
 })
 
-// NOTE: a YouTube script that fails to load is reported to each play by `videoEvents`, so the Mount ignores it.
+// NOTE: a player that never appears and a video that never starts loading send no event at all, so a play that is still loading after this long counts as a failed load. The length is a judgment, not a measurement: too short reloads a video that was only slow.
+const LOAD_TIMEOUT_SECONDS = 20
+
+export const WaitBeforeLoadTimeout = Command.define('WaitBeforeLoadTimeout', {
+  args: { playId: Schema.Number },
+  messages: [Message.CompletedWaitBeforeLoadTimeout],
+  execute: ({ playId }) =>
+    Effect.sleep(Duration.seconds(LOAD_TIMEOUT_SECONDS)).pipe(
+      Effect.as(Message.CompletedWaitBeforeLoadTimeout({ playId })),
+    ),
+})
+
+export const WaitBeforeRetryLoad = Command.define('WaitBeforeRetryLoad', {
+  args: { playId: Schema.Number, delaySeconds: Schema.Number },
+  messages: [Message.CompletedWaitBeforeRetryLoad],
+  execute: ({ playId, delaySeconds }) =>
+    Effect.sleep(Duration.seconds(delaySeconds)).pipe(
+      Effect.as(Message.CompletedWaitBeforeRetryLoad({ playId })),
+    ),
+})
+
 export const MountPlayer = Mount.define('MountPlayer', {
   messages: [Message.CompletedMountPlayer],
   execute: ({ element }) =>
     runPlayer(element, {
       hostId: PLAYER_HOST_ID,
       playerVars: { controls: 1, modestbranding: 1 },
-    }).pipe(Effect.ignore, Effect.as(Message.CompletedMountPlayer())),
+    }).pipe(Effect.as(Message.CompletedMountPlayer())),
 })
 
 // SUBSCRIPTION
@@ -686,6 +710,13 @@ const playheadOf = (
     ({ playId }) => playId === nowPlaying.playId,
   )
 
+/** The song the bar names: the one being sung, or the one that was clicked. */
+export const songOnBar = (model: Model, nowPlaying: NowPlaying): PlayableSong =>
+  Option.match(nowSingingOf(model), {
+    onNone: () => nowPlaying.song,
+    onSome: ({ segment }) => segment.song,
+  })
+
 export const nowSingingOf = (model: Model): Option.Option<NowSinging> =>
   Option.gen(function* () {
     const nowPlaying = yield* model.setlist.maybeNowPlaying
@@ -723,8 +754,8 @@ const seekBeside = (
 ): UpdateReturn =>
   Option.match(
     Option.flatMap(
-      Option.filter(model.setlist.maybeNowPlaying, ({ maybeLoadError }) =>
-        Option.isNone(maybeLoadError),
+      Option.filter(model.setlist.maybeNowPlaying, ({ phase }) =>
+        Option.isSome(intentOf(phase)),
       ),
       nowPlaying =>
         Option.map(
@@ -807,7 +838,6 @@ const continuationOf = (model: Model): Continuation => {
 
 const pickAnotherVideo = (
   model: Model,
-  cause: PickCause,
   onNoneLeft: () => UpdateReturn,
 ): UpdateReturn =>
   Option.match(model.setlist.maybeNowPlaying, {
@@ -817,7 +847,7 @@ const pickAnotherVideo = (
         onEmpty: onNoneLeft,
         onNonEmpty: candidates => ({
           model,
-          commands: [PickRandomVideo({ playId, candidates, cause })],
+          commands: [PickRandomVideo({ playId, candidates })],
         }),
       }),
   })
@@ -872,8 +902,12 @@ const changeSetlist = (model: Model, setlist: Setlist): UpdateReturn => {
       after: setlist.maybeNowPlaying,
     }),
     ({ before, after }) =>
-      before.playId === after.playId && before.status !== after.status
-        ? Option.some(ApplyPlayback({ isPlaying: after.status === 'Playing' }))
+      before.playId === after.playId
+        ? Option.flatMap(intentOf(after.phase), intent =>
+            Option.contains(intentOf(before.phase), intent)
+              ? Option.none()
+              : Option.some(ApplyPlayback({ isPlaying: intent === 'Playing' })),
+          )
         : Option.none(),
   )
   return {
@@ -917,6 +951,86 @@ const withSkipToast = (
       Option.some(addSkip(maybeToast, failedTitle, dismissId)),
   })
 
+/** The load of the current play failed. It is tried again by itself after a
+ *  wait, while automatic retries are left. */
+const failCurrentLoad = (
+  model: Model,
+  { playId, attempt }: NowPlaying,
+  reason: LoadFailure,
+): UpdateReturn => ({
+  model: modifyFields(model, {
+    setlist: setlist => failLoad(setlist, reason),
+  }),
+  commands: Option.toArray(
+    Option.map(loadRetryDelaySeconds(attempt), delaySeconds =>
+      WaitBeforeRetryLoad({ playId, delaySeconds }),
+    ),
+  ),
+})
+
+/** Loads the song on the bar again, which only a failed load allows. The new
+ *  playId makes the older retry timer stale. */
+const retryCurrentLoad = (
+  model: Model,
+  by: 'Visitor' | 'Timer',
+): UpdateReturn =>
+  Option.match(model.setlist.maybeNowPlaying, {
+    onNone: () => ({ model }),
+    onSome: nowPlaying => ({
+      model: modifyFields(model, {
+        setlist: setlist =>
+          retryLoad(setlist, songOnBar(model, nowPlaying), by),
+      }),
+    }),
+  })
+
+const currentPlay = (model: Model, playId: number): Option.Option<NowPlaying> =>
+  Option.filter(
+    model.setlist.maybeNowPlaying,
+    nowPlaying => nowPlaying.playId === playId,
+  )
+
+/** YouTube no longer has the video, so it is remembered as gone and the radio
+ *  moves on: to the queue head, to a random other video, or nowhere. */
+const skipGoneVideo = (
+  model: Model,
+  { playId, song: goneSong }: NowPlaying,
+): UpdateReturn => {
+  const goneModel = modifyFields(model, {
+    goneVideoIds: known => Array.dedupe([...known, goneSong.video_url]),
+  })
+  const { cleaned, advance } = planSkip(
+    goneModel.setlist,
+    continuationOf(goneModel),
+  )
+  const setlist = applySkip(cleaned, advance)
+  const skipped = modifyFields(goneModel, { setlist: () => setlist })
+  const saveSetlist = SaveSetlist({ json: toPersistedJson(setlist) })
+  return Advance.matchOrElse(
+    advance,
+    {
+      PickRandomVideo: ({ candidates }) => ({
+        model: skipped,
+        commands: [saveSetlist, PickRandomVideo({ playId, candidates })],
+      }),
+    },
+    () =>
+      Option.match(
+        Option.filter(
+          setlist.maybeNowPlaying,
+          after => after.playId !== playId,
+        ),
+        {
+          onNone: () => ({ model: skipped, commands: [saveSetlist] }),
+          onSome: ({ playId: dismissId }) => ({
+            model: withSkipToast(skipped, songLabel(goneSong), dismissId),
+            commands: [saveSetlist, WaitBeforeDismissToast({ dismissId })],
+          }),
+        },
+      ),
+  )
+}
+
 const updateModel = (model: Model, message: Message) =>
   Message.match<UpdateReturn>(message, {
     SucceededFetchSongs: ({ songs, goneVideoIds }) => ({
@@ -951,18 +1065,24 @@ const updateModel = (model: Model, message: Message) =>
       model: modifyFields(model, { maybeSelectedVideoId: () => Option.none() }),
     }),
 
-    ClickedSong: ({ song }) => {
-      const isCurrentSong = Option.exists(
-        model.setlist.maybeNowPlaying,
-        nowPlaying => nowPlaying.song.id === song.id,
-      )
-      return changeSetlist(
-        model,
-        isCurrentSong
-          ? togglePlaying(model.setlist)
-          : play(model.setlist, song),
-      )
-    },
+    ClickedSong: ({ song }) =>
+      Option.match(
+        Option.filter(
+          model.setlist.maybeNowPlaying,
+          nowPlaying => nowPlaying.song.id === song.id,
+        ),
+        {
+          onNone: () => changeSetlist(model, play(model.setlist, song)),
+          onSome: ({ phase }) =>
+            phase._tag === 'LoadFailed'
+              ? {
+                  model: modifyFields(model, {
+                    setlist: setlist => retryLoad(setlist, song, 'Visitor'),
+                  }),
+                }
+              : changeSetlist(model, togglePlaying(model.setlist)),
+        },
+      ),
 
     ClickedAddToQueue: ({ song }) =>
       changeSetlist(model, enqueue(model.setlist, song)),
@@ -1043,11 +1163,12 @@ const updateModel = (model: Model, message: Message) =>
     },
 
     ClickedPlayPause: () => changeSetlist(model, togglePlaying(model.setlist)),
+    ClickedRetryLoad: () => retryCurrentLoad(model, 'Visitor'),
     ClickedNext: () =>
       Array.isReadonlyArrayNonEmpty(model.setlist.queue)
         ? changeSetlist(model, playNext(model.setlist, model.repeat))
         : seekBeside(model, 1, () =>
-            pickAnotherVideo(model, 'Ended', () => ({ model })),
+            pickAnotherVideo(model, () => ({ model })),
           ),
     ClickedPrevious: () =>
       seekBeside(model, -1, () =>
@@ -1082,6 +1203,7 @@ const updateModel = (model: Model, message: Message) =>
         : { model },
 
     // NOTE: the previous play's video can still have events on their way, and acting on a late end would skip a song.
+    // A video that failed keeps reporting too, so a play that cannot sound hears only that its stream is gone.
     ReceivedPlayerEvent: ({ playId, event }) =>
       Option.match(
         Option.filter(
@@ -1090,119 +1212,70 @@ const updateModel = (model: Model, message: Message) =>
         ),
         {
           onNone: () => ({ model }),
-          onSome: ({ status, song: nowPlayingSong }) =>
-            PlayerEvent.match<UpdateReturn>(event, {
-              Ready: () => ({
-                model: modifyFields(model, {
-                  setlist: markPlayerReady,
-                }),
-                // NOTE: loading a video starts it, and a play call while it seeks to the song's start can start it from 0.
-                commands:
-                  status === 'Paused'
-                    ? [
-                        ApplyPlayback({ isPlaying: false }),
-                        ApplyVolume(model.volume),
-                      ]
-                    : [ApplyVolume(model.volume)],
-              }),
-              Playing: () =>
-                recordFromPlayer(model, setStatus(model.setlist, 'Playing')),
-              Paused: () =>
-                recordFromPlayer(model, setStatus(model.setlist, 'Paused')),
-              Ended: () => {
-                const advance = planAdvance(
-                  model.setlist,
-                  continuationOf(model),
-                )
-                return Advance.matchOrElse(
-                  advance,
-                  {
-                    PickRandomVideo: ({ candidates }) => ({
-                      model,
-                      commands: [
-                        PickRandomVideo({
-                          playId,
-                          candidates,
-                          cause: 'Ended',
-                        }),
-                      ],
-                    }),
-                  },
-                  () =>
-                    changeSetlist(
-                      model,
-                      applyAdvance(model.setlist, advance, model.repeat),
-                    ),
-                )
-              },
-              VideoFailed: () => {
-                const goneModel = modifyFields(model, {
-                  goneVideoIds: known =>
-                    Array.dedupe([...known, nowPlayingSong.video_url]),
-                })
-                const { cleaned, advance } = planSkip(
-                  goneModel.setlist,
-                  continuationOf(goneModel),
-                  STREAM_GONE,
-                )
-                return Advance.matchOrElse(
-                  advance,
-                  {
-                    PickRandomVideo: ({ candidates }) => ({
-                      model: modifyFields(goneModel, {
-                        setlist: () => cleaned,
-                      }),
-                      commands: [
-                        SaveSetlist({ json: toPersistedJson(cleaned) }),
-                        PickRandomVideo({
-                          playId,
-                          candidates,
-                          cause: 'Unavailable',
-                        }),
-                      ],
-                    }),
-                  },
-                  () => {
-                    const setlist = applySkip(cleaned, advance)
-                    const saveSetlist = SaveSetlist({
-                      json: toPersistedJson(setlist),
-                    })
-                    const maybeSkippedTo = Option.filter(
-                      setlist.maybeNowPlaying,
-                      after => after.playId !== playId,
+          onSome: nowPlaying =>
+            Option.match(intentOf(nowPlaying.phase), {
+              onNone: () =>
+                nowPlaying.phase._tag === 'LoadFailed'
+                  ? PlayerEvent.matchOrElse<UpdateReturn>(
+                      event,
+                      {
+                        VideoGone: () => skipGoneVideo(model, nowPlaying),
+                        Playing: () =>
+                          recordFromPlayer(model, reportPlaying(model.setlist)),
+                      },
+                      () => ({ model }),
                     )
-                    return Option.match(maybeSkippedTo, {
-                      onNone: () => ({
-                        model: modifyFields(goneModel, {
-                          setlist: () => setlist,
+                  : { model },
+              onSome: intent =>
+                PlayerEvent.match<UpdateReturn>(event, {
+                  Ready: () => ({
+                    model: modifyFields(model, { setlist: reportReady }),
+                    // NOTE: loading a video starts it, and a play call while it seeks to the song's start can start it from 0.
+                    commands:
+                      intent === 'Paused'
+                        ? [
+                            ApplyPlayback({ isPlaying: false }),
+                            ApplyVolume(model.volume),
+                          ]
+                        : [ApplyVolume(model.volume)],
+                  }),
+                  Playing: () =>
+                    recordFromPlayer(model, reportPlaying(model.setlist)),
+                  Paused: () =>
+                    recordFromPlayer(model, reportPaused(model.setlist)),
+                  Ended: () => {
+                    const advance = planAdvance(
+                      model.setlist,
+                      continuationOf(model),
+                    )
+                    return Advance.matchOrElse(
+                      advance,
+                      {
+                        PickRandomVideo: ({ candidates }) => ({
+                          model,
+                          commands: [PickRandomVideo({ playId, candidates })],
                         }),
-                        commands: [saveSetlist],
-                      }),
-                      onSome: ({ playId: dismissId }) => ({
-                        model: withSkipToast(
-                          modifyFields(goneModel, { setlist: () => setlist }),
-                          songLabel(nowPlayingSong),
-                          dismissId,
+                      },
+                      () =>
+                        changeSetlist(
+                          model,
+                          applyAdvance(model.setlist, advance, model.repeat),
                         ),
-                        commands: [
-                          saveSetlist,
-                          WaitBeforeDismissToast({ dismissId }),
-                        ],
-                      }),
-                    })
+                    )
                   },
-                )
-              },
-              PlayerFailed: ({ reason }) =>
-                recordFromPlayer(model, failLoad(model.setlist, reason)),
-              Progressed: ({ seconds }) => progressed(model, playId, seconds),
+                  VideoGone: () => skipGoneVideo(model, nowPlaying),
+                  LoadFailed: ({ reason }) =>
+                    failCurrentLoad(model, nowPlaying, reason),
+                  Progressed: ({ seconds }) =>
+                    progressed(model, playId, seconds),
+                }),
             }),
         },
       ),
 
     // NOTE: a click while the pick was pending changed the playId, and the visitor's choice wins.
     // A refetch can report the picked video gone after the pick was asked for, so it is drawn again.
-    CompletedPickRandomVideo: ({ playId, song, cause }) =>
+    CompletedPickRandomVideo: ({ playId, song }) =>
       Option.match(
         Option.filter(
           model.setlist.maybeNowPlaying,
@@ -1210,23 +1283,19 @@ const updateModel = (model: Model, message: Message) =>
         ),
         {
           onNone: () => ({ model }),
-          onSome: ({ song: previousSong }) => {
+          onSome: ({ song: previousSong, phase }) => {
             if (continuationOf(model).isGone(song)) {
-              return pickAnotherVideo(model, cause, () =>
-                cause === 'Ended'
-                  ? changeSetlist(model, setStatus(model.setlist, 'Paused'))
-                  : { model },
+              return pickAnotherVideo(model, () =>
+                Option.isSome(intentOf(phase))
+                  ? changeSetlist(model, pause(model.setlist))
+                  : { model: modifyFields(model, { setlist: settleGone }) },
               )
             }
             const setlist = play(model.setlist, song)
             const saveSetlist = SaveSetlist({ json: toPersistedJson(setlist) })
             const dismissId = setlist.playCount
-            return cause === 'Ended'
+            return phase._tag === 'MovingOn'
               ? {
-                  model: modifyFields(model, { setlist: () => setlist }),
-                  commands: [saveSetlist],
-                }
-              : {
                   model: withSkipToast(
                     modifyFields(model, { setlist: () => setlist }),
                     songLabel(previousSong),
@@ -1237,9 +1306,29 @@ const updateModel = (model: Model, message: Message) =>
                     WaitBeforeDismissToast({ dismissId }),
                   ],
                 }
+              : {
+                  model: modifyFields(model, { setlist: () => setlist }),
+                  commands: [saveSetlist],
+                }
           },
         },
       ),
+
+    // NOTE: a retry or a click since the timer started changed the playId, so a late timer does nothing.
+    CompletedWaitBeforeRetryLoad: ({ playId }) =>
+      Option.match(currentPlay(model, playId), {
+        onNone: () => ({ model }),
+        onSome: () => retryCurrentLoad(model, 'Timer'),
+      }),
+
+    CompletedWaitBeforeLoadTimeout: ({ playId }) =>
+      Option.match(currentPlay(model, playId), {
+        onNone: () => ({ model }),
+        onSome: nowPlaying =>
+          nowPlaying.phase._tag === 'Loading'
+            ? failCurrentLoad(model, nowPlaying, 'PlayerUnavailable')
+            : { model },
+      }),
 
     CompletedLoadSavedSetlist: ({ maybeJson }) => ({
       model: modifyFields(model, {
@@ -1387,11 +1476,30 @@ const updateModel = (model: Model, message: Message) =>
     CompletedFocusInfoButton: () => ({ model }),
   })
 
+/** Every new play starts its own load timeout, whatever started the play, so a
+ *  load that never reports anything still ends. */
+const withLoadTimeout = (before: Model, result: UpdateReturn): UpdateReturn =>
+  Option.match(
+    Option.filter(result.model.setlist.maybeNowPlaying, ({ playId }) =>
+      Option.isNone(currentPlay(before, playId)),
+    ),
+    {
+      onNone: () => result,
+      onSome: ({ playId }) => ({
+        ...result,
+        commands: [
+          ...(result.commands ?? []),
+          WaitBeforeLoadTimeout({ playId }),
+        ],
+      }),
+    },
+  )
+
 /** The address bar follows the open layers, so the browser's Back button closes
  *  the topmost one. A change that came from the address bar already has its
  *  entry, so it only repairs a URL that says something the model does not. */
 export const update = (model: Model, message: Message): UpdateReturn => {
-  const result = updateModel(model, message)
+  const result = withLoadTimeout(model, updateModel(model, message))
   const sync = (change: 'OpenVideo' | 'OpenOverlay' | 'Replace' | 'Close') =>
     SyncUrl({ url: layersToUrl(layersOf(result.model)), change })
   const fromUrl =

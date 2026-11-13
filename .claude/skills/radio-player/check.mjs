@@ -98,15 +98,29 @@ const setlistKey = (model, base) => {
   const now = nowOf(model);
   return JSON.stringify([
     ids(model.setlist.queue), ids(model.setlist.history),
-    now && [now.song.id, now.playId - base, now.status, now.player, now.maybeLoadError._tag],
+    now && [now.song.id, now.playId - base, now.phase, now.attempt],
   ]);
 };
-const hasFailed = (now) => now.maybeLoadError._tag === 'Some';
+// A live play has a video that can sound. A gone play's stream is gone, and a failed load is neither.
+const tagOf = (now) => now.phase._tag;
+const isLive = (now) => ['Loading', 'Playing', 'Paused'].includes(tagOf(now));
+const isGonePlay = (now) => ['MovingOn', 'Gone'].includes(tagOf(now));
+const intentOf = (now) => (tagOf(now) === 'Loading' ? now.phase.intent : isLive(now) ? tagOf(now) : undefined);
+const cannotSeek = (now) => !isLive(now);
+// The song the bar names: the one sung at the playhead, or the clicked one.
+const barSongOf = (model) => {
+  const now = nowOf(model);
+  const seconds = playheadOf(model);
+  return (seconds === undefined ? undefined : sungAt(now.song.video_url, seconds)) ?? now.song;
+};
+const WAITS = [2, 4, 8];
 const goneOf = (model, env) => new Set([...model.goneVideoIds, ...env.failed]);
 const named = (commands, name) => (commands ?? []).filter((command) => command.name === name);
 
-// STATE. `pending` holds the Command results that change something when they arrive: random picks and
-// toast timers. A timer knows whether it is the newest one, because two toasts can share a dismissId.
+// STATE. `pending` holds the Command results that change something when they arrive: random picks,
+// toast timers, retry timers and load timeouts. A toast timer knows whether it is the newest one,
+// because two toasts can share a dismissId. `env.loads` is the explorer's own count of the loads of the
+// song on the bar since it last played.
 // Every other Command's result message returns the model unchanged in `update`.
 // Lyrics, volume, layers and drags are left out: no setlist branch reads them.
 const keyOf = ({ model, env, pending, config }) => {
@@ -116,10 +130,11 @@ const keyOf = ({ model, env, pending, config }) => {
   return JSON.stringify([
     config, setlistKey(model, base), playhead && [playhead.playId - base, playhead.seconds],
     toast && [toast.firstSkippedTitle, toast.skippedCount, toast.dismissId - base],
-    [...model.goneVideoIds].sort(), [...env.failed].sort(), env.phase, env.position, env.refetched,
+    [...model.goneVideoIds].sort(), [...env.failed].sort(), env.phase, env.position, env.refetched, env.loads,
     pending.map((item) => JSON.stringify(item.kind === 'pick'
-      ? [item.kind, item.playId - base, item.cause, ids(item.candidates)]
-      : [item.kind, item.dismissId - base, item.isNewest])).sort(),
+      ? [item.kind, item.playId - base, ids(item.candidates)]
+      : item.kind === 'timer' ? [item.kind, item.dismissId - base, item.isNewest]
+      : [item.kind, item.playId - base, item.delaySeconds])).sort(),
   ]);
 };
 
@@ -140,8 +155,10 @@ function transitions({ model, env, pending }) {
     user(K.Message.ClickedQueuedSong({ index: 0 }), 'ClickedQueuedSong(0)');
     user(K.Message.ClickedRemoveFromQueue({ index: 0 }), 'ClickedRemoveFromQueue(0)');
   }
+  // The middle button is Play/Pause for a live play and Retry for a failed load. A gone play has neither.
+  if (now && isLive(now)) user(K.Message.ClickedPlayPause(), 'ClickedPlayPause');
+  if (now && tagOf(now) === 'LoadFailed') user(K.Message.ClickedRetryLoad(), 'ClickedRetryLoad');
   if (now) {
-    user(K.Message.ClickedPlayPause(), 'ClickedPlayPause');
     user(K.Message.ClickedNext(), 'ClickedNext');
     user(K.Message.ClickedPrevious(), 'ClickedPrevious');
   }
@@ -150,16 +167,20 @@ function transitions({ model, env, pending }) {
     out.push({ message: K.Message.SucceededFetchSongs({ songs: ARCHIVE, goneVideoIds: REFETCH_GONE }), label: `SucceededFetchSongs(refetch, gone [${REFETCH_GONE}])`, kind: 'refetch' });
   }
   // The current play's events, in the order loadedVideoEvents in src/youtube.ts emits them: Ready first,
-  // except that a failure can come before it. PlayerFailed is the only event of a player that never loaded.
+  // except that an error can come before it. The listener and its tick keep running after an error, so
+  // a play that failed or is gone can still get every later event, and update must ignore them.
+  const videoGone = () => playerEvent(now.playId, PlayerEvent.VideoGone(), 'VideoGone');
+  const loadFailed = () => playerEvent(now.playId, PlayerEvent.LoadFailed({ reason: 'VideoUnplayable' }), 'LoadFailed');
   if (now && env.phase === 'fresh') {
     out.push(playerEvent(now.playId, PlayerEvent.Ready(), 'Ready'));
-    out.push(playerEvent(now.playId, PlayerEvent.VideoFailed({ reason: 'x' }), 'VideoFailed'));
-    out.push(playerEvent(now.playId, PlayerEvent.PlayerFailed({ reason: 'x' }), 'PlayerFailed'));
+    out.push(videoGone());
+    out.push(loadFailed());
   }
   if (now && env.phase === 'loaded') {
     out.push(playerEvent(now.playId, PlayerEvent.Playing(), 'Playing'));
     out.push(playerEvent(now.playId, PlayerEvent.Paused(), 'Paused'));
-    out.push(playerEvent(now.playId, PlayerEvent.VideoFailed({ reason: 'x' }), 'VideoFailed'));
+    out.push(videoGone());
+    out.push(loadFailed());
     for (const seconds of PLAYHEADS[now.song.video_url]) {
       out.push(playerEvent(now.playId, PlayerEvent.Progressed({ seconds }), `Progressed ${seconds}s`));
     }
@@ -172,15 +193,19 @@ function transitions({ model, env, pending }) {
   // update, which compares only with the current one, so one older playId stands for all of them.
   const stale = model.setlist.playCount - 1;
   if (stale >= 1) {
-    for (const [event, label] of [[PlayerEvent.Ready(), 'Ready'], [PlayerEvent.Playing(), 'Playing'], [PlayerEvent.Paused(), 'Paused'], [PlayerEvent.Ended(), 'Ended'], [PlayerEvent.VideoFailed({ reason: 'x' }), 'VideoFailed'], [PlayerEvent.PlayerFailed({ reason: 'x' }), 'PlayerFailed'], [PlayerEvent.Progressed({ seconds: 180 }), 'Progressed 180s']]) {
+    for (const [event, label] of [[PlayerEvent.Ready(), 'Ready'], [PlayerEvent.Playing(), 'Playing'], [PlayerEvent.Paused(), 'Paused'], [PlayerEvent.Ended(), 'Ended'], [PlayerEvent.VideoGone(), 'VideoGone'], [PlayerEvent.LoadFailed({ reason: 'VideoUnplayable' }), 'LoadFailed'], [PlayerEvent.Progressed({ seconds: 180 }), 'Progressed 180s']]) {
       out.push(playerEvent(stale, event, label));
     }
   }
   pending.forEach((item, index) => {
     if (item.kind === 'pick') {
       for (const song of item.candidates) {
-        out.push({ message: K.Message.CompletedPickRandomVideo({ playId: item.playId, song, cause: item.cause }), label: `CompletedPickRandomVideo(playId ${item.playId}, ${song.id}, ${item.cause})`, kind: 'pick', playId: item.playId, song, consumes: index });
+        out.push({ message: K.Message.CompletedPickRandomVideo({ playId: item.playId, song }), label: `CompletedPickRandomVideo(playId ${item.playId}, ${song.id})`, kind: 'pick', playId: item.playId, song, consumes: index });
       }
+    } else if (item.kind === 'retry') {
+      out.push({ message: K.Message.CompletedWaitBeforeRetryLoad({ playId: item.playId }), label: `CompletedWaitBeforeRetryLoad(playId ${item.playId})`, kind: 'retry', playId: item.playId, consumes: index });
+    } else if (item.kind === 'loadTimeout') {
+      out.push({ message: K.Message.CompletedWaitBeforeLoadTimeout({ playId: item.playId }), label: `CompletedWaitBeforeLoadTimeout(playId ${item.playId})`, kind: 'loadTimeout', playId: item.playId, consumes: index });
     } else {
       out.push({ message: K.Message.CompletedWaitBeforeDismissToast({ dismissId: item.dismissId }), label: `CompletedWaitBeforeDismissToast(${item.dismissId})`, kind: 'timer', dismissId: item.dismissId, isNewest: item.isNewest, consumes: index });
     }
@@ -193,25 +218,37 @@ function step(state, transition) {
   const model = result.model;
   const commands = result.commands ?? [];
   const isNewTimer = commands.some((command) => command.name === 'WaitBeforeDismissToast');
-  const pending = state.pending
+  let pending = state.pending
     .filter((_, index) => index !== transition.consumes)
     .map((item) => (isNewTimer && item.kind === 'timer' ? { ...item, isNewest: false } : item));
   for (const command of commands) {
     if (command.name === 'PickRandomVideo') pending.push({ kind: 'pick', ...command.args });
     if (command.name === 'WaitBeforeDismissToast') pending.push({ kind: 'timer', dismissId: command.args.dismissId, isNewest: true });
+    if (command.name === 'WaitBeforeRetryLoad') pending.push({ kind: 'retry', ...command.args });
+    if (command.name === 'WaitBeforeLoadTimeout') pending.push({ kind: 'loadTimeout', ...command.args });
   }
   const before = nowOf(state.model);
   const after = nowOf(model);
+  // update compares a timer's playId only with the current one, so the newest timer of an older play
+  // stands for all of them. Without this, every play would leave its own load timeout in the state.
+  for (const kind of ['retry', 'loadTimeout']) {
+    const newestStale = pending.filter((item) => item.kind === kind && item.playId !== after?.playId).at(-1);
+    pending = pending.filter((item) => item.kind !== kind || item.playId === after?.playId || item === newestStale);
+  }
   let env = state.env;
   if (transition.kind === 'refetch') env = { ...env, refetched: true };
   if (transition.kind === 'player' && before && transition.playId === before.playId) {
     const tag = transition.event._tag;
     if (tag === 'Ready') env = { ...env, phase: 'loaded' };
     if (tag === 'Progressed') env = { ...env, position: transition.event.seconds };
-    if (tag === 'PlayerFailed') env = { ...env, phase: 'dead' };
-    if (tag === 'VideoFailed') env = { ...env, phase: 'dead', failed: [...new Set([...env.failed, before.song.video_url])] };
+    if (tag === 'VideoGone' && !isGonePlay(before)) env = { ...env, failed: [...new Set([...env.failed, before.song.video_url])] };
+    // Sound proves the load worked, unless the stream is gone, where the page ignores the report.
+    if (tag === 'Playing' && !isGonePlay(before)) env = { ...env, loads: 1 };
   }
-  if (after && (!before || after.playId !== before.playId)) env = { ...env, phase: 'fresh', position: undefined };
+  if (after && (!before || after.playId !== before.playId)) {
+    const isRetry = transition.kind === 'retry' || transition.label === 'ClickedRetryLoad' || (transition.kind === 'user' && before && tagOf(before) === 'LoadFailed' && transition.label === `ClickedSong(${before.song.id})`);
+    env = { ...env, phase: 'fresh', position: undefined, loads: isRetry ? env.loads + 1 : 1 };
+  }
   return { model, env, pending, config: state.config, commands };
 }
 
@@ -226,9 +263,9 @@ const sameSetlist = (pre, post) => setlistKey(pre.model, 0) === setlistKey(post.
 
 const PROPERTIES = {
   'stale-results-never-act': {
-    promise: 'A player event or random pick for a play that is no longer current changes nothing and sends nothing.',
+    promise: 'A player event, random pick, retry timer or load timeout for a play that is no longer current changes nothing and sends nothing.',
     check(pre, t, post) {
-      if ((t.kind !== 'player' && t.kind !== 'pick') || isCurrent(pre, t.playId)) return;
+      if (!['player', 'pick', 'retry', 'loadTimeout'].includes(t.kind) || isCurrent(pre, t.playId)) return;
       if (!sameSetlist(pre, post)) return 'the setlist changed';
       if (!same(post.model.maybePlayhead, pre.model.maybePlayhead)) return 'the playhead moved';
       if (!same(post.model.goneVideoIds, pre.model.goneVideoIds)) return 'a video was marked gone';
@@ -251,7 +288,7 @@ const PROPERTIES = {
         return;
       }
       const seconds = playheadOf(pre.model);
-      const failed = hasFailed(now);
+      const failed = cannotSeek(now);
       if (!failed && (seconds === undefined || !sungAt(now.song.video_url, seconds))) return; // see next-and-previous-with-unknown-playhead
       const next = failed ? undefined : songAfter(now.song.video_url, seconds);
       if (!sameSetlist(pre, post)) return 'the setlist changed, so the video reloaded or the queue moved';
@@ -276,7 +313,7 @@ const PROPERTIES = {
       if (t.label !== 'ClickedPrevious' || !now) return;
       const seconds = playheadOf(pre.model);
       const sung = seconds === undefined ? undefined : sungAt(now.song.video_url, seconds);
-      const failed = hasFailed(now);
+      const failed = cannotSeek(now);
       if (!sung && !failed) return; // see next-and-previous-with-unknown-playhead
       const seeks = named(post.commands, 'SeekPlayer');
       const before = failed ? undefined : songBefore(sung);
@@ -290,7 +327,7 @@ const PROPERTIES = {
       if (history.length === 0) return sameSetlist(pre, post) ? undefined : 'it changed the setlist with no history';
       const after = post.model.setlist;
       if (startedNewPlay(pre, post)?.song.id !== history[0].id) return `expected a new play of ${history[0].id}`;
-      const expectedQueue = failed ? queue : [now.song, ...queue];
+      const expectedQueue = isGonePlay(now) ? queue : [now.song, ...queue];
       if (ids(after.queue) !== ids(expectedQueue)) return `queue ${ids(after.queue)}, expected ${ids(expectedQueue)}`;
       if (ids(after.history) !== ids(history.slice(1))) return 'history did not drop its newest song';
     },
@@ -299,7 +336,7 @@ const PROPERTIES = {
     promise: 'Before a progress report, or with the playhead before the first song, Next and Previous still move within the stream from the song on the bar.',
     check(pre, t, post) {
       const now = nowOf(pre.model);
-      if ((t.label !== 'ClickedNext' && t.label !== 'ClickedPrevious') || !now || hasFailed(now)) return;
+      if ((t.label !== 'ClickedNext' && t.label !== 'ClickedPrevious') || !now || cannotSeek(now)) return;
       const seconds = playheadOf(pre.model);
       if (seconds !== undefined && sungAt(now.song.video_url, seconds)) return;
       if (t.label === 'ClickedNext' && pre.model.setlist.queue.length > 0) return;
@@ -348,13 +385,13 @@ const PROPERTIES = {
       if (t.kind === 'player' && started && !fromQueue && !repeated && gone.has(started.song.video_url)) return `${t.label} started ${started.song.id} of gone video ${started.song.video_url}`;
     },
   },
-  'failed-video-leaves-queue-and-history': {
-    promise: 'Once a video fails to play, none of its songs stays in the queue or history, so nothing plays it again.',
+  'gone-video-leaves-queue-and-history': {
+    promise: 'Once YouTube reports a video gone, none of its songs stays in the queue or history, so nothing plays it again.',
     check(pre, t, post) {
       const failed = new Set(post.env.failed);
       const { queue, history } = post.model.setlist;
       const bad = [...queue, ...history].find((song) => failed.has(song.video_url));
-      if (bad) return `${bad.id} of failed video ${bad.video_url} is in the ${queue.includes(bad) ? 'queue' : 'history'} after ${t.label}`;
+      if (bad) return `${bad.id} of gone video ${bad.video_url} is in the ${queue.includes(bad) ? 'queue' : 'history'} after ${t.label}`;
     },
   },
   'pick-rechecks-gone-at-delivery': {
@@ -365,27 +402,27 @@ const PROPERTIES = {
     },
   },
   'player-reports-never-echo': {
-    promise: "The player's own Playing, Paused, Progressed and PlayerFailed reports send no ApplyPlayback back, and Ready sends only a pause, for a paused play.",
+    promise: "The player's own Playing, Paused, Progressed and LoadFailed reports send no ApplyPlayback back, and Ready sends only a pause, for a live play the visitor paused.",
     check(pre, t, post) {
       if (t.kind !== 'player' || !isCurrent(pre, t.playId)) return;
       const applied = named(post.commands, 'ApplyPlayback');
       const tag = t.event._tag;
-      if (['Playing', 'Paused', 'Progressed', 'PlayerFailed'].includes(tag) && applied.length) return `${tag} sent ApplyPlayback(${applied[0].args.isPlaying})`;
+      if (['Playing', 'Paused', 'Progressed', 'LoadFailed'].includes(tag) && applied.length) return `${tag} sent ApplyPlayback(${applied[0].args.isPlaying})`;
       if (tag === 'Ready') {
-        const shouldPause = nowOf(pre.model).status === 'Paused';
-        if (applied.length !== (shouldPause ? 1 : 0) || applied.some((c) => c.args.isPlaying)) return `Ready on a ${nowOf(pre.model).status} play sent ${JSON.stringify(applied.map((c) => c.args))}`;
+        const shouldPause = intentOf(nowOf(pre.model)) === 'Paused';
+        if (applied.length !== (shouldPause ? 1 : 0) || applied.some((c) => c.args.isPlaying)) return `Ready on a ${tagOf(nowOf(pre.model))} play sent ${JSON.stringify(applied.map((c) => c.args))}`;
       }
     },
   },
   'play-pause-reaches-the-player': {
-    promise: 'Play/Pause flips the status and tells the player the new state.',
+    promise: 'Play/Pause on a live play flips what the visitor wants and tells the player the new state.',
     check(pre, t, post) {
       const before = nowOf(pre.model);
       if (t.label !== 'ClickedPlayPause' || !before) return;
       const after = nowOf(post.model);
       const applied = named(post.commands, 'ApplyPlayback');
-      if (after.status === before.status) return 'the status did not change';
-      if (applied.length !== 1 || applied[0].args.isPlaying !== (after.status === 'Playing')) return `sent ${JSON.stringify(applied.map((c) => c.args))} for ${after.status}`;
+      if (intentOf(after) === intentOf(before)) return 'what the visitor wants did not change';
+      if (applied.length !== 1 || applied[0].args.isPlaying !== (intentOf(after) === 'Playing')) return `sent ${JSON.stringify(applied.map((c) => c.args))} for ${intentOf(after)}`;
     },
   },
   'end-of-stream-does-not-replay-it': {
@@ -399,17 +436,17 @@ const PROPERTIES = {
     },
   },
   'ended-never-stalls': {
-    promise: 'After the current video ends, a new play starts or a random pick is on its way; it pauses only when nothing may follow.',
+    promise: 'After the video of a live play ends, a new play starts or a random pick is on its way; it pauses only when nothing may follow.',
     check(pre, t, post) {
       const now = nowOf(pre.model);
-      if (t.kind !== 'player' || t.event._tag !== 'Ended' || !isCurrent(pre, t.playId)) return;
+      if (t.kind !== 'player' || t.event._tag !== 'Ended' || !isCurrent(pre, t.playId) || !isLive(now)) return;
       if (startedNewPlay(pre, post)) return;
       const picks = named(post.commands, 'PickRandomVideo');
       if (picks.length === 1 && picks[0].args.playId === now.playId) return;
       const after = nowOf(post.model);
       const others = otherLiveFirstSongs(now.song.video_url, goneOf(pre.model, pre.env));
       const nothingFollows = pre.config.repeat === 'Off' && pre.model.setlist.queue.length === 0 && (!pre.config.isAutoplay || others.length === 0);
-      if (after.status !== 'Paused') return 'nothing new started and it did not pause';
+      if (intentOf(after) !== 'Paused') return 'nothing new started and it did not pause';
       if (!nothingFollows) return `it paused, though ${pre.model.setlist.queue.length ? 'the queue' : others.length ? `other live videos (${ids(others)})` : 'repeat'} could follow`;
     },
   },
@@ -421,6 +458,90 @@ const PROPERTIES = {
       if (toast && changed && !named(post.commands, 'WaitBeforeDismissToast').some((c) => c.args.dismissId === toast.dismissId)) return `${t.label} showed toast ${JSON.stringify(toast)} without starting its timer`;
       if (toast && !post.pending.some((item) => item.kind === 'timer' && item.isNewest && item.dismissId === toast.dismissId)) return `toast ${JSON.stringify(toast)} has no timer of its own on the way, so it never clears`;
       if (t.kind === 'timer' && !t.isNewest && some(pre.model.maybeSkipToast) && changed) return `an older timer (${t.dismissId}) hid the newer toast ${JSON.stringify(some(pre.model.maybeSkipToast))}`;
+    },
+  },
+  'load-failure-never-marks-a-stream-gone': {
+    promise: 'A load that failed, by an error or by its timeout, stays on its song and changes nothing else: no video is marked gone, and the queue, the history and the toast stay.',
+    check(pre, t, post) {
+      const now = nowOf(pre.model);
+      const isFailure = (t.kind === 'player' && t.event._tag === 'LoadFailed') || t.kind === 'loadTimeout';
+      if (!isFailure || !now || !isCurrent(pre, t.playId)) return;
+      const after = nowOf(post.model);
+      if (!same(post.model.goneVideoIds, pre.model.goneVideoIds)) return `it marked ${post.model.goneVideoIds.filter((id) => !pre.model.goneVideoIds.includes(id))} gone`;
+      if (after.playId !== now.playId || after.song.id !== now.song.id) return `the play changed to ${after.song.id}#${after.playId}`;
+      if (ids(post.model.setlist.queue) !== ids(pre.model.setlist.queue) || ids(post.model.setlist.history) !== ids(pre.model.setlist.history)) return 'the queue or history changed';
+      if (!same(post.model.maybeSkipToast, pre.model.maybeSkipToast)) return 'a skip toast appeared';
+      if (named(post.commands, 'PickRandomVideo').length) return 'it asked for another video';
+      const fails = isLive(now) && (t.kind === 'player' || tagOf(now) === 'Loading');
+      if (fails && tagOf(after) !== 'LoadFailed') return `the play is ${tagOf(after)}, not LoadFailed`;
+      if (!fails && !same(after, now)) return `a ${tagOf(now)} play changed`;
+    },
+  },
+  'retry-reloads-the-song-on-the-bar': {
+    promise: 'A retry of a failed load, by its timer, the Retry button or a click on the song, starts a new play of the song the bar names, or of the clicked song, as the next attempt, with its own load timeout, and leaves the queue and history alone. A timer for a play that is no longer failed does nothing.',
+    check(pre, t, post) {
+      const now = nowOf(pre.model);
+      if (!now) return;
+      const isRetry = (t.kind === 'retry' && isCurrent(pre, t.playId)) || t.label === 'ClickedRetryLoad' || (tagOf(now) === 'LoadFailed' && t.label === `ClickedSong(${now.song.id})`);
+      if (!isRetry) return;
+      const after = nowOf(post.model);
+      if (tagOf(now) !== 'LoadFailed') {
+        if (!sameSetlist(pre, post) || post.commands.length) return `a retry timer changed a ${tagOf(now)} play`;
+        return;
+      }
+      const expected = t.label.startsWith('ClickedSong') ? now.song : barSongOf(pre.model);
+      if (after.playId <= now.playId) return 'the playId stayed, so the video does not reload';
+      if (after.song.id !== expected.id) return `it loaded ${after.song.id}, and the bar named ${expected.id}`;
+      if (tagOf(after) !== 'Loading') return `the new play is ${tagOf(after)}`;
+      if (after.attempt !== now.attempt + 1) return `attempt went from ${now.attempt} to ${after.attempt}`;
+      if (ids(post.model.setlist.queue) !== ids(pre.model.setlist.queue) || ids(post.model.setlist.history) !== ids(pre.model.setlist.history)) return 'the queue or history changed';
+      const timeouts = named(post.commands, 'WaitBeforeLoadTimeout');
+      if (timeouts.length !== 1 || timeouts[0].args.playId !== after.playId) return 'the new play has no load timeout of its own';
+    },
+  },
+  'manual-retry-never-shortens-the-next-automatic-wait': {
+    promise: 'A failed load waits 2, 4, then 8 seconds by the count of loads since the song last played, whoever started them, and then waits for nothing. A retry itself starts no wait, so a manual Retry neither restarts nor shortens the schedule.',
+    check(pre, t, post) {
+      const now = nowOf(pre.model);
+      const waits = named(post.commands, 'WaitBeforeRetryLoad');
+      const after = nowOf(post.model);
+      const failedNow = now && after && isLive(now) && after.playId === now.playId && tagOf(after) === 'LoadFailed';
+      if (!failedNow) return waits.length ? `${t.label} started a retry wait of ${waits[0].args.delaySeconds}s without a failed load` : undefined;
+      const expected = WAITS[pre.env.loads - 1];
+      const got = waits.map((c) => c.args.delaySeconds);
+      if (expected === undefined) return got.length ? `load ${pre.env.loads} failed and still waits ${got}s to retry` : undefined;
+      if (got.length !== 1 || got[0] !== expected || waits[0].args.playId !== now.playId) return `load ${pre.env.loads} failed and waits [${got}]s for play ${waits[0]?.args.playId}, expected ${expected}s for play ${now.playId}`;
+    },
+  },
+  'moving-on-always-resolves': {
+    promise: 'A gone stream that is moving on always has a random pick for it on the way, and that pick starts another video or leaves the stream Gone. A gone play never becomes playable again.',
+    check(pre, t, post) {
+      const now = nowOf(pre.model);
+      const after = nowOf(post.model);
+      if (after && tagOf(after) === 'MovingOn' && !post.pending.some((item) => item.kind === 'pick' && item.playId === after.playId)) return `${t.label} left the play moving on with no pick on the way`;
+      if (now && after && isGonePlay(now) && after.playId === now.playId && !isGonePlay(after)) return `${t.label} turned a ${tagOf(now)} play into ${tagOf(after)}`;
+    },
+  },
+  'loading-always-ends': {
+    promise: 'A play that is loading always has its load timeout on the way, and that timeout fails the load.',
+    check(pre, t, post) {
+      const now = nowOf(pre.model);
+      const after = nowOf(post.model);
+      if (after && tagOf(after) === 'Loading' && !post.pending.some((item) => item.kind === 'loadTimeout' && item.playId === after.playId)) return `${t.label} left play ${after.playId} loading with no load timeout on the way`;
+      if (t.kind === 'loadTimeout' && now && isCurrent(pre, t.playId) && tagOf(now) === 'Loading' && tagOf(after) !== 'LoadFailed') return `the timeout left the play ${tagOf(after)}`;
+    },
+  },
+  'failed-play-ignores-player-reports': {
+    promise: 'A gone play ignores everything its player still reports. A failed load ignores everything but a gone video and a video that starts playing late.',
+    check(pre, t, post) {
+      const now = nowOf(pre.model);
+      if (t.kind !== 'player' || !now || !isCurrent(pre, t.playId) || isLive(now)) return;
+      const tag = t.event._tag;
+      if (tagOf(now) === 'LoadFailed' && (tag === 'VideoGone' || tag === 'Playing')) return;
+      if (!sameSetlist(pre, post)) return `${tag} changed a ${tagOf(now)} play`;
+      if (!same(post.model.maybePlayhead, pre.model.maybePlayhead)) return `${tag} moved the playhead of a ${tagOf(now)} play`;
+      if (!same(post.model.goneVideoIds, pre.model.goneVideoIds) || !same(post.model.maybeSkipToast, pre.model.maybeSkipToast)) return `${tag} on a ${tagOf(now)} play marked a video gone or showed a toast`;
+      if (post.commands.length) return `${tag} on a ${tagOf(now)} play sent ${post.commands.map((c) => c.name)}`;
     },
   },
   'setlist-change-is-saved': {
@@ -444,7 +565,7 @@ const configLabel = ({ isAutoplay, repeat }) => `autoplay ${isAutoplay ? 'on' : 
 
 function initialState(config) {
   const fetched = K.update(K.init(), K.Message.SucceededFetchSongs({ songs: ARCHIVE, goneVideoIds: SERVER_GONE })).model;
-  return { model: { ...fetched, ...config }, env: { phase: 'none', position: undefined, failed: [], refetched: false }, pending: [], config };
+  return { model: { ...fetched, ...config }, env: { phase: 'none', position: undefined, failed: [], refetched: false, loads: 1 }, pending: [], config };
 }
 
 const checkStep = (names, found, pre, transition, post, traceOf) => {
@@ -520,37 +641,55 @@ function walk(config, names, seed) {
 
 // MUTANTS: broken copies of the real code. Each must make its property fail.
 const MUTANTS = [
-  { property: 'stale-results-never-act', file: 'src/page/karaoke/karaoke.ts', from: 'CompletedPickRandomVideo: ({ playId, song, cause }) =>\n      Option.match(\n        Option.filter(\n          model.setlist.maybeNowPlaying,\n          nowPlaying => nowPlaying.playId === playId,', to: 'CompletedPickRandomVideo: ({ playId, song, cause }) =>\n      Option.match(\n        Option.filter(\n          model.setlist.maybeNowPlaying,\n          () => true,' },
+  { property: "stale-results-never-act", file: "src/page/karaoke/karaoke.ts", from: "CompletedPickRandomVideo: ({ playId, song }) =>\n      Option.match(\n        Option.filter(\n          model.setlist.maybeNowPlaying,\n          nowPlaying => nowPlaying.playId === playId,", to: "CompletedPickRandomVideo: ({ playId, song }) =>\n      Option.match(\n        Option.filter(\n          model.setlist.maybeNowPlaying,\n          () => true," },
   { property: 'stale-results-never-act', file: 'src/page/karaoke/karaoke.ts', from: 'ReceivedPlayerEvent: ({ playId, event }) =>\n      Option.match(\n        Option.filter(\n          model.setlist.maybeNowPlaying,\n          nowPlaying => nowPlaying.playId === playId,', to: 'ReceivedPlayerEvent: ({ playId, event }) =>\n      Option.match(\n        Option.filter(\n          model.setlist.maybeNowPlaying,\n          () => true,' },
   { property: 'next-plays-queue-then-stream-then-other-video', file: 'src/page/karaoke/karaoke.ts', from: 'ClickedNext: () =>\n      Array.isReadonlyArrayNonEmpty(model.setlist.queue)\n        ? changeSetlist(model, playNext(model.setlist, model.repeat))\n        : seekBeside(model, 1, () =>', to: 'ClickedNext: () =>\n      false\n        ? changeSetlist(model, playNext(model.setlist, model.repeat))\n        : seekBeside(model, 1, () =>' },
   { property: 'next-plays-queue-then-stream-then-other-video', file: 'src/page/karaoke/setlist.ts', from: 'song => !isGone(song) && song.video_url !== current.video_url,', to: 'song => !isGone(song),' },
   { property: 'next-plays-queue-then-stream-then-other-video', file: 'src/page/karaoke/karaoke.ts', from: ': seekBeside(model, 1, () =>', to: ': seekBeside(model, -1, () =>' },
-  { property: 'next-plays-queue-then-stream-then-other-video', file: 'src/page/karaoke/karaoke.ts', from: 'commands: [PickRandomVideo({ playId, candidates, cause })],', to: 'commands: [PickRandomVideo({ playId: playId + 1, candidates, cause })],' },
+  { property: "next-plays-queue-then-stream-then-other-video", file: "src/page/karaoke/karaoke.ts", from: "onNonEmpty: candidates => ({\n          model,\n          commands: [PickRandomVideo({ playId, candidates })],", to: "onNonEmpty: candidates => ({\n          model,\n          commands: [PickRandomVideo({ playId: playId + 1, candidates })]," },
   { property: 'previous-seeks-in-stream-then-history', file: 'src/page/karaoke/karaoke.ts', from: 'seekBeside(model, -1, () =>', to: 'seekBeside(model, 1, () =>' },
   { property: 'previous-seeks-in-stream-then-history', file: 'src/page/karaoke/karaoke.ts', from: 'ClickedPrevious: () =>\n      seekBeside(model, -1, () =>\n        changeSetlist(model, playPrevious(model.setlist)),\n      ),', to: 'ClickedPrevious: () => changeSetlist(model, playPrevious(model.setlist)),' },
   { property: 'next-and-previous-with-unknown-playhead', file: 'src/lyrics.ts', from: 'onNone: () =>\n      Array.findFirstIndex(spans, ({ song }) => song.id === playing.id),', to: 'onNone: () => Option.none(),' },
   { property: 'next-and-previous-with-unknown-playhead', file: 'src/lyrics.ts', from: '        () => -1,\n', to: '        () => -2,\n' },
-  { property: 'next-plays-queue-then-stream-then-other-video', file: 'src/page/karaoke/karaoke.ts', from: '        Option.isNone(maybeLoadError),', to: '        true,' },
+  { property: "next-plays-queue-then-stream-then-other-video", file: "src/page/karaoke/karaoke.ts", from: "        Option.isSome(intentOf(phase)),\n      ),\n      nowPlaying =>", to: "        true,\n      ),\n      nowPlaying =>" },
   { property: 'seek-never-reloads', file: 'src/page/karaoke/karaoke.ts', from: '          model: moved.model,\n          commands: [...(moved.commands ?? []), SeekPlayer({ seconds })],', to: '          model: modifyFields(moved.model, { setlist: setlist => play(setlist, song) }),\n          commands: [...(moved.commands ?? []), SeekPlayer({ seconds })],' },
   { property: 'seek-never-reloads', file: 'src/page/karaoke/karaoke.ts', from: 'const moved = progressed(model, nowPlaying.playId, seconds)', to: 'const moved = { model }' },
   { property: 'gone-video-never-auto-starts', file: 'src/page/karaoke/setlist.ts', from: 'song => !isGone(song) && song.video_url !== current.video_url,', to: 'song => song.video_url !== current.video_url,' },
   { property: 'gone-video-never-auto-starts', file: 'src/page/karaoke/karaoke.ts', from: 'isGone: song => goneIds.has(song.video_url),', to: 'isGone: () => false,' },
-  { property: 'gone-video-never-auto-starts', file: 'src/page/karaoke/karaoke.ts', from: 'goneVideoIds: known =>\n                    Array.dedupe([...known, nowPlayingSong.video_url]),', to: 'goneVideoIds: known => known,' },
-  { property: 'failed-video-leaves-queue-and-history', file: 'src/page/karaoke/setlist.ts', from: 'Option.isNone(maybeLoadError) ? Option.some(song) : Option.none(),', to: 'Option.some(song),' },
-  { property: 'failed-video-leaves-queue-and-history', file: 'src/page/karaoke/setlist.ts', from: 'const cleaned = failLoad(', to: 'const cleaned = (setlist => setlist)(' },
+  { property: "gone-video-never-auto-starts", file: "src/page/karaoke/karaoke.ts", from: "goneVideoIds: known => Array.dedupe([...known, goneSong.video_url]),", to: "goneVideoIds: known => known," },
+  { property: "gone-video-leaves-queue-and-history", file: "src/page/karaoke/setlist.ts", from: "isStreamGone(phase) ? Option.none() : Option.some(song),", to: "Option.some(song)," },
+  { property: "gone-video-leaves-queue-and-history", file: "src/page/karaoke/setlist.ts", from: "const cleaned = changePhase(", to: "const cleaned = (setlist => setlist)(" },
   { property: 'pick-rechecks-gone-at-delivery', file: 'src/page/karaoke/karaoke.ts', from: 'if (continuationOf(model).isGone(song)) {', to: 'if (false) {' },
-  { property: 'player-reports-never-echo', file: 'src/page/karaoke/karaoke.ts', from: "Playing: () =>\n                recordFromPlayer(model, setStatus(model.setlist, 'Playing')),", to: "Playing: () =>\n                changeSetlist(model, setStatus(model.setlist, 'Playing'))," },
-  { property: 'player-reports-never-echo', file: 'src/page/karaoke/karaoke.ts', from: "Paused: () =>\n                recordFromPlayer(model, setStatus(model.setlist, 'Paused')),", to: "Paused: () =>\n                changeSetlist(model, setStatus(model.setlist, 'Paused'))," },
-  { property: 'player-reports-never-echo', file: 'src/page/karaoke/karaoke.ts', from: "status === 'Paused'\n                    ? [\n                        ApplyPlayback({ isPlaying: false }),", to: "status === 'Playing'\n                    ? [\n                        ApplyPlayback({ isPlaying: false })," },
-  { property: 'play-pause-reaches-the-player', file: 'src/page/karaoke/karaoke.ts', from: 'before.playId === after.playId && before.status !== after.status', to: 'false' },
+  { property: "player-reports-never-echo", file: "src/page/karaoke/karaoke.ts", from: "Playing: () =>\n                    recordFromPlayer(model, reportPlaying(model.setlist)),", to: "Playing: () =>\n                    changeSetlist(model, reportPlaying(model.setlist))," },
+  { property: "player-reports-never-echo", file: "src/page/karaoke/karaoke.ts", from: "Paused: () =>\n                    recordFromPlayer(model, reportPaused(model.setlist)),", to: "Paused: () =>\n                    changeSetlist(model, reportPaused(model.setlist))," },
+  { property: "player-reports-never-echo", file: "src/page/karaoke/karaoke.ts", from: "intent === 'Paused'\n                        ? [\n                            ApplyPlayback({ isPlaying: false }),", to: "intent === 'Playing'\n                        ? [\n                            ApplyPlayback({ isPlaying: false })," },
+  { property: "play-pause-reaches-the-player", file: "src/page/karaoke/karaoke.ts", from: "Option.contains(intentOf(before.phase), intent)\n              ? Option.none()", to: "true\n              ? Option.none()" },
   { property: 'end-of-stream-does-not-replay-it', file: 'src/page/karaoke/setlist.ts', from: 'onSome: ({ song }) => planFromArchive(continuation, song),', to: 'onSome: () => Advance.Replay(),' },
-  { property: 'ended-never-stalls', file: 'src/page/karaoke/karaoke.ts', from: "                      commands: [\n                        PickRandomVideo({\n                          playId,\n                          candidates,\n                          cause: 'Ended',\n                        }),\n                      ],", to: '                      commands: [],' },
+  { property: "ended-never-stalls", file: "src/page/karaoke/karaoke.ts", from: "PickRandomVideo: ({ candidates }) => ({\n                          model,\n                          commands: [PickRandomVideo({ playId, candidates })],", to: "PickRandomVideo: ({ candidates }) => ({\n                          model,\n                          commands: []," },
   { property: 'ended-never-stalls', file: 'src/page/karaoke/setlist.ts', from: '  continuation.isAutoplay\n    ? Array.match(', to: '  !continuation.isAutoplay\n    ? Array.match(' },
   { property: 'skip-toast-always-clears', file: 'src/page/karaoke/karaoke.ts', from: 'Option.filter(maybeToast, toast => toast.dismissId !== dismissId)', to: 'Option.none()' },
   { property: 'skip-toast-always-clears', file: 'src/page/karaoke/karaoke.ts', from: 'const dismissId = setlist.playCount\n', to: 'const dismissId = setlist.playCount - 1\n' },
   { property: 'skip-toast-always-clears', file: 'src/page/karaoke/karaoke.ts', from: '                  commands: [\n                    saveSetlist,\n                    WaitBeforeDismissToast({ dismissId }),\n                  ],', to: '                  commands: [saveSetlist],' },
-  { property: 'setlist-change-is-saved', file: 'src/page/karaoke/karaoke.ts', from: '                      commands: [\n                        SaveSetlist({ json: toPersistedJson(cleaned) }),', to: '                      commands: [' },
-  { property: 'setlist-change-is-saved', file: 'src/page/karaoke/karaoke.ts', from: "            return cause === 'Ended'\n              ? {\n                  model: modifyFields(model, { setlist: () => setlist }),\n                  commands: [saveSetlist],", to: "            return cause === 'Ended'\n              ? {\n                  model: modifyFields(model, { setlist: () => setlist }),\n                  commands: []," },
+  { property: "setlist-change-is-saved", file: "src/page/karaoke/karaoke.ts", from: "commands: [saveSetlist, PickRandomVideo({ playId, candidates })],", to: "commands: [PickRandomVideo({ playId, candidates })]," },
+  { property: "setlist-change-is-saved", file: "src/page/karaoke/karaoke.ts", from: ": {\n                  model: modifyFields(model, { setlist: () => setlist }),\n                  commands: [saveSetlist],", to: ": {\n                  model: modifyFields(model, { setlist: () => setlist }),\n                  commands: []," },
+  { property: "stale-results-never-act", file: "src/page/karaoke/karaoke.ts", from: "CompletedWaitBeforeRetryLoad: ({ playId }) =>\n      Option.match(currentPlay(model, playId), {", to: "CompletedWaitBeforeRetryLoad: ({ playId }) =>\n      Option.match(model.setlist.maybeNowPlaying, {" },
+  { property: "stale-results-never-act", file: "src/page/karaoke/karaoke.ts", from: "CompletedWaitBeforeLoadTimeout: ({ playId }) =>\n      Option.match(currentPlay(model, playId), {", to: "CompletedWaitBeforeLoadTimeout: ({ playId }) =>\n      Option.match(model.setlist.maybeNowPlaying, {" },
+  { property: "load-failure-never-marks-a-stream-gone", file: "src/page/karaoke/karaoke.ts", from: "LoadFailed: ({ reason }) =>\n                    failCurrentLoad(model, nowPlaying, reason),", to: "LoadFailed: () => skipGoneVideo(model, nowPlaying)," },
+  { property: "load-failure-never-marks-a-stream-gone", file: "src/page/karaoke/karaoke.ts", from: "? failCurrentLoad(model, nowPlaying, 'PlayerUnavailable')", to: "? skipGoneVideo(model, nowPlaying)" },
+  { property: "load-failure-never-marks-a-stream-gone", file: "src/page/karaoke/setlist.ts", from: "onSome: intent => Phase.LoadFailed({ reason, intent }),", to: "onSome: () => Phase.Gone()," },
+  { property: "retry-reloads-the-song-on-the-bar", file: "src/page/karaoke/karaoke.ts", from: "retryLoad(setlist, songOnBar(model, nowPlaying), by),", to: "retryLoad(setlist, nowPlaying.song, by)," },
+  { property: "retry-reloads-the-song-on-the-bar", file: "src/page/karaoke/setlist.ts", from: "playId: setlist.playCount + 1,\n                  phase: Phase.Loading({", to: "playId: setlist.playCount,\n                  phase: Phase.Loading({" },
+  { property: "retry-reloads-the-song-on-the-bar", file: "src/page/karaoke/setlist.ts", from: "LoadFailed: ({ intent }) =>\n            modifyFields(setlist, {", to: "LoadFailed: ({ intent }) =>\n            modifyFields(play(setlist, song), {" },
+  { property: "manual-retry-never-shortens-the-next-automatic-wait", file: "src/page/karaoke/karaoke.ts", from: "ClickedRetryLoad: () => retryCurrentLoad(model, 'Visitor'),", to: "ClickedRetryLoad: () => {\n      const retried = retryCurrentLoad(model, 'Visitor')\n      return { model: modifyFields(retried.model, { setlist: setlist => modifyFields(setlist, { maybeNowPlaying: Option.map(nowPlaying => ({ ...nowPlaying, attempt: 1 })) }) }) }\n    }," },
+  { property: "manual-retry-never-shortens-the-next-automatic-wait", file: "src/page/karaoke/setlist.ts", from: "attempt: attempt + 1,", to: "attempt: 1," },
+  { property: "manual-retry-never-shortens-the-next-automatic-wait", file: "src/page/karaoke/setlist.ts", from: "attempt <= MAX_AUTO_LOAD_RETRIES ? Option.some", to: "true ? Option.some" },
+  { property: "manual-retry-never-shortens-the-next-automatic-wait", file: "src/page/karaoke/karaoke.ts", from: "Option.map(loadRetryDelaySeconds(attempt), delaySeconds =>", to: "Option.map(loadRetryDelaySeconds(1), delaySeconds =>" },
+  { property: "moving-on-always-resolves", file: "src/page/karaoke/karaoke.ts", from: ": { model: modifyFields(model, { setlist: settleGone }) },", to: ": { model }," },
+  { property: "moving-on-always-resolves", file: "src/page/karaoke/karaoke.ts", from: "commands: [saveSetlist, PickRandomVideo({ playId, candidates })],", to: "commands: [saveSetlist]," },
+  { property: "loading-always-ends", file: "src/page/karaoke/karaoke.ts", from: "          WaitBeforeLoadTimeout({ playId }),\n        ],", to: "        ]," },
+  { property: "loading-always-ends", file: "src/page/karaoke/karaoke.ts", from: "nowPlaying.phase._tag === 'Loading'\n            ? failCurrentLoad", to: "false\n            ? failCurrentLoad" },
+  { property: "failed-play-ignores-player-reports", file: "src/page/karaoke/karaoke.ts", from: "                      () => ({ model }),\n                    )\n                  : { model },", to: "                      () => progressed(model, playId, 0),\n                    )\n                  : { model }," },
+  { property: "failed-play-ignores-player-reports", file: "src/page/karaoke/karaoke.ts", from: "                      () => ({ model }),\n                    )\n                  : { model },", to: "                      () => ({ model }),\n                    )\n                  : progressed(model, playId, 0)," },
 ];
 
 function runMutants() {

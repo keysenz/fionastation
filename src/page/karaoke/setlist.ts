@@ -3,14 +3,48 @@ import { defineTaggedUnion } from 'foldkit/schema'
 import { modifyFields } from 'foldkit/struct'
 
 import { PlayableSong } from '../../domain.ts'
+import { LoadFailure } from '../../youtube.ts'
 
 const HISTORY_LIMIT = 50
 
-export const PlaybackStatus = Schema.Literals(['Playing', 'Paused'])
-export type PlaybackStatus = typeof PlaybackStatus.Type
+export const PlaybackIntent = Schema.Literals(['Playing', 'Paused'])
+export type PlaybackIntent = typeof PlaybackIntent.Type
 
-export const PlayerState = Schema.Literals(['Loading', 'Ready'])
-export type PlayerState = typeof PlayerState.Type
+/** Where one play stands. `MovingOn` and `Gone` both mean YouTube no longer has
+ *  the stream: a random other video is on its way, or nothing may follow.
+ *  `LoadFailed` is a load that may still work, so the song stays a real song.
+ *  `intent` is what the visitor last asked for while no video can honor it. */
+export const Phase = defineTaggedUnion({
+  Loading: { intent: PlaybackIntent },
+  Playing: {},
+  Paused: {},
+  MovingOn: {},
+  Gone: {},
+  LoadFailed: { reason: LoadFailure, intent: PlaybackIntent },
+})
+export type Phase = typeof Phase.Type
+
+/** What the visitor wants from a video that can play, and nothing for one that cannot. */
+export const intentOf = (phase: Phase): Option.Option<PlaybackIntent> =>
+  Phase.match<Option.Option<PlaybackIntent>>(phase, {
+    Loading: ({ intent }) => Option.some(intent),
+    Playing: () => Option.some('Playing'),
+    Paused: () => Option.some('Paused'),
+    MovingOn: () => Option.none(),
+    Gone: () => Option.none(),
+    LoadFailed: () => Option.none(),
+  })
+
+export const isStreamGone = Phase.isAnyOf(['MovingOn', 'Gone'])
+
+export const MAX_AUTO_LOAD_RETRIES = 3
+
+/** The wait before the automatic retry of a failed load: 2, 4, then 8 seconds.
+ *  None once the automatic retries are spent, whoever started the attempts. */
+export const loadRetryDelaySeconds = (
+  attempt: number,
+): Option.Option<number> =>
+  attempt <= MAX_AUTO_LOAD_RETRIES ? Option.some(2 ** attempt) : Option.none()
 
 export const Repeat = Schema.Literals(['Off', 'All', 'One'])
 export type Repeat = typeof Repeat.Type
@@ -18,16 +52,13 @@ export type Repeat = typeof Repeat.Type
 export const nextRepeat = (repeat: Repeat): Repeat =>
   repeat === 'Off' ? 'All' : repeat === 'All' ? 'One' : 'Off'
 
-const PLAYING: PlaybackStatus = 'Playing'
-const PAUSED: PlaybackStatus = 'Paused'
-
 export const NowPlaying = Schema.Struct({
   song: PlayableSong,
   // NOTE: tells two plays of one song apart, so replaying it still reloads the video.
   playId: Schema.Number,
-  status: PlaybackStatus,
-  player: PlayerState,
-  maybeLoadError: Schema.Option(Schema.String),
+  phase: Phase,
+  // NOTE: counts the loads of this song since it last played, across the new playId of each retry. It lives beside the phase because a load that got ready or paused can still fail.
+  attempt: Schema.Number,
 })
 export type NowPlaying = typeof NowPlaying.Type
 
@@ -63,18 +94,17 @@ const startPlay = (setlist: Setlist, song: PlayableSong): Setlist =>
       Option.some({
         song,
         playId: setlist.playCount + 1,
-        status: PLAYING,
-        player: 'Loading',
-        maybeLoadError: Option.none(),
+        phase: Phase.Loading({ intent: 'Playing' }),
+        attempt: 1,
       }),
     playCount: count => count + 1,
   })
 
-/** The song being left, unless its play failed. A song that never played is
- *  neither history nor queued again, because its video may be gone. */
+/** The song being left, unless its stream is gone. A gone song is neither
+ *  history nor queued again. A song whose load failed is still a real song. */
 const leftSong = (setlist: Setlist): Option.Option<PlayableSong> =>
-  Option.flatMap(setlist.maybeNowPlaying, ({ song, maybeLoadError }) =>
-    Option.isNone(maybeLoadError) ? Option.some(song) : Option.none(),
+  Option.flatMap(setlist.maybeNowPlaying, ({ song, phase }) =>
+    isStreamGone(phase) ? Option.none() : Option.some(song),
   )
 
 export const play = (setlist: Setlist, song: PlayableSong): Setlist =>
@@ -141,30 +171,120 @@ const modifyNowPlaying = (
     maybeNowPlaying: maybeNowPlaying => Option.map(maybeNowPlaying, change),
   })
 
-export const setStatus = (setlist: Setlist, status: PlaybackStatus): Setlist =>
+const changePhase = (
+  setlist: Setlist,
+  change: (phase: Phase) => Phase,
+): Setlist =>
   modifyNowPlaying(setlist, nowPlaying =>
-    modifyFields(nowPlaying, { status: () => status }),
+    modifyFields(nowPlaying, { phase: change }),
   )
 
-export const markPlayerReady = (setlist: Setlist): Setlist =>
-  modifyNowPlaying(setlist, nowPlaying =>
-    modifyFields(nowPlaying, { player: () => 'Ready' }),
+const keep = (phase: Phase): Phase => phase
+
+export const togglePlaying = (setlist: Setlist): Setlist =>
+  changePhase(
+    setlist,
+    Phase.matchOrElse(
+      {
+        Loading: ({ intent }) =>
+          Phase.Loading({
+            intent: intent === 'Playing' ? 'Paused' : 'Playing',
+          }),
+        Playing: () => Phase.Paused(),
+        Paused: () => Phase.Playing(),
+      },
+      keep,
+    ),
   )
 
-export const failLoad = (setlist: Setlist, reason: string): Setlist =>
+export const pause = (setlist: Setlist): Setlist =>
+  changePhase(
+    setlist,
+    Phase.matchOrElse(
+      {
+        Loading: () => Phase.Loading({ intent: 'Paused' }),
+        Playing: () => Phase.Paused(),
+      },
+      keep,
+    ),
+  )
+
+/** The player loaded the video, which starts or stays paused as the visitor asked. */
+export const reportReady = (setlist: Setlist): Setlist =>
+  changePhase(
+    setlist,
+    Phase.matchOrElse(
+      {
+        Loading: ({ intent }) =>
+          intent === 'Playing' ? Phase.Playing() : Phase.Paused(),
+      },
+      keep,
+    ),
+  )
+
+/** Only sound proves a load worked, so only this starts the attempts again.
+ *  It also ends a failed load, whose video can still start late. */
+export const reportPlaying = (setlist: Setlist): Setlist =>
   modifyNowPlaying(setlist, nowPlaying =>
-    modifyFields(nowPlaying, {
-      status: () => PAUSED,
-      maybeLoadError: () => Option.some(reason),
+    isStreamGone(nowPlaying.phase)
+      ? nowPlaying
+      : modifyFields(nowPlaying, {
+          phase: () => Phase.Playing(),
+          attempt: () => 1,
+        }),
+  )
+
+export const reportPaused = (setlist: Setlist): Setlist =>
+  changePhase(setlist, phase =>
+    Option.isSome(intentOf(phase)) ? Phase.Paused() : phase,
+  )
+
+export const failLoad = (setlist: Setlist, reason: LoadFailure): Setlist =>
+  changePhase(setlist, phase =>
+    Option.match(intentOf(phase), {
+      onNone: () => phase,
+      onSome: intent => Phase.LoadFailed({ reason, intent }),
     }),
   )
 
-export const togglePlaying = (setlist: Setlist): Setlist =>
+/** Loads `song` again as the next attempt of the failed play, with a new playId
+ *  so the video reloads. The queue and history stay as they are. `Visitor` asks
+ *  to hear it, and `Timer` keeps what the visitor asked before the failure. */
+export const retryLoad = (
+  setlist: Setlist,
+  song: PlayableSong,
+  by: 'Visitor' | 'Timer',
+): Setlist =>
   Option.match(setlist.maybeNowPlaying, {
     onNone: () => setlist,
-    onSome: ({ status }) =>
-      setStatus(setlist, status === 'Playing' ? 'Paused' : 'Playing'),
+    onSome: ({ phase, attempt }) =>
+      Phase.matchOrElse(
+        phase,
+        {
+          LoadFailed: ({ intent }) =>
+            modifyFields(setlist, {
+              maybeNowPlaying: () =>
+                Option.some({
+                  song,
+                  playId: setlist.playCount + 1,
+                  phase: Phase.Loading({
+                    intent: by === 'Visitor' ? 'Playing' : intent,
+                  }),
+                  attempt: attempt + 1,
+                }),
+              playCount: count => count + 1,
+            }),
+        },
+        () => setlist,
+      ),
   })
+
+/** The pick for a gone stream found no live video, so the stream stays, gone. */
+export const settleGone = (setlist: Setlist): Setlist =>
+  changePhase(
+    setlist,
+    Phase.matchOrElse({ MovingOn: () => Phase.Gone() }, keep),
+  )
 
 /** With repeat All, leaving a song puts it at the end of the queue first, so
  *  the queue loops, and an empty queue replays the song. */
@@ -177,7 +297,7 @@ export const playNext = (setlist: Setlist, repeat: Repeat = 'Off'): Setlist => {
         })
       : setlist
   return Option.match(Array.head(looped.queue), {
-    onNone: () => setStatus(looped, 'Paused'),
+    onNone: () => pause(looped),
     onSome: nextSong =>
       play(
         modifyFields(looped, { queue: queue => Array.drop(queue, 1) }),
@@ -219,10 +339,6 @@ export const Advance = defineTaggedUnion({
   Stop: {},
 })
 export type Advance = typeof Advance.Type
-
-/** Why a random video was needed: the video ended, or it cannot be played. */
-export const PickCause = Schema.Literals(['Ended', 'Unavailable'])
-export type PickCause = typeof PickCause.Type
 
 export const firstSongOfEachOtherLiveVideo = (
   { archive, isGone }: Continuation,
@@ -287,43 +403,46 @@ export const applyAdvance = (
         onSome: ({ song }) => startPlay(setlist, song),
       }),
     PickRandomVideo: () => setlist,
-    Stop: () => setStatus(setlist, 'Paused'),
+    Stop: () => pause(setlist),
   })
 
-/** A dead video takes every song of it out of the queue and history, and its
- *  play is marked failed with the reason, so nothing records it later. The plan
- *  is for the cleaned setlist, so the song that hit it is never a candidate. */
+/** A gone video takes every song of it out of the queue and history, and its
+ *  play is marked gone, so nothing records it later. The plan is for the cleaned
+ *  setlist, so the song that hit it is never a candidate. */
 export const planSkip = (
   setlist: Setlist,
   continuation: Continuation,
-  reason: string,
 ): { cleaned: Setlist; advance: Advance } =>
   Option.match(setlist.maybeNowPlaying, {
     onNone: () => ({ cleaned: setlist, advance: Advance.Stop() }),
-    onSome: ({ song: failedSong }) => {
+    onSome: ({ song: goneSong }) => {
       const isOtherVideo = (song: PlayableSong): boolean =>
-        song.video_url !== failedSong.video_url
-      const cleaned = failLoad(
+        song.video_url !== goneSong.video_url
+      const cleaned = changePhase(
         modifyFields(setlist, {
           queue: queue => Array.filter(queue, isOtherVideo),
           history: history => Array.filter(history, isOtherVideo),
         }),
-        reason,
+        () => Phase.Gone(),
       )
       return {
         cleaned,
         advance: Array.isReadonlyArrayNonEmpty(cleaned.queue)
           ? Advance.PlayQueued()
-          : planFromArchive(continuation, failedSong),
+          : planFromArchive(continuation, goneSong),
       }
     },
   })
 
-/** With nothing to move to, the failed song stays, paused with the reason. */
+/** The queue head plays. A random pick is on its way, so the gone song waits
+ *  for it. With nothing to move to, the gone song stays. */
 export const applySkip = (cleaned: Setlist, advance: Advance): Setlist =>
   Advance.matchOrElse(
     advance,
-    { PlayQueued: () => playNext(cleaned) },
+    {
+      PlayQueued: () => playNext(cleaned),
+      PickRandomVideo: () => changePhase(cleaned, () => Phase.MovingOn()),
+    },
     () => cleaned,
   )
 

@@ -10,7 +10,7 @@ import {
   songLabel,
 } from '../../domain.ts'
 import { songsRouter } from '../../route'
-import { thumbnailUrl } from '../../youtube'
+import { type LoadFailure, thumbnailUrl } from '../../youtube'
 import { infoButtonView, infoPanelView } from './info.ts'
 import {
   Message,
@@ -22,6 +22,7 @@ import {
   allSongs,
   nowSingingOf,
   queueHandleId,
+  songOnBar,
 } from './karaoke'
 import {
   currentLineOf,
@@ -30,9 +31,13 @@ import {
 } from './lyricsView.ts'
 import {
   type NowPlaying,
+  Phase,
+  type PlaybackIntent,
   type Repeat,
   type Volume,
+  intentOf,
   isSilent,
+  loadRetryDelaySeconds,
 } from './setlist.ts'
 import {
   type VideoGroup,
@@ -60,21 +65,14 @@ type Playback = {
   isPlaying: boolean
 }
 
-const shownSongOf = (model: Model, nowPlaying: NowPlaying): PlayableSong =>
-  Option.match(nowSingingOf(model), {
-    onNone: () => nowPlaying.song,
-    onSome: ({ segment }) => segment.song,
-  })
-
 const playbackOf = (model: Model): Playback => ({
   maybeNowPlaying: model.setlist.maybeNowPlaying,
   maybeShownSongId: Option.map(
     model.setlist.maybeNowPlaying,
-    nowPlaying => shownSongOf(model, nowPlaying).id,
+    nowPlaying => songOnBar(model, nowPlaying).id,
   ),
-  isPlaying: Option.exists(
-    model.setlist.maybeNowPlaying,
-    nowPlaying => nowPlaying.status === 'Playing',
+  isPlaying: Option.exists(model.setlist.maybeNowPlaying, ({ phase }) =>
+    Option.contains(intentOf(phase), 'Playing'),
   ),
 })
 
@@ -1213,15 +1211,101 @@ const repeatButtonView = (
     ],
   )
 
+const LOAD_FAILURE_TEXT: Record<LoadFailure, string> = {
+  PlayerUnavailable: 'YouTube did not load',
+  VideoUnplayable: 'This video did not load',
+}
+
+/** What the bar says in place of the song's kind while the song cannot sound. */
+const troubleOf = ({ phase, attempt }: NowPlaying): Option.Option<string> =>
+  Phase.matchOrElse(
+    phase,
+    {
+      MovingOn: () => Option.some('Stream gone. Finding another video'),
+      Gone: () => Option.some('This stream is gone'),
+      LoadFailed: ({ reason }) =>
+        Option.some(
+          Option.match(loadRetryDelaySeconds(attempt), {
+            onNone: () => `${LOAD_FAILURE_TEXT[reason]} after ${attempt} tries`,
+            onSome: delaySeconds =>
+              `${LOAD_FAILURE_TEXT[reason]}. Try ${attempt + 1} in ${delaySeconds}s`,
+          }),
+        ),
+    },
+    () => Option.none<string>(),
+  )
+
+/** The middle button of the bar and of the phone controls. It plays or pauses a
+ *  video that can sound, and otherwise shows why it cannot. */
+const playControlView = (
+  { phase }: NowPlaying,
+  shapeClass: string,
+  h: HtmlBuilder<Message>,
+): Html => {
+  const playPauseView = (intent: PlaybackIntent): Html =>
+    h.button(
+      [
+        h.Type('button'),
+        h.AriaLabel(intent === 'Playing' ? 'Pause' : 'Play'),
+        h.OnClick(Message.ClickedPlayPause()),
+        h.Class(shapeClass),
+      ],
+      [
+        h.i([
+          h.Class(intent === 'Playing' ? 'fas fa-pause' : 'fas fa-play pl-1'),
+          h.AriaHidden(true),
+        ]),
+      ],
+    )
+  return Phase.match(phase, {
+    Loading: ({ intent }) => playPauseView(intent),
+    Playing: () => playPauseView('Playing'),
+    Paused: () => playPauseView('Paused'),
+    MovingOn: () =>
+      h.div(
+        [
+          h.Role('status'),
+          h.AriaLabel('Finding another video'),
+          h.Class(twMerge(shapeClass, 'bg-white/20 text-white')),
+        ],
+        [h.i([h.Class('fas fa-spinner fa-spin'), h.AriaHidden(true)])],
+      ),
+    Gone: () =>
+      h.button(
+        [
+          h.Type('button'),
+          h.Disabled(true),
+          h.AriaLabel('Play'),
+          h.Class(twMerge(shapeClass, 'opacity-40 cursor-not-allowed')),
+        ],
+        [h.i([h.Class('fas fa-play pl-1'), h.AriaHidden(true)])],
+      ),
+    LoadFailed: () =>
+      h.button(
+        [
+          h.Type('button'),
+          h.AriaLabel('Retry'),
+          h.Title('Retry'),
+          h.OnClick(Message.ClickedRetryLoad()),
+          h.Class(shapeClass),
+        ],
+        [h.i([h.Class('fas fa-redo'), h.AriaHidden(true)])],
+      ),
+  })
+}
+
 const playerBarView = (
   nowPlaying: NowPlaying,
   model: Model,
   h: HtmlBuilder<Message>,
 ): Html => {
-  const isPlayerReady = nowPlaying.player === 'Ready'
-  const shownSong = shownSongOf(model, nowPlaying)
+  // NOTE: only a loaded video has something to expand, but an open player must always close, whatever became of its video.
+  const canToggleExpanded =
+    model.isExpanded || Phase.isAnyOf(['Playing', 'Paused'])(nowPlaying.phase)
+  const shownSong = songOnBar(model, nowPlaying)
   const maybeLine = Option.flatMap(nowSingingOf(model), currentLineOf)
-  const subline = Option.getOrElse(nowPlaying.maybeLoadError, () =>
+  const maybeTrouble = troubleOf(nowPlaying)
+  const subline = Option.getOrElse(maybeTrouble, () =>
     kindLabel(shownSong.kind),
   )
   return h.div(
@@ -1270,10 +1354,10 @@ const playerBarView = (
               h.Class(
                 twMerge(
                   'relative group',
-                  isPlayerReady ? 'cursor-pointer' : 'cursor-default',
+                  canToggleExpanded ? 'cursor-pointer' : 'cursor-default',
                 ),
               ),
-              ...(isPlayerReady
+              ...(canToggleExpanded
                 ? [h.OnClick(Message.ClickedToggleExpanded())]
                 : []),
             ],
@@ -1314,13 +1398,16 @@ const playerBarView = (
                 [songLabel(shownSong)],
               ),
               h.p(
-                [h.Class('hidden sm:block text-xs text-gray-300 truncate')],
+                [
+                  h.Class('hidden sm:block text-xs text-gray-300 truncate'),
+                  h.Title(subline),
+                ],
                 [subline],
               ),
               h.p(
                 [h.Class('sm:hidden text-xs text-gray-300 truncate')],
                 [
-                  Option.isSome(nowPlaying.maybeLoadError)
+                  Option.isSome(maybeTrouble)
                     ? subline
                     : Option.getOrElse(maybeLine, () => subline),
                 ],
@@ -1329,7 +1416,7 @@ const playerBarView = (
           ),
           h.button([
             h.Type('button'),
-            h.Disabled(!isPlayerReady),
+            h.Disabled(!canToggleExpanded),
             h.AriaLabel(model.isExpanded ? 'Collapse player' : 'Expand player'),
             h.OnClick(Message.ClickedToggleExpanded()),
             h.Class('absolute inset-0 !ml-0 sm:hidden'),
@@ -1351,22 +1438,10 @@ const playerBarView = (
                 ],
                 [h.i([h.Class('fas fa-step-backward fa-lg drop-shadow-md')])],
               ),
-              h.button(
-                [
-                  h.OnClick(Message.ClickedPlayPause()),
-                  h.Class(
-                    'w-10 h-10 rounded-full bg-white text-black flex items-center justify-center hover:scale-110 active:scale-95 transition shadow-lg hover:shadow-sky-500/20',
-                  ),
-                ],
-                [
-                  h.i([
-                    h.Class(
-                      nowPlaying.status === 'Playing'
-                        ? 'fas fa-pause'
-                        : 'fas fa-play pl-1',
-                    ),
-                  ]),
-                ],
+              playControlView(
+                nowPlaying,
+                'w-10 h-10 rounded-full bg-white text-black flex items-center justify-center hover:scale-110 active:scale-95 transition shadow-lg hover:shadow-sky-500/20',
+                h,
               ),
               h.button(
                 [
@@ -1414,16 +1489,18 @@ const playerBarView = (
           h.button(
             [
               h.Type('button'),
-              h.Disabled(!isPlayerReady),
+              h.Disabled(!canToggleExpanded),
               h.AriaLabel(
                 model.isExpanded ? 'Collapse player' : 'Expand player',
               ),
               h.Title(
-                isPlayerReady
+                canToggleExpanded
                   ? model.isExpanded
                     ? 'Collapse player'
                     : 'Expand player'
-                  : 'Player is loading',
+                  : nowPlaying.phase._tag === 'Loading'
+                    ? 'Player is loading'
+                    : 'This video cannot play',
               ),
               h.OnClick(Message.ClickedToggleExpanded()),
               h.Class(
@@ -1594,25 +1671,10 @@ const phoneControlsView = (
         ],
         [h.i([h.Class('fas fa-step-backward fa-lg'), h.AriaHidden(true)])],
       ),
-      h.button(
-        [
-          h.Type('button'),
-          h.AriaLabel(nowPlaying.status === 'Playing' ? 'Pause' : 'Play'),
-          h.OnClick(Message.ClickedPlayPause()),
-          h.Class(
-            'w-16 h-16 rounded-full bg-white text-black flex items-center justify-center text-2xl active:scale-95 transition shadow-lg',
-          ),
-        ],
-        [
-          h.i([
-            h.Class(
-              nowPlaying.status === 'Playing'
-                ? 'fas fa-pause'
-                : 'fas fa-play pl-1',
-            ),
-            h.AriaHidden(true),
-          ]),
-        ],
+      playControlView(
+        nowPlaying,
+        'w-16 h-16 rounded-full bg-white text-black flex items-center justify-center text-2xl active:scale-95 transition shadow-lg',
+        h,
       ),
       h.button(
         [
@@ -1706,7 +1768,7 @@ const playerView = (
                     'text-xl sm:text-2xl md:text-3xl font-bold text-center mb-1 sm:mb-2 drop-shadow-lg',
                   ),
                 ],
-                [songLabel(shownSongOf(model, nowPlaying))],
+                [songLabel(songOnBar(model, nowPlaying))],
               ),
               h.p(
                 [h.Class('text-center text-gray-400 mb-4')],
