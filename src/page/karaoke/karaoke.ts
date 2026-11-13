@@ -1136,7 +1136,7 @@ const updateModel = (model: Model, message: Message) =>
           onSome: nowPlaying =>
             Option.match(intentOf(nowPlaying.phase), {
               onNone: () =>
-                event._tag === 'VideoFailed' &&
+                event._tag === 'VideoGone' &&
                 nowPlaying.phase._tag === 'LoadFailed'
                   ? skipGoneVideo(model, nowPlaying)
                   : { model },
@@ -1177,12 +1177,9 @@ const updateModel = (model: Model, message: Message) =>
                         ),
                     )
                   },
-                  VideoFailed: () => skipGoneVideo(model, nowPlaying),
-                  PlayerFailed: () =>
-                    recordFromPlayer(
-                      model,
-                      failLoad(model.setlist, 'PlayerUnavailable'),
-                    ),
+                  VideoGone: () => skipGoneVideo(model, nowPlaying),
+                  LoadFailed: ({ reason }) =>
+                    recordFromPlayer(model, failLoad(model.setlist, reason)),
                   Progressed: ({ seconds }) =>
                     progressed(model, playId, seconds),
                 }),

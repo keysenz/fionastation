@@ -82,7 +82,7 @@ const pickedFor = (song: PlayableSong, playId: number) =>
 const failVideo = (playId: number) =>
   Message.ReceivedPlayerEvent({
     playId,
-    event: PlayerEvent.VideoFailed({ reason: 'gone' }),
+    event: PlayerEvent.VideoGone(),
   })
 const waited = (dismissId: number) =>
   Command.resolve(
@@ -214,8 +214,8 @@ test('a gone video ignores what its player still reports, so it is never paused,
     PlayerEvent.Playing(),
     PlayerEvent.Paused(),
     PlayerEvent.Ended(),
-    PlayerEvent.PlayerFailed({ reason: 'blocked' }),
-    PlayerEvent.VideoFailed({ reason: 'gone' }),
+    PlayerEvent.LoadFailed({ reason: 'PlayerUnavailable' }),
+    PlayerEvent.VideoGone(),
   ].map(event =>
     update(gone, Message.ReceivedPlayerEvent({ playId: 1, event })),
   )
@@ -249,7 +249,7 @@ test('a player that cannot load fails the load and skips nothing', () => {
     message(
       Message.ReceivedPlayerEvent({
         playId: 1,
-        event: PlayerEvent.PlayerFailed({ reason: 'blocked' }),
+        event: PlayerEvent.LoadFailed({ reason: 'PlayerUnavailable' }),
       }),
     ),
     model(current => {
@@ -466,7 +466,7 @@ test('an unavailable only video and a player that cannot load show no toast', ()
     message(
       Message.ReceivedPlayerEvent({
         playId: 2,
-        event: PlayerEvent.PlayerFailed({ reason: 'blocked' }),
+        event: PlayerEvent.LoadFailed({ reason: 'PlayerUnavailable' }),
       }),
     ),
     model(current => {
@@ -1708,7 +1708,7 @@ test('next on a play that failed asks for another video instead of seeking in it
     update(fetched, Message.ClickedSong({ song: early })).model,
     Message.ReceivedPlayerEvent({
       playId: 1,
-      event: PlayerEvent.PlayerFailed({ reason: 'blocked' }),
+      event: PlayerEvent.LoadFailed({ reason: 'PlayerUnavailable' }),
     }),
   ).model
   const next = update(failed, Message.ClickedNext())

@@ -10,7 +10,7 @@ import {
   songLabel,
 } from '../../domain.ts'
 import { songsRouter } from '../../route'
-import { thumbnailUrl } from '../../youtube'
+import { type LoadFailure, thumbnailUrl } from '../../youtube'
 import { infoButtonView, infoPanelView } from './info.ts'
 import {
   Message,
@@ -29,7 +29,6 @@ import {
   lyricsWindowView,
 } from './lyricsView.ts'
 import {
-  type LoadFailure,
   type NowPlaying,
   Phase,
   type PlaybackIntent,

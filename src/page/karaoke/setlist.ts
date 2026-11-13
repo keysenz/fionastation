@@ -3,17 +3,12 @@ import { defineTaggedUnion } from 'foldkit/schema'
 import { modifyFields } from 'foldkit/struct'
 
 import { PlayableSong } from '../../domain.ts'
+import { LoadFailure } from '../../youtube.ts'
 
 const HISTORY_LIMIT = 50
 
 export const PlaybackIntent = Schema.Literals(['Playing', 'Paused'])
 export type PlaybackIntent = typeof PlaybackIntent.Type
-
-export const LoadFailure = Schema.Literals([
-  'PlayerUnavailable',
-  'VideoUnplayable',
-])
-export type LoadFailure = typeof LoadFailure.Type
 
 /** Where one play stands. `MovingOn` and `Gone` both mean YouTube no longer has
  *  the stream: a random other video is on its way, or nothing may follow.

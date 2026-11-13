@@ -37,7 +37,7 @@ type YouTubeApi = Readonly<{
       events: Readonly<{
         onReady: () => void
         onStateChange: (event: Readonly<{ data: number }>) => void
-        onError: () => void
+        onError: (event: Readonly<{ data: number }>) => void
       }>
     }>,
   ) => YouTubePlayer
@@ -59,13 +59,20 @@ export const thumbnailUrl = (
   size: ThumbnailSize = 'default',
 ): string => `https://img.youtube.com/vi/${videoId}/${size}.jpg`
 
+/** Why a video did not load, when YouTube may still have it. */
+export const LoadFailure = Schema.Literals([
+  'PlayerUnavailable',
+  'VideoUnplayable',
+])
+export type LoadFailure = typeof LoadFailure.Type
+
 export const PlayerEvent = defineTaggedUnion({
   Ready: {},
   Playing: {},
   Paused: {},
   Ended: {},
-  VideoFailed: { reason: Schema.String },
-  PlayerFailed: { reason: Schema.String },
+  VideoGone: {},
+  LoadFailed: { reason: LoadFailure },
   Progressed: { seconds: Schema.Number },
 })
 export type PlayerEvent = typeof PlayerEvent.Type
@@ -73,8 +80,8 @@ export type PlayerEvent = typeof PlayerEvent.Type
 const PROGRESS_INTERVAL = Duration.millis(250)
 const PROGRESS_EPSILON_SECONDS = 0.05
 
-const VIDEO_UNAVAILABLE = 'This video is not available on YouTube'
-const PLAYER_UNAVAILABLE = 'Could not load the YouTube player'
+// NOTE: YouTube's onError codes for a video that is removed, private or not embeddable. Every other code can pass on a later load.
+const GONE_ERROR_CODES: ReadonlySet<number> = new Set([100, 101, 150])
 
 const STATE_UNSTARTED = -1
 const STATE_ENDED = 0
@@ -107,7 +114,7 @@ const loadApi = Effect.runSync(Effect.cached(Effect.tryPromise(loadApiScript)))
 
 type PlayerReport =
   | Readonly<{ kind: 'StateChanged'; state: number }>
-  | Readonly<{ kind: 'Failed' }>
+  | Readonly<{ kind: 'Failed'; code: number }>
   | Readonly<{ kind: 'PlayRequested' }>
 
 type Host = Readonly<{
@@ -175,7 +182,7 @@ export const runPlayer = (
               ),
             onStateChange: ({ data }) =>
               report({ kind: 'StateChanged', state: data }),
-            onError: () => report({ kind: 'Failed' }),
+            onError: ({ data }) => report({ kind: 'Failed', code: data }),
           },
         })
         return player
@@ -231,7 +238,9 @@ const loadedVideoEvents = (
         if (report.kind === 'Failed') {
           Queue.offerUnsafe(
             queue,
-            PlayerEvent.VideoFailed({ reason: VIDEO_UNAVAILABLE }),
+            GONE_ERROR_CODES.has(report.code)
+              ? PlayerEvent.VideoGone()
+              : PlayerEvent.LoadFailed({ reason: 'VideoUnplayable' }),
           )
           return
         }
@@ -289,7 +298,7 @@ export const videoEvents = (
       ),
       Effect.catch(() =>
         Effect.succeed(
-          Stream.make(PlayerEvent.PlayerFailed({ reason: PLAYER_UNAVAILABLE })),
+          Stream.make(PlayerEvent.LoadFailed({ reason: 'PlayerUnavailable' })),
         ),
       ),
     ),
