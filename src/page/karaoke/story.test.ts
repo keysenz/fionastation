@@ -2051,6 +2051,15 @@ test('clicking the row of the song that failed to load retries it', () => {
   expect(retried.model.setlist.history).toEqual([])
 })
 
+test('clicking the row the stream was entered on retries that song, even when a later one was being sung', () => {
+  const failed = update(tick(playingStream(), 320).model, failLoadOf(1))
+  const retried = update(failed.model, Message.ClickedSong({ song: early }))
+  expect(currentIdOf(retried.model)).toEqual(Option.some('early'))
+  expect(playIdOf(retried.model)).toEqual(Option.some(2))
+  expect(attemptOf(retried.model)).toEqual(Option.some(2))
+  expect(retried.model.setlist.history).toEqual([])
+})
+
 test('a pause from before the failure survives the automatic retry, and a manual retry plays', () => {
   const pausedThenFailed = through(
     update,

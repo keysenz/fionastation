@@ -1065,24 +1065,24 @@ const updateModel = (model: Model, message: Message) =>
       model: modifyFields(model, { maybeSelectedVideoId: () => Option.none() }),
     }),
 
-    ClickedSong: ({ song }) => {
-      const maybeCurrent = Option.filter(
-        model.setlist.maybeNowPlaying,
-        nowPlaying => nowPlaying.song.id === song.id,
-      )
-      const isCurrentSong = Option.isSome(maybeCurrent)
-      if (
-        Option.exists(maybeCurrent, ({ phase }) => phase._tag === 'LoadFailed')
-      ) {
-        return retryCurrentLoad(model, 'Visitor')
-      }
-      return changeSetlist(
-        model,
-        isCurrentSong
-          ? togglePlaying(model.setlist)
-          : play(model.setlist, song),
-      )
-    },
+    ClickedSong: ({ song }) =>
+      Option.match(
+        Option.filter(
+          model.setlist.maybeNowPlaying,
+          nowPlaying => nowPlaying.song.id === song.id,
+        ),
+        {
+          onNone: () => changeSetlist(model, play(model.setlist, song)),
+          onSome: ({ phase }) =>
+            phase._tag === 'LoadFailed'
+              ? {
+                  model: modifyFields(model, {
+                    setlist: setlist => retryLoad(setlist, song, 'Visitor'),
+                  }),
+                }
+              : changeSetlist(model, togglePlaying(model.setlist)),
+        },
+      ),
 
     ClickedAddToQueue: ({ song }) =>
       changeSetlist(model, enqueue(model.setlist, song)),
