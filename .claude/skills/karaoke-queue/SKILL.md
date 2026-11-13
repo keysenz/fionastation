@@ -29,7 +29,7 @@ Exit code 0 means every property holds.
 
 ## What it checks
 
-Each sequence has up to 150 actions, 52 to 80 consecutive plays to reach the history cap, or 4 to 30 enqueues and moves. A move has random indexes, so some are out of range and must change nothing. It uses 12 distinct songs, 4 to each of 3 videos in archive order. Each run also draws which of the 3 videos are known gone and whether autoplay is on, and passes them to the module as its `Continuation`. Each action also carries a number that stands in for the random video pick, so a run resolves `PickRandomVideo` the way the Command does, with a deterministic choice. The seed is fixed at `20261101`, with 1000 runs per property.
+Each sequence has up to 150 actions, 52 to 80 consecutive plays to reach the history cap, 4 to 30 enqueues and moves, or one play followed by up to 12 things that happen to a play (it ends, pauses, goes, fails to load, is retried). The actions include a gone video (`fail`), a load that failed (`loadFail`) and a retry by the visitor or the timer. The page ignores a video end from a play that cannot sound and a second gone report, so those change nothing here either. A move has random indexes, so some are out of range and must change nothing. It uses 12 distinct songs, 4 to each of 3 videos in archive order. Each run also draws which of the 3 videos are known gone and whether autoplay is on, and passes them to the module as its `Continuation`. Each action also carries a number that stands in for the random video pick, so a run resolves `PickRandomVideo` the way the Command does, with a deterministic choice. The seed is fixed at `20261101`, with 1000 runs per property.
 
 | Property | Plain meaning |
 | --- | --- |
@@ -37,12 +37,15 @@ Each sequence has up to 150 actions, 52 to 80 consecutive plays to reach the his
 | `history-is-bounded-and-newest-first` | History never passes 50, and a song replaced by a click or a video end becomes its newest entry. |
 | `new-play-gets-a-new-player` | Each play and Previous gets a new `playId`, even for the same song, and toggling keeps it. |
 | `end-of-video-picks-another-video-or-pauses` | With autoplay on and an empty queue, a video end offers the first song of every other live video, and pauses the same song when there is none. YouTube ends a video only at its end, so no later song of that video is left. |
-| `random-pick-lands-on-another-live-video-first-song` | A random pick, from a video end or a failed video, lands on the first song of a video that is not the current one and not gone, among all such videos. |
-| `autoplay-off-never-starts-an-archive-song` | With autoplay off and nothing queued, a video end or a failed video never asks for a random video, and keeps the same song, paused. A failure says why. |
-| `queue-plays-whatever-autoplay-says` | A video end or a failed video plays the queue head, with autoplay on or off. |
-| `archive-advance-skips-gone-videos` | The random pick after a video end or failure never lands on a video known to be gone. |
-| `unavailable-video-is-skipped` | A video that fails leaves no song of it in the queue or history. Playback moves to the queue head or, with autoplay on, the first song of a random other live video, without recording the failed song in history. It pauses with the reason if there is none. |
-| `failed-song-is-never-recorded` | A song whose video failed and that stayed on the bar does not enter the queue or history when a click, Next, Previous or a video end leaves it. |
+| `random-pick-lands-on-another-live-video-first-song` | A random pick, from a video end or a gone video, lands on the first song of a video that is not the current one and not gone, among all such videos. |
+| `autoplay-off-never-starts-an-archive-song` | With autoplay off and nothing queued, a video end or a gone video never asks for a random video, and keeps the same song: paused after an end, and in phase `Gone` after a gone video. |
+| `queue-plays-whatever-autoplay-says` | A video end or a gone video plays the queue head, with autoplay on or off. |
+| `archive-advance-skips-gone-videos` | The random pick after a video end or a gone video never lands on a video known to be gone. |
+| `unavailable-video-is-skipped` | A gone video leaves no song of it in the queue or history. Playback moves to the queue head or, with autoplay on, the first song of a random other live video, without recording the gone song in history. While the pick is on its way the gone song is in phase `MovingOn`. With nothing to move to it stays, in phase `Gone`. |
+| `gone-song-is-never-recorded` | A song whose video is gone and that stayed on the bar does not enter the queue or history when a click, Next or Previous leaves it. |
+| `load-failure-keeps-the-song` | A load that failed keeps the play, the song, the queue and the history, and puts the play in phase `LoadFailed`, not a gone phase. A gone play stays gone. A click on another song records the failed song in history like any other. |
+| `retry-reloads-the-same-song-and-counts-up` | A retry of a failed load is a new play of the same song with the queue and history unchanged, and `attempt` goes up by one, whoever asked. A retry the visitor asked for plays. A retry of a play whose load did not fail changes nothing. Any other new play starts at attempt 1. |
+| `automatic-retries-double-then-stop` | `loadRetryDelaySeconds` is 2, 4 and 8 for attempts 1 to 3, and nothing after. |
 | `reload-restores-queue-and-history` | Saving and restoring keeps the queue and history, and nothing plays. |
 
 "Playing with no current song" is no longer a property, because the `NowPlaying` type cannot represent it.
