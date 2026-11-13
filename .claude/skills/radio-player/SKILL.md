@@ -63,7 +63,7 @@ Exit code 0 means that every property passes, except any known findings listed b
   - Every other Command's result message returns the model unchanged in `update`, so it is not delivered.
   - A refetch (`SucceededFetchSongs`) that newly reports `single` as gone can arrive while a pick is pending.
 - **Left out.** Lyrics, volume, layers, search and queue drags are not in the state, and the explorer sends none of their messages. No setlist branch reads them.
-- **Depth 6, measured at 5f5d365.** About 2.5 million distinct states and 8.4 million steps in 60 to 70 s, then 72,000 random-walk steps of 40 actions each.
+- **Depth 6, measured at 2c2f783.** About 2.5 million distinct states and 8.4 million steps in 60 to 70 s, then 72,000 random-walk steps of 40 actions each.
 
 ## What it checks
 
@@ -131,11 +131,11 @@ A `FAIL` prints the property's promise, the steps in message names (`ClickedSong
 
 ## Coverage record
 
-The check was last confirmed to describe the code at commit `5f5d365592e12a696cde163e63d42c2a3bdbe651`. It covers these files and functions:
+The check was last confirmed to describe the code at commit `2c2f7834ae29b7442d6b3472f2ab523e60121ee1`. It covers these files and functions:
 
 - `src/page/karaoke/karaoke.ts`: `update`, `updateModel` (every setlist and player branch), `seekBeside`, `playheadOf`, `progressed`, `nowSingingOf`, `pickAnotherVideo`, `skipGoneVideo`, `failCurrentLoad`, `retryCurrentLoad`, `songOnBar`, `withLoadTimeout`, `continuationOf`, `changeSetlist`, `recordFromPlayer`, `withSkipToast`, and the Commands `PickRandomVideo`, `SeekPlayer`, `ApplyPlayback`, `SaveSetlist`, `WaitBeforeDismissToast`, `WaitBeforeRetryLoad` and `WaitBeforeLoadTimeout`.
 - `src/page/karaoke/setlist.ts`: `Phase`, `intentOf`, `play`, `playNext`, `playPrevious`, `playFromQueue`, `togglePlaying`, `pause`, `reportReady`, `reportPlaying`, `reportPaused`, `failLoad`, `retryLoad`, `settleGone`, `loadRetryDelaySeconds`, `planAdvance`, `applyAdvance`, `planSkip`, `applySkip` and `firstSongOfEachOtherLiveVideo`.
 - `src/lyrics.ts`: `segmentAt` and `songBeside`.
 - `src/youtube.ts`: `PlayerEvent`, and `loadedVideoEvents` for the order of events.
 
-To find changes since then, run `git log 5f5d365592e12a696cde163e63d42c2a3bdbe651..HEAD -- src/page/karaoke/karaoke.ts src/page/karaoke/setlist.ts src/lyrics.ts src/youtube.ts`. Move this commit forward only after you have read those changes, confirmed that `transitions()` and the properties still describe the code, and run both commands. The `/maintain-formal-verification-skill` skill does this pass.
+To find changes since then, run `git log 2c2f7834ae29b7442d6b3472f2ab523e60121ee1..HEAD -- src/page/karaoke/karaoke.ts src/page/karaoke/setlist.ts src/lyrics.ts src/youtube.ts`. Move this commit forward only after you have read those changes, confirmed that `transitions()` and the properties still describe the code, and run both commands. The `/maintain-formal-verification-skill` skill does this pass.
