@@ -222,15 +222,16 @@ export const reportReady = (setlist: Setlist): Setlist =>
     ),
   )
 
-/** Only sound proves a load worked, so only this starts the attempts again. */
+/** Only sound proves a load worked, so only this starts the attempts again.
+ *  It also ends a failed load, whose video can still start late. */
 export const reportPlaying = (setlist: Setlist): Setlist =>
   modifyNowPlaying(setlist, nowPlaying =>
-    Option.isSome(intentOf(nowPlaying.phase))
-      ? modifyFields(nowPlaying, {
+    isStreamGone(nowPlaying.phase)
+      ? nowPlaying
+      : modifyFields(nowPlaying, {
           phase: () => Phase.Playing(),
           attempt: () => 1,
-        })
-      : nowPlaying,
+        }),
   )
 
 export const reportPaused = (setlist: Setlist): Setlist =>

@@ -32,11 +32,13 @@ import {
   SyncUrl,
   type UpdateReturn,
   WaitBeforeDismissToast,
+  WaitBeforeLoadTimeout,
+  WaitBeforeRetryLoad,
   WaitBeforeRetryLyrics,
   entered,
   init,
   nowSingingOf,
-  update,
+  update as pageUpdate,
 } from './karaoke'
 import { layersToUrl, parseLayers } from './layers.ts'
 import {
@@ -48,6 +50,19 @@ import {
   toPersistedJson,
   toVolumeJson,
 } from './setlist.ts'
+
+// NOTE: every new play starts a load timeout. Only the tests about that timer look at it, so the rest drive the page without it.
+const update = (current: Model, next: Message): UpdateReturn => {
+  const result = pageUpdate(current, next)
+  return result.commands === undefined
+    ? result
+    : {
+        ...result,
+        commands: result.commands.filter(
+          ({ name }) => name !== WaitBeforeLoadTimeout.name,
+        ),
+      }
+}
 
 const makeSong = (
   id: string,
@@ -89,6 +104,11 @@ const waited = (dismissId: number) =>
     WaitBeforeDismissToast,
     Message.CompletedWaitBeforeDismissToast({ dismissId }),
   )
+// NOTE: a story must resolve every Command, and playId 99 is no play, so this stands for a retry timer that has not elapsed.
+const retryNotYetDue = Command.resolve(
+  WaitBeforeRetryLoad,
+  Message.CompletedWaitBeforeRetryLoad({ playId: 99 }),
+)
 const toastOf = (current: Model) =>
   Option.getOrUndefined(current.maybeSkipToast)
 
@@ -252,6 +272,7 @@ test('a player that cannot load fails the load and skips nothing', () => {
         event: PlayerEvent.LoadFailed({ reason: 'PlayerUnavailable' }),
       }),
     ),
+    retryNotYetDue,
     model(current => {
       expect(currentIdOf(current)).toEqual(Option.some('a'))
       expect(phaseOf(current)).toEqual(Option.some('LoadFailed'))
@@ -469,6 +490,7 @@ test('an unavailable only video and a player that cannot load show no toast', ()
         event: PlayerEvent.LoadFailed({ reason: 'PlayerUnavailable' }),
       }),
     ),
+    retryNotYetDue,
     model(current => {
       expect(toastOf(current)).toBeUndefined()
     }),
@@ -1892,4 +1914,253 @@ test('automatic retries stop after three, and a manual retry starts the count ag
   expect(failedAgain.commands?.map(({ name }) => name)).toEqual([
     WaitBeforeRetryLyrics.name,
   ])
+})
+
+const failLoadOf = (playId: number) =>
+  Message.ReceivedPlayerEvent({
+    playId,
+    event: PlayerEvent.LoadFailed({ reason: 'VideoUnplayable' }),
+  })
+const retryElapsed = (playId: number) =>
+  Message.CompletedWaitBeforeRetryLoad({ playId })
+const attemptOf = (current: Model) =>
+  Option.map(current.setlist.maybeNowPlaying, ({ attempt }) => attempt)
+const retryWaitsOf = (result: UpdateReturn) =>
+  (result.commands ?? [])
+    .filter(({ name }) => name === WaitBeforeRetryLoad.name)
+    .map(({ args }) => args)
+const through = (
+  drive: typeof update,
+  ...messages: ReadonlyArray<Message>
+): UpdateReturn =>
+  messages.reduce<UpdateReturn>(
+    (previous, next) => drive(previous.model, next),
+    { model: init() },
+  )
+const loadFailed = (...more: ReadonlyArray<Message>): UpdateReturn =>
+  through(
+    update,
+    Message.SucceededFetchSongs({ songs: [a, a2, b], goneVideoIds: [] }),
+    Message.ClickedAddToQueue({ song: b }),
+    Message.ClickedSong({ song: a }),
+    failLoadOf(1),
+    ...more,
+  )
+
+test('a load that failed stays on its song, marks nothing gone, and waits before it tries again', () => {
+  const failed = loadFailed()
+  expect(currentIdOf(failed.model)).toEqual(Option.some('a'))
+  expect(phaseOf(failed.model)).toEqual(Option.some('LoadFailed'))
+  expect(failed.model.goneVideoIds).toEqual([])
+  expect(queueOf(failed.model)).toEqual(['b'])
+  expect(failed.model.setlist.history).toEqual([])
+  expect(toastOf(failed.model)).toBeUndefined()
+  expect(failed.commands?.map(({ name }) => name)).toEqual([
+    WaitBeforeRetryLoad.name,
+  ])
+})
+
+test('each automatic retry loads the same song as a new play, waits twice as long as the one before, and the fourth failure waits for nothing', () => {
+  let current = loadFailed()
+  const waits = [retryWaitsOf(current)]
+  for (const playId of [1, 2, 3]) {
+    const retried = update(current.model, retryElapsed(playId))
+    expect(playIdOf(retried.model)).toEqual(Option.some(playId + 1))
+    expect(currentIdOf(retried.model)).toEqual(Option.some('a'))
+    expect(phaseOf(retried.model)).toEqual(Option.some('Loading'))
+    expect(queueOf(retried.model)).toEqual(['b'])
+    expect(retried.model.setlist.history).toEqual([])
+    current = update(retried.model, failLoadOf(playId + 1))
+    waits.push(retryWaitsOf(current))
+  }
+  expect(waits).toEqual([
+    [{ playId: 1, delaySeconds: 2 }],
+    [{ playId: 2, delaySeconds: 4 }],
+    [{ playId: 3, delaySeconds: 8 }],
+    [],
+  ])
+  expect(phaseOf(current.model)).toEqual(Option.some('LoadFailed'))
+})
+
+test('a retry timer that elapses after the visitor chose another song does nothing', () => {
+  const clicked = loadFailed(Message.ClickedSong({ song: b }))
+  const late = update(clicked.model, retryElapsed(1))
+  expect(late.model).toEqual(clicked.model)
+  expect(late.commands).toBeUndefined()
+})
+
+test('a manual retry never shortens the next automatic wait: it loads at once as the next attempt and leaves the old timer stale', () => {
+  const secondFailure = loadFailed(retryElapsed(1), failLoadOf(2))
+  expect(retryWaitsOf(secondFailure)).toEqual([{ playId: 2, delaySeconds: 4 }])
+
+  const manual = update(secondFailure.model, Message.ClickedRetryLoad())
+  expect(playIdOf(manual.model)).toEqual(Option.some(3))
+  expect(currentIdOf(manual.model)).toEqual(Option.some('a'))
+  expect(phaseOf(manual.model)).toEqual(Option.some('Loading'))
+  expect(attemptOf(manual.model)).toEqual(Option.some(3))
+  expect(retryWaitsOf(manual)).toEqual([])
+
+  const staleTimer = update(manual.model, retryElapsed(2))
+  expect(staleTimer.model).toEqual(manual.model)
+
+  const thirdFailure = update(manual.model, failLoadOf(3))
+  expect(retryWaitsOf(thirdFailure)).toEqual([{ playId: 3, delaySeconds: 8 }])
+})
+
+test('once the automatic retries are spent, a manual retry still loads the song and starts no automatic retries again', () => {
+  let current = loadFailed()
+  for (const playId of [1, 2, 3]) {
+    current = update(
+      update(current.model, retryElapsed(playId)).model,
+      failLoadOf(playId + 1),
+    )
+  }
+  for (const playId of [4, 5]) {
+    const manual = update(current.model, Message.ClickedRetryLoad())
+    expect(playIdOf(manual.model)).toEqual(Option.some(playId + 1))
+    expect(phaseOf(manual.model)).toEqual(Option.some('Loading'))
+    current = update(manual.model, failLoadOf(playId + 1))
+    expect(phaseOf(current.model)).toEqual(Option.some('LoadFailed'))
+    expect(retryWaitsOf(current)).toEqual([])
+  }
+})
+
+test('a retried song that plays starts the count again, so a later failure waits the shortest time', () => {
+  const failedLater = loadFailed(
+    retryElapsed(1),
+    Message.ReceivedPlayerEvent({ playId: 2, event: PlayerEvent.Ready() }),
+    Message.ReceivedPlayerEvent({ playId: 2, event: PlayerEvent.Playing() }),
+    failLoadOf(2),
+  )
+  expect(retryWaitsOf(failedLater)).toEqual([{ playId: 2, delaySeconds: 2 }])
+})
+
+test('a retried load that gets ready and fails before it plays keeps counting, so the retries end', () => {
+  const failedAgain = loadFailed(
+    retryElapsed(1),
+    Message.ReceivedPlayerEvent({ playId: 2, event: PlayerEvent.Ready() }),
+    failLoadOf(2),
+  )
+  expect(retryWaitsOf(failedAgain)).toEqual([{ playId: 2, delaySeconds: 4 }])
+})
+
+test('clicking the row of the song that failed to load retries it', () => {
+  const retried = loadFailed(Message.ClickedSong({ song: a }))
+  expect(playIdOf(retried.model)).toEqual(Option.some(2))
+  expect(phaseOf(retried.model)).toEqual(Option.some('Loading'))
+  expect(retried.model.setlist.history).toEqual([])
+})
+
+test('a pause from before the failure survives the automatic retry, and a manual retry plays', () => {
+  const pausedThenFailed = through(
+    update,
+    Message.ClickedSong({ song: a }),
+    Message.ClickedPlayPause(),
+    failLoadOf(1),
+  )
+  const byTimer = update(pausedThenFailed.model, retryElapsed(1))
+  expect(statusOf(byTimer.model)).toEqual(Option.some('Paused'))
+  const byVisitor = update(pausedThenFailed.model, Message.ClickedRetryLoad())
+  expect(statusOf(byVisitor.model)).toEqual(Option.some('Playing'))
+})
+
+test('a retry reloads the song being sung, not the one the stream was entered on', () => {
+  const failed = update(tick(playingStream(), 320).model, failLoadOf(1))
+  const retried = update(failed.model, Message.ClickedRetryLoad())
+  expect(currentIdOf(retried.model)).toEqual(Option.some('late'))
+  expect(playIdOf(retried.model)).toEqual(Option.some(2))
+})
+
+test('a song whose load failed is still a real song: leaving it records it in history', () => {
+  const left = loadFailed(Message.ClickedNext())
+  expect(currentIdOf(left.model)).toEqual(Option.some('b'))
+  expect(left.model.setlist.history.map(({ id }) => id)).toEqual(['a'])
+  expect(left.model.goneVideoIds).toEqual([])
+})
+
+test('a failed load does nothing on Play/Pause, and a video that starts late plays after all', () => {
+  const failed = loadFailed()
+  const toggled = update(failed.model, Message.ClickedPlayPause())
+  expect(phaseOf(toggled.model)).toEqual(Option.some('LoadFailed'))
+  expect(
+    toggled.commands?.some(({ name }) => name === ApplyPlayback.name),
+  ).toBe(false)
+  const paused = update(
+    failed.model,
+    Message.ReceivedPlayerEvent({ playId: 1, event: PlayerEvent.Paused() }),
+  )
+  expect(paused.model).toEqual(failed.model)
+  const started = update(
+    failed.model,
+    Message.ReceivedPlayerEvent({ playId: 1, event: PlayerEvent.Playing() }),
+  )
+  expect(phaseOf(started.model)).toEqual(Option.some('Playing'))
+  const lateTimer = update(started.model, retryElapsed(1))
+  expect(lateTimer.model).toEqual(started.model)
+})
+
+test('a failed load whose video turns out gone takes the gone path', () => {
+  const gone = loadFailed(failVideo(1))
+  expect(gone.model.goneVideoIds).toEqual([a.video_url])
+  expect(currentIdOf(gone.model)).toEqual(Option.some('b'))
+  expect(gone.model.setlist.history).toEqual([])
+})
+
+const loadTimeoutsOf = (result: UpdateReturn) =>
+  (result.commands ?? [])
+    .filter(({ name }) => name === WaitBeforeLoadTimeout.name)
+    .map(({ args }) => args)
+const loadTimedOut = (playId: number) =>
+  Message.CompletedWaitBeforeLoadTimeout({ playId })
+
+test('every new play starts its own load timeout, and a seek or a pause starts none', () => {
+  const clicked = through(pageUpdate, Message.ClickedSong({ song: a }))
+  expect(loadTimeoutsOf(clicked)).toEqual([{ playId: 1 }])
+  const paused = pageUpdate(clicked.model, Message.ClickedPlayPause())
+  expect(loadTimeoutsOf(paused)).toEqual([])
+  const failed = pageUpdate(clicked.model, failLoadOf(1))
+  const retried = pageUpdate(failed.model, retryElapsed(1))
+  expect(loadTimeoutsOf(retried)).toEqual([{ playId: 2 }])
+  const picked = through(
+    pageUpdate,
+    Message.SucceededFetchSongs({ songs: [a, b], goneVideoIds: [] }),
+    Message.ClickedSong({ song: a }),
+    failVideo(1),
+    Message.CompletedPickRandomVideo({ playId: 1, song: b }),
+  )
+  expect(loadTimeoutsOf(picked)).toEqual([{ playId: 2 }])
+})
+
+test('a play still loading when its timeout elapses fails as an attempt and waits before it retries', () => {
+  const stuck = through(
+    update,
+    Message.ClickedSong({ song: a }),
+    loadTimedOut(1),
+  )
+  expect(phaseOf(stuck.model)).toEqual(Option.some('LoadFailed'))
+  expect(currentIdOf(stuck.model)).toEqual(Option.some('a'))
+  expect(stuck.model.goneVideoIds).toEqual([])
+  expect(retryWaitsOf(stuck)).toEqual([{ playId: 1, delaySeconds: 2 }])
+  const stuckAgain = update(
+    update(stuck.model, retryElapsed(1)).model,
+    loadTimedOut(2),
+  )
+  expect(retryWaitsOf(stuckAgain)).toEqual([{ playId: 2, delaySeconds: 4 }])
+})
+
+test('a load timeout that elapses after the player got ready, or for an older play, does nothing', () => {
+  const ready = through(
+    update,
+    Message.ClickedSong({ song: a }),
+    Message.ReceivedPlayerEvent({ playId: 1, event: PlayerEvent.Ready() }),
+  )
+  expect(update(ready.model, loadTimedOut(1)).model).toEqual(ready.model)
+  const replaced = through(
+    update,
+    Message.ClickedSong({ song: a }),
+    Message.ClickedSong({ song: b }),
+  )
+  const late = update(replaced.model, loadTimedOut(1))
+  expect(late.model).toEqual(replaced.model)
+  expect(late.commands).toBeUndefined()
 })

@@ -22,6 +22,7 @@ import {
   allSongs,
   nowSingingOf,
   queueHandleId,
+  songOnBar,
 } from './karaoke'
 import {
   currentLineOf,
@@ -36,6 +37,7 @@ import {
   type Volume,
   intentOf,
   isSilent,
+  loadRetryDelaySeconds,
 } from './setlist.ts'
 import {
   type VideoGroup,
@@ -63,17 +65,11 @@ type Playback = {
   isPlaying: boolean
 }
 
-const shownSongOf = (model: Model, nowPlaying: NowPlaying): PlayableSong =>
-  Option.match(nowSingingOf(model), {
-    onNone: () => nowPlaying.song,
-    onSome: ({ segment }) => segment.song,
-  })
-
 const playbackOf = (model: Model): Playback => ({
   maybeNowPlaying: model.setlist.maybeNowPlaying,
   maybeShownSongId: Option.map(
     model.setlist.maybeNowPlaying,
-    nowPlaying => shownSongOf(model, nowPlaying).id,
+    nowPlaying => songOnBar(model, nowPlaying).id,
   ),
   isPlaying: Option.exists(model.setlist.maybeNowPlaying, ({ phase }) =>
     Option.contains(intentOf(phase), 'Playing'),
@@ -1221,13 +1217,21 @@ const LOAD_FAILURE_TEXT: Record<LoadFailure, string> = {
 }
 
 /** What the bar says in place of the song's kind while the song cannot sound. */
-const troubleOf = ({ phase }: NowPlaying): Option.Option<string> =>
+const troubleOf = ({ phase, attempt }: NowPlaying): Option.Option<string> =>
   Phase.matchOrElse(
     phase,
     {
       MovingOn: () => Option.some('This stream is gone. Finding another video'),
       Gone: () => Option.some('This stream is gone'),
-      LoadFailed: ({ reason }) => Option.some(LOAD_FAILURE_TEXT[reason]),
+      LoadFailed: ({ reason }) =>
+        Option.some(
+          Option.match(loadRetryDelaySeconds(attempt), {
+            onNone: () =>
+              `${LOAD_FAILURE_TEXT[reason]}. Tried ${attempt} times`,
+            onSome: delaySeconds =>
+              `${LOAD_FAILURE_TEXT[reason]}. Try ${attempt} failed, trying again in ${delaySeconds} s`,
+          }),
+        ),
     },
     () => Option.none<string>(),
   )
@@ -1239,16 +1243,6 @@ const playControlView = (
   shapeClass: string,
   h: HtmlBuilder<Message>,
 ): Html => {
-  const unplayableView = (): Html =>
-    h.button(
-      [
-        h.Type('button'),
-        h.Disabled(true),
-        h.AriaLabel('Play'),
-        h.Class(twMerge(shapeClass, 'opacity-40 cursor-not-allowed')),
-      ],
-      [h.i([h.Class('fas fa-play pl-1'), h.AriaHidden(true)])],
-    )
   const playPauseView = (intent: PlaybackIntent): Html =>
     h.button(
       [
@@ -1277,8 +1271,27 @@ const playControlView = (
         ],
         [h.i([h.Class('fas fa-spinner fa-spin'), h.AriaHidden(true)])],
       ),
-    Gone: unplayableView,
-    LoadFailed: unplayableView,
+    Gone: () =>
+      h.button(
+        [
+          h.Type('button'),
+          h.Disabled(true),
+          h.AriaLabel('Play'),
+          h.Class(twMerge(shapeClass, 'opacity-40 cursor-not-allowed')),
+        ],
+        [h.i([h.Class('fas fa-play pl-1'), h.AriaHidden(true)])],
+      ),
+    LoadFailed: () =>
+      h.button(
+        [
+          h.Type('button'),
+          h.AriaLabel('Retry'),
+          h.Title('Retry'),
+          h.OnClick(Message.ClickedRetryLoad()),
+          h.Class(shapeClass),
+        ],
+        [h.i([h.Class('fas fa-redo'), h.AriaHidden(true)])],
+      ),
   })
 }
 
@@ -1288,7 +1301,7 @@ const playerBarView = (
   h: HtmlBuilder<Message>,
 ): Html => {
   const isPlayerReady = Phase.isAnyOf(['Playing', 'Paused'])(nowPlaying.phase)
-  const shownSong = shownSongOf(model, nowPlaying)
+  const shownSong = songOnBar(model, nowPlaying)
   const maybeLine = Option.flatMap(nowSingingOf(model), currentLineOf)
   const maybeTrouble = troubleOf(nowPlaying)
   const subline = Option.getOrElse(maybeTrouble, () =>
@@ -1749,7 +1762,7 @@ const playerView = (
                     'text-xl sm:text-2xl md:text-3xl font-bold text-center mb-1 sm:mb-2 drop-shadow-lg',
                   ),
                 ],
-                [songLabel(shownSongOf(model, nowPlaying))],
+                [songLabel(songOnBar(model, nowPlaying))],
               ),
               h.p(
                 [h.Class('text-center text-gray-400 mb-4')],

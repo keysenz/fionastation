@@ -47,6 +47,7 @@ import {
   toNudgesJson,
 } from '../../lyrics.ts'
 import {
+  type LoadFailure,
   PlayerEvent,
   runPlayer,
   seekTo,
@@ -77,6 +78,7 @@ import {
   failLoad,
   firstSongOfEachOtherLiveVideo,
   intentOf,
+  loadRetryDelaySeconds,
   moveInQueue,
   nextRepeat,
   parseVolume,
@@ -92,6 +94,7 @@ import {
   reportPlaying,
   reportReady,
   restoreSaved,
+  retryLoad,
   setLevel,
   settleGone,
   toPersistedJson,
@@ -173,6 +176,7 @@ export const Message = defineMessageUnion({
   ClickedQueuedSong: { index: Schema.Number },
   ClickedRemoveFromQueue: { index: Schema.Number },
   ClickedPlayPause: {},
+  ClickedRetryLoad: {},
   ClickedNext: {},
   ClickedPrevious: {},
   ClickedToggleExpanded: {},
@@ -227,6 +231,8 @@ export const Message = defineMessageUnion({
     song: PlayableSong,
   },
   CompletedWaitBeforeDismissToast: { dismissId: Schema.Number },
+  CompletedWaitBeforeLoadTimeout: { playId: Schema.Number },
+  CompletedWaitBeforeRetryLoad: { playId: Schema.Number },
 })
 export type Message = typeof Message.Type
 
@@ -498,6 +504,27 @@ export const WaitBeforeDismissToast = Command.define('WaitBeforeDismissToast', {
     ),
 })
 
+// NOTE: a player that never appears and a video that never starts loading send no event at all, so a play that is still loading after this long counts as a failed load. A slow phone connection loads the script and the player well inside it.
+const LOAD_TIMEOUT_SECONDS = 20
+
+export const WaitBeforeLoadTimeout = Command.define('WaitBeforeLoadTimeout', {
+  args: { playId: Schema.Number },
+  messages: [Message.CompletedWaitBeforeLoadTimeout],
+  execute: ({ playId }) =>
+    Effect.sleep(Duration.seconds(LOAD_TIMEOUT_SECONDS)).pipe(
+      Effect.as(Message.CompletedWaitBeforeLoadTimeout({ playId })),
+    ),
+})
+
+export const WaitBeforeRetryLoad = Command.define('WaitBeforeRetryLoad', {
+  args: { playId: Schema.Number, delaySeconds: Schema.Number },
+  messages: [Message.CompletedWaitBeforeRetryLoad],
+  execute: ({ playId, delaySeconds }) =>
+    Effect.sleep(Duration.seconds(delaySeconds)).pipe(
+      Effect.as(Message.CompletedWaitBeforeRetryLoad({ playId })),
+    ),
+})
+
 export const MountPlayer = Mount.define('MountPlayer', {
   messages: [Message.CompletedMountPlayer],
   execute: ({ element }) =>
@@ -682,6 +709,13 @@ const playheadOf = (
     model.maybePlayhead,
     ({ playId }) => playId === nowPlaying.playId,
   )
+
+/** The song the bar names: the one being sung, or the one that was clicked. */
+export const songOnBar = (model: Model, nowPlaying: NowPlaying): PlayableSong =>
+  Option.match(nowSingingOf(model), {
+    onNone: () => nowPlaying.song,
+    onSome: ({ segment }) => segment.song,
+  })
 
 export const nowSingingOf = (model: Model): Option.Option<NowSinging> =>
   Option.gen(function* () {
@@ -917,6 +951,45 @@ const withSkipToast = (
       Option.some(addSkip(maybeToast, failedTitle, dismissId)),
   })
 
+/** The load of the current play failed. It is tried again by itself after a
+ *  wait, while automatic retries are left. */
+const failCurrentLoad = (
+  model: Model,
+  { playId, attempt }: NowPlaying,
+  reason: LoadFailure,
+): UpdateReturn => ({
+  model: modifyFields(model, {
+    setlist: setlist => failLoad(setlist, reason),
+  }),
+  commands: Option.toArray(
+    Option.map(loadRetryDelaySeconds(attempt), delaySeconds =>
+      WaitBeforeRetryLoad({ playId, delaySeconds }),
+    ),
+  ),
+})
+
+/** Loads the song on the bar again, which only a failed load allows. The new
+ *  playId makes the older retry timer stale. */
+const retryCurrentLoad = (
+  model: Model,
+  by: 'Visitor' | 'Timer',
+): UpdateReturn =>
+  Option.match(model.setlist.maybeNowPlaying, {
+    onNone: () => ({ model }),
+    onSome: nowPlaying => ({
+      model: modifyFields(model, {
+        setlist: setlist =>
+          retryLoad(setlist, songOnBar(model, nowPlaying), by),
+      }),
+    }),
+  })
+
+const currentPlay = (model: Model, playId: number): Option.Option<NowPlaying> =>
+  Option.filter(
+    model.setlist.maybeNowPlaying,
+    nowPlaying => nowPlaying.playId === playId,
+  )
+
 /** YouTube no longer has the video, so it is remembered as gone and the radio
  *  moves on: to the queue head, to a random other video, or nowhere. */
 const skipGoneVideo = (
@@ -993,10 +1066,16 @@ const updateModel = (model: Model, message: Message) =>
     }),
 
     ClickedSong: ({ song }) => {
-      const isCurrentSong = Option.exists(
+      const maybeCurrent = Option.filter(
         model.setlist.maybeNowPlaying,
         nowPlaying => nowPlaying.song.id === song.id,
       )
+      const isCurrentSong = Option.isSome(maybeCurrent)
+      if (
+        Option.exists(maybeCurrent, ({ phase }) => phase._tag === 'LoadFailed')
+      ) {
+        return retryCurrentLoad(model, 'Visitor')
+      }
       return changeSetlist(
         model,
         isCurrentSong
@@ -1084,6 +1163,7 @@ const updateModel = (model: Model, message: Message) =>
     },
 
     ClickedPlayPause: () => changeSetlist(model, togglePlaying(model.setlist)),
+    ClickedRetryLoad: () => retryCurrentLoad(model, 'Visitor'),
     ClickedNext: () =>
       Array.isReadonlyArrayNonEmpty(model.setlist.queue)
         ? changeSetlist(model, playNext(model.setlist, model.repeat))
@@ -1135,9 +1215,16 @@ const updateModel = (model: Model, message: Message) =>
           onSome: nowPlaying =>
             Option.match(intentOf(nowPlaying.phase), {
               onNone: () =>
-                event._tag === 'VideoGone' &&
                 nowPlaying.phase._tag === 'LoadFailed'
-                  ? skipGoneVideo(model, nowPlaying)
+                  ? PlayerEvent.matchOrElse<UpdateReturn>(
+                      event,
+                      {
+                        VideoGone: () => skipGoneVideo(model, nowPlaying),
+                        Playing: () =>
+                          recordFromPlayer(model, reportPlaying(model.setlist)),
+                      },
+                      () => ({ model }),
+                    )
                   : { model },
               onSome: intent =>
                 PlayerEvent.match<UpdateReturn>(event, {
@@ -1178,7 +1265,7 @@ const updateModel = (model: Model, message: Message) =>
                   },
                   VideoGone: () => skipGoneVideo(model, nowPlaying),
                   LoadFailed: ({ reason }) =>
-                    recordFromPlayer(model, failLoad(model.setlist, reason)),
+                    failCurrentLoad(model, nowPlaying, reason),
                   Progressed: ({ seconds }) =>
                     progressed(model, playId, seconds),
                 }),
@@ -1226,6 +1313,22 @@ const updateModel = (model: Model, message: Message) =>
           },
         },
       ),
+
+    // NOTE: a retry or a click since the timer started changed the playId, so a late timer does nothing.
+    CompletedWaitBeforeRetryLoad: ({ playId }) =>
+      Option.match(currentPlay(model, playId), {
+        onNone: () => ({ model }),
+        onSome: () => retryCurrentLoad(model, 'Timer'),
+      }),
+
+    CompletedWaitBeforeLoadTimeout: ({ playId }) =>
+      Option.match(currentPlay(model, playId), {
+        onNone: () => ({ model }),
+        onSome: nowPlaying =>
+          nowPlaying.phase._tag === 'Loading'
+            ? failCurrentLoad(model, nowPlaying, 'PlayerUnavailable')
+            : { model },
+      }),
 
     CompletedLoadSavedSetlist: ({ maybeJson }) => ({
       model: modifyFields(model, {
@@ -1373,11 +1476,30 @@ const updateModel = (model: Model, message: Message) =>
     CompletedFocusInfoButton: () => ({ model }),
   })
 
+/** Every new play starts its own load timeout, whatever started the play, so a
+ *  load that never reports anything still ends. */
+const withLoadTimeout = (before: Model, result: UpdateReturn): UpdateReturn =>
+  Option.match(
+    Option.filter(result.model.setlist.maybeNowPlaying, ({ playId }) =>
+      Option.isNone(currentPlay(before, playId)),
+    ),
+    {
+      onNone: () => result,
+      onSome: ({ playId }) => ({
+        ...result,
+        commands: [
+          ...(result.commands ?? []),
+          WaitBeforeLoadTimeout({ playId }),
+        ],
+      }),
+    },
+  )
+
 /** The address bar follows the open layers, so the browser's Back button closes
  *  the topmost one. A change that came from the address bar already has its
  *  entry, so it only repairs a URL that says something the model does not. */
 export const update = (model: Model, message: Message): UpdateReturn => {
-  const result = updateModel(model, message)
+  const result = withLoadTimeout(model, updateModel(model, message))
   const sync = (change: 'OpenVideo' | 'OpenOverlay' | 'Replace' | 'Close') =>
     SyncUrl({ url: layersToUrl(layersOf(result.model)), change })
   const fromUrl =
