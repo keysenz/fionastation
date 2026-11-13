@@ -4,7 +4,7 @@ Fio Radio is the only page. A visitor opens `/`, sees the background art and the
 
 ## Sub-features
 
-- `site-home` renders the `Fio Radio` heading and the background image at `/`.
+- `site-home` renders the `Fio Radio` heading and the background image at `/`, and the Font Awesome icon fonts load.
 - `site-info` shows an info button (`About Fio Radio`, 40px) in the radio header. It opens a modal dialog with the sections `Who is Fiona` and `Credits`, with the bio, her YouTube, X and wiki links, the fan-site text, the contribute links, every credited name and the background credit. Every link opens in a new tab with `rel="noopener noreferrer"`. Focus moves into the dialog on open. Escape, the `Close` button and a click on the backdrop close it, and focus returns to the info button. The dialog sits above the player bar and the skip toast.
 - `site-redirects` answers `/radio`, `/karaoke`, `/cover`, `/about` and `/credits` with 301 to `/` and keeps the query string.
 - `site-headers` serves the security headers from `server/main.ts`.

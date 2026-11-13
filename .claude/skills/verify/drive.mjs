@@ -404,6 +404,14 @@ const journeys = {
       return img.naturalWidth;
     });
     check('site', 'background image renders', loaded > 0, `naturalWidth ${loaded}`);
+    const fonts = await page.evaluate(async () => {
+      await document.fonts.ready;
+      return {
+        failed: [...document.fonts].filter((f) => f.status === 'error').map((f) => `${f.family} ${f.weight}`),
+        solid: document.fonts.check('900 16px "Font Awesome 6 Free"'),
+      };
+    });
+    check('site', 'icon fonts load', fonts.solid && fonts.failed.length === 0, JSON.stringify(fonts));
     const headers = (await fetch(BASE + '/')).headers;
     check('site', 'security headers are served', headers.get('x-frame-options') === 'SAMEORIGIN');
   },
