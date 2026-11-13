@@ -11,11 +11,16 @@ type PlayerEvents = Readonly<{
 
 const VIDEO = { videoId: 'abc', startSeconds: 60 }
 const HOST_ID = 'test-host'
+const ENDED = 0
+const PLAYING = 1
+const PAUSED = 2
 const BUFFERING = 3
+const DURATION = 58.2
 
 const makeYouTube = () => {
   const loadedVideos: Array<typeof VIDEO> = []
   const players: Array<PlayerEvents> = []
+  const clock = { seconds: 0, duration: DURATION, pauses: 0 }
   class Player {
     constructor(_target: HTMLElement, options: { events: PlayerEvents }) {
       players.push(options.events)
@@ -25,14 +30,20 @@ const makeYouTube = () => {
       loadedVideos.push(video)
     }
     getCurrentTime() {
-      return 0
+      return clock.seconds
+    }
+    getDuration() {
+      return clock.duration
+    }
+    pauseVideo() {
+      clock.pauses += 1
     }
     getPlayerState() {
       return BUFFERING
     }
     destroy() {}
   }
-  return { api: { Player }, loadedVideos, players }
+  return { api: { Player }, loadedVideos, players, clock }
 }
 
 const scriptRequests: Array<HTMLScriptElement> = []
@@ -165,4 +176,73 @@ test('a script that loaded is not asked for again by later plays', async () => {
   play()
   await vi.waitFor(() => expect(loadedVideos).toHaveLength(2))
   expect(scriptRequests).toHaveLength(1)
+})
+
+const playLoaded = async () => {
+  const { mount, play } = await start()
+  mount()
+  const events = play()
+  const youTube = answerScript(scriptRequests[0], 'Arrives')
+  await vi.waitFor(() => expect(youTube.loadedVideos).toEqual([VIDEO]))
+  const { clock } = youTube
+  const report = (state: number, seconds: number) => {
+    clock.seconds = seconds
+    youTube.players[0]?.onStateChange({ data: state })
+  }
+  return { events, clock, report }
+}
+
+const progressedTo = (events: ReadonlyArray<PlayerEvent>, seconds: number) =>
+  events.some(event => event._tag === 'Progressed' && event.seconds === seconds)
+
+const tagsAfterFirstEnd = (events: ReadonlyArray<PlayerEvent>) =>
+  tagsOf(events).slice(tagsOf(events).indexOf('Ended'))
+
+test('a video that wraps to its start on its own ends once, and is paused there', async () => {
+  const { events, clock, report } = await playLoaded()
+  report(PLAYING, 40)
+  report(BUFFERING, DURATION - 0.1)
+  report(PLAYING, DURATION - 0.05)
+  report(BUFFERING, 0)
+  report(PLAYING, 0.1)
+  report(PAUSED, 0.1)
+  report(BUFFERING, 7)
+  await vi.waitFor(() => expect(progressedTo(events, 7)).toBe(true))
+  const afterEnd = tagsAfterFirstEnd(events)
+  expect(afterEnd.filter(tag => tag === 'Ended')).toHaveLength(1)
+  expect(afterEnd).not.toContain('Playing')
+  expect(afterEnd).not.toContain('Paused')
+  expect(clock.pauses).toBe(1)
+})
+
+test('dragging back to the start after a video ended does not end it again', async () => {
+  const { events, clock, report } = await playLoaded()
+  report(PLAYING, 40)
+  report(PLAYING, DURATION - 0.5)
+  report(ENDED, DURATION)
+  report(BUFFERING, 0)
+  report(PLAYING, 0.2)
+  await vi.waitFor(() => expect(progressedTo(events, 0.2)).toBe(true))
+  expect(tagsOf(events).filter(tag => tag === 'Ended')).toHaveLength(1)
+  expect(clock.pauses).toBe(0)
+})
+
+test('seeking back to the start from the middle of a video does not end it', async () => {
+  const { events, clock, report } = await playLoaded()
+  report(PLAYING, 20)
+  report(BUFFERING, 0)
+  report(PLAYING, 0.2)
+  await vi.waitFor(() => expect(progressedTo(events, 0.2)).toBe(true))
+  expect(tagsOf(events)).not.toContain('Ended')
+  expect(clock.pauses).toBe(0)
+})
+
+test('a new load that first reads the previous video at its end does not end', async () => {
+  const { events, clock, report } = await playLoaded()
+  report(BUFFERING, DURATION - 0.1)
+  report(BUFFERING, 0)
+  report(PLAYING, 0.2)
+  await vi.waitFor(() => expect(progressedTo(events, 0.2)).toBe(true))
+  expect(tagsOf(events)).not.toContain('Ended')
+  expect(clock.pauses).toBe(0)
 })

@@ -19,6 +19,7 @@ type YouTubePlayer = Readonly<{
   mute: () => void
   unMute: () => void
   getCurrentTime: () => number
+  getDuration: () => number
   getPlayerState: () => number
   loadVideoById: (
     video: Readonly<{ videoId: string; startSeconds: number }>,
@@ -78,6 +79,9 @@ export type PlayerEvent = typeof PlayerEvent.Type
 
 const PROGRESS_INTERVAL = Duration.millis(250)
 const PROGRESS_EPSILON_SECONDS = 0.05
+
+// NOTE: an embedded YouTube Short never reports its end. It jumps back to its start and plays again, so a jump from this close to the end to this close to the start counts as the end.
+const WRAP_MARGIN_SECONDS = 1.5
 
 // NOTE: YouTube's onError codes for a video that is removed, private or not embeddable. Every other code can pass on a later load.
 const GONE_ERROR_CODES: ReadonlySet<number> = new Set([100, 101, 150])
@@ -233,25 +237,61 @@ export const runPlayer = (
     )
   })
 
+/** How a load stands toward its end. It waits for its own first play, so the
+ *  previous video's end time cannot read as a wrap. After a wrap it swallows
+ *  reports until the pause it asked for lands, so the wrap looks like an end. */
+type Ending = 'WaitingToPlay' | 'Watching' | 'PausingAtWrap' | 'Ended'
+
 const loadedVideoEvents = (
   host: Host,
   video: Readonly<{ videoId: string; startSeconds: number }>,
 ): Stream.Stream<PlayerEvent> =>
   Stream.callback<PlayerEvent>(queue =>
     Effect.gen(function* () {
-      const progress = {
+      const progress: {
+        isLoaded: boolean
+        lastSeconds: number
+        unstartedTicks: number
+        ending: Ending
+      } = {
         isLoaded: false,
         lastSeconds: Number.NEGATIVE_INFINITY,
         unstartedTicks: 0,
+        ending: 'WaitingToPlay',
+      }
+      const isNearEnd = (seconds: number) => {
+        const duration = host.player.getDuration()
+        return (
+          duration > 2 * WRAP_MARGIN_SECONDS &&
+          seconds >= duration - WRAP_MARGIN_SECONDS
+        )
       }
       const offerProgress = (isForced: boolean) => {
         const seconds = host.player.getCurrentTime()
         if (
-          progress.isLoaded &&
-          Number.isFinite(seconds) &&
-          (isForced ||
-            Math.abs(seconds - progress.lastSeconds) >=
-              PROGRESS_EPSILON_SECONDS)
+          !progress.isLoaded ||
+          !Number.isFinite(seconds) ||
+          progress.ending === 'PausingAtWrap'
+        ) {
+          return
+        }
+        if (
+          progress.ending === 'Watching' &&
+          seconds <= WRAP_MARGIN_SECONDS &&
+          isNearEnd(progress.lastSeconds)
+        ) {
+          progress.ending = 'PausingAtWrap'
+          progress.lastSeconds = seconds
+          host.player.pauseVideo()
+          Queue.offerUnsafe(queue, PlayerEvent.Ended())
+          return
+        }
+        if (progress.ending === 'Ended' && !isNearEnd(seconds)) {
+          progress.ending = 'Watching'
+        }
+        if (
+          isForced ||
+          Math.abs(seconds - progress.lastSeconds) >= PROGRESS_EPSILON_SECONDS
         ) {
           progress.lastSeconds = seconds
           Queue.offerUnsafe(queue, PlayerEvent.Progressed({ seconds }))
@@ -269,6 +309,9 @@ const loadedVideoEvents = (
       const listener = (report: PlayerReport) => {
         if (report.kind === 'PlayRequested') {
           progress.unstartedTicks = 0
+          if (progress.ending === 'PausingAtWrap') {
+            progress.ending = 'Ended'
+          }
           return
         }
         if (report.kind === 'Failed') {
@@ -290,6 +333,21 @@ const loadedVideoEvents = (
         }
         // NOTE: a seek made with YouTube's own controls changes the state, so this reports it before the next tick.
         offerProgress(true)
+        if (progress.ending === 'PausingAtWrap') {
+          if (report.state === STATE_PAUSED) {
+            progress.ending = 'Ended'
+          }
+          return
+        }
+        if (
+          report.state === STATE_PLAYING &&
+          progress.ending === 'WaitingToPlay'
+        ) {
+          progress.ending = 'Watching'
+        }
+        if (report.state === STATE_ENDED) {
+          progress.ending = 'Ended'
+        }
         Option.match(stateChangeToEvent(report.state), {
           onNone: () => false,
           onSome: event => Queue.offerUnsafe(queue, event),
