@@ -1700,7 +1700,7 @@ const playerView = (
   return h.div(
     [
       h.Class(
-        `fixed transition-all duration-500 shadow-2xl z-50 bg-black/95 backdrop-blur-xl flex flex-col ${isExpanded ? 'inset-0 overflow-y-auto' : 'overflow-hidden w-1 h-1 opacity-0 pointer-events-none bottom-0 right-0'}`,
+        `fixed transition-opacity duration-150 ease-out motion-reduce:transition-none shadow-2xl z-50 bg-black/95 flex flex-col ${isExpanded ? 'inset-0 overflow-y-auto' : 'overflow-hidden w-1 h-1 opacity-0 pointer-events-none bottom-0 right-0'}`,
       ),
     ],
     [
