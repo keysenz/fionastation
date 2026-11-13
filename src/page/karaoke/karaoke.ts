@@ -805,15 +805,19 @@ const continuationOf = (model: Model): Continuation => {
   }
 }
 
-const pickAnotherVideo = (model: Model): UpdateReturn =>
+const pickAnotherVideo = (
+  model: Model,
+  cause: PickCause,
+  onNoneLeft: () => UpdateReturn,
+): UpdateReturn =>
   Option.match(model.setlist.maybeNowPlaying, {
     onNone: () => ({ model }),
     onSome: ({ playId, song }) =>
       Array.match(firstSongOfEachOtherLiveVideo(continuationOf(model), song), {
-        onEmpty: () => ({ model }),
+        onEmpty: onNoneLeft,
         onNonEmpty: candidates => ({
           model,
-          commands: [PickRandomVideo({ playId, candidates, cause: 'Ended' })],
+          commands: [PickRandomVideo({ playId, candidates, cause })],
         }),
       }),
   })
@@ -1042,7 +1046,9 @@ const updateModel = (model: Model, message: Message) =>
     ClickedNext: () =>
       Array.isReadonlyArrayNonEmpty(model.setlist.queue)
         ? changeSetlist(model, playNext(model.setlist, model.repeat))
-        : seekBeside(model, 1, () => pickAnotherVideo(model)),
+        : seekBeside(model, 1, () =>
+            pickAnotherVideo(model, 'Ended', () => ({ model })),
+          ),
     ClickedPrevious: () =>
       seekBeside(model, -1, () =>
         changeSetlist(model, playPrevious(model.setlist)),
@@ -1195,6 +1201,7 @@ const updateModel = (model: Model, message: Message) =>
       ),
 
     // NOTE: a click while the pick was pending changed the playId, and the visitor's choice wins.
+    // A refetch can report the picked video gone after the pick was asked for, so it is drawn again.
     CompletedPickRandomVideo: ({ playId, song, cause }) =>
       Option.match(
         Option.filter(
@@ -1204,6 +1211,13 @@ const updateModel = (model: Model, message: Message) =>
         {
           onNone: () => ({ model }),
           onSome: ({ song: previousSong }) => {
+            if (continuationOf(model).isGone(song)) {
+              return pickAnotherVideo(model, cause, () =>
+                cause === 'Ended'
+                  ? changeSetlist(model, setStatus(model.setlist, 'Paused'))
+                  : { model },
+              )
+            }
             const setlist = play(model.setlist, song)
             const saveSetlist = SaveSetlist({ json: toPersistedJson(setlist) })
             const dismissId = setlist.playCount

@@ -777,6 +777,53 @@ test('a pick that finishes after the visitor chose another song is ignored', () 
   expect(late.commands).toBeUndefined()
 })
 
+const refetchGone = (...goneVideoIds: ReadonlyArray<string>) =>
+  Message.SucceededFetchSongs({ songs: archive, goneVideoIds })
+
+test('a pick that lands on a video reported gone since it was asked for draws again among the live ones', () => {
+  const repicked = playing(
+    Message.ClickedSong({ song: a2 }),
+    Message.ReceivedPlayerEvent({ playId: 1, event: PlayerEvent.Ended() }),
+    refetchGone(b.video_url),
+    Message.CompletedPickRandomVideo({ playId: 1, song: b, cause: 'Ended' }),
+  )
+  expect(currentIdOf(repicked.model)).toEqual(Option.some('a2'))
+  expect(repicked.commands?.map(({ name, args }) => [name, args])).toEqual([
+    [PickRandomVideo.name, { playId: 1, candidates: [c], cause: 'Ended' }],
+  ])
+})
+
+test('a pick after an end whose videos have all gone since pauses the same song', () => {
+  const stopped = playing(
+    Message.ClickedSong({ song: a2 }),
+    Message.ReceivedPlayerEvent({ playId: 1, event: PlayerEvent.Ended() }),
+    refetchGone(b.video_url, c.video_url),
+    Message.CompletedPickRandomVideo({ playId: 1, song: b, cause: 'Ended' }),
+  )
+  expect(currentIdOf(stopped.model)).toEqual(Option.some('a2'))
+  expect(statusOf(stopped.model)).toEqual(Option.some('Paused'))
+  expect(
+    stopped.commands?.some(({ name }) => name === PickRandomVideo.name),
+  ).toBe(false)
+})
+
+test('a pick after a failed video whose videos have all gone since leaves the failed song paused with the reason', () => {
+  const stopped = playing(
+    Message.ClickedSong({ song: a }),
+    failVideo(1),
+    refetchGone(b.video_url, c.video_url),
+    Message.CompletedPickRandomVideo({
+      playId: 1,
+      song: b,
+      cause: 'Unavailable',
+    }),
+  )
+  expect(currentIdOf(stopped.model)).toEqual(Option.some('a'))
+  expect(statusOf(stopped.model)).toEqual(Option.some('Paused'))
+  expect(loadErrorOf(stopped.model)).toEqual(Option.some(STREAM_GONE))
+  expect(stopped.commands).toBeUndefined()
+})
+
 test('with autoplay off the end of a video never asks for a random video', () => {
   story(
     update,

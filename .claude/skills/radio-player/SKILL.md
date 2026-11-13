@@ -73,7 +73,7 @@ Exit code 0 means that every property passes, except the known findings below, w
 | `seek-never-reloads` | Every `SeekPlayer` keeps the playId and song, so the `nowPlayingVideo` subscription does not reload the video. The model's playhead is the seek target, and `nowSingingOf` names the song at that point. |
 | `gone-video-never-auto-starts` | A `PickRandomVideo` never offers the current video or a gone video, which includes one that failed this session. An archive advance never starts a gone video. A song from the queue and a repeat replay are excluded, because they play whatever the visitor chose. |
 | `failed-video-leaves-queue-and-history` | After a video fails, none of its songs is left in the queue or history, and leaving its song later does not put it back. `planSkip` marks the play failed, and `play`, `playNext` and `playPrevious` never record a failed play. |
-| `pick-rechecks-gone-at-delivery` | A random pick that arrives after its video became known gone does not start that video. |
+| `pick-rechecks-gone-at-delivery` | A random pick that arrives after its video became known gone does not start that video. It draws again among the videos still live, or stops when none is left. |
 | `player-reports-never-echo` | `Playing`, `Paused`, `Progressed` and `PlayerFailed` send no `ApplyPlayback` back. `Ready` sends only a pause, and only for a paused play. |
 | `play-pause-reaches-the-player` | Play/Pause flips the status and sends `ApplyPlayback` with the new state. |
 | `end-of-stream-does-not-replay-it` | When a video ends with nothing queued and repeat Off, the radio does not start that video again. |
@@ -83,13 +83,9 @@ Exit code 0 means that every property passes, except the known findings below, w
 
 The expected values come from the fixture alone: songs sorted by seconds and filtered by video. They never come from the module's own helpers.
 
-## Known findings at 36bbeed
+## Known findings
 
-These properties fail on the current code. The run prints them as `FINDING` and does not fail because of them. Each trace is the explorer's shortest one.
-
-4. **`pick-rechecks-gone-at-delivery`: a pick can start a video that a refetch just reported gone.** The steps are `ClickedSong(s1)`, `ClickedNext`, a refetch that reports `single` gone, and then `CompletedPickRandomVideo(solo)`. In practice the window is tiny, because `Random.choice` resolves almost at once.
-
-When a fix makes one of these pass, the run prints `PASS ... remove it from KNOWN_FINDINGS`. Remove the name from `KNOWN_FINDINGS` in `check.mjs`, and remove the entry from this list.
+None. `KNOWN_FINDINGS` in `check.mjs` lists a property that the current code is known to break. The run prints it as `FINDING` and does not fail because of it. When a fix makes it pass, the run prints `PASS ... remove it from KNOWN_FINDINGS`, so remove the name.
 
 ## Reading a failure
 
