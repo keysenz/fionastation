@@ -67,8 +67,6 @@ const REFETCH_GONE = ['gone', 'single'];
 const startOf = (song) => song.timestamp.split(':').map(Number).reduce((total, part) => total * 60 + part, 0);
 // Each song's start and a point inside it, plus second 0, before the stream's first song.
 const PLAYHEADS = { stream: [0, 60, 120, 180, 240, 300, 360], single: [30, 90], duet: [30, 90], gone: [30] };
-// The lyrics scope needs a point inside each song and a point past the last song's end, which is its
-// start plus six minutes because songs carry no duration: 660 for s3 and 390 for solo.
 const LYRIC_PLAYHEADS = { stream: [70, 200, 400, 700], single: [40, 400], duet: [40], gone: [40] };
 const LAST_SONG_SECONDS = 360;
 const LYRIC_CLICKS = ['s1', 's3', 'solo'];
@@ -124,14 +122,12 @@ const barSongOf = (model) => {
   return (seconds === undefined ? undefined : sungAt(now.song.video_url, seconds)) ?? now.song;
 };
 const WAITS = [2, 4, 8];
-// Where the play is: its last position, or the clicked song's start before the first one.
 const positionOf = (model) => playheadOf(model) ?? startOf(nowOf(model).song);
 const isBeforeEnd = (model, songId) => {
   const now = nowOf(model);
   const song = ARCHIVE.find(({ id }) => id === songId);
   return Boolean(now) && song.video_url === now.song.video_url && positionOf(model) < endOf(song);
 };
-// The song sung at the playhead and the one after it, the two whose lyrics the page wants.
 const lyricWindowOf = (model) => {
   const seconds = playheadOf(model);
   const sung = seconds === undefined ? undefined : sungAt(nowOf(model).song.video_url, seconds);
@@ -148,8 +144,7 @@ const named = (commands, name) => (commands ?? []).filter((command) => command.n
 // because two toasts can share a dismissId. `env.loads` is the explorer's own count of the loads of the
 // song on the bar since it last played.
 // Every other Command's result message returns the model unchanged in `update`.
-// Volume, layers and drags are left out: no setlist branch reads them. Lyrics fetches and their waits
-// are pending only in the lyrics scope.
+// Volume, layers and drags are left out: no setlist branch reads them.
 const keyOf = ({ model, env, pending, config }) => {
   const base = model.setlist.playCount;
   const waits = model.lyricsWaitCount;
@@ -175,8 +170,6 @@ const playerEvent = (playId, event, label) => ({ message: K.Message.ReceivedPlay
 
 const MISSING_LYRICS = { _tag: 'Missing', reason: 'NotFound' };
 
-// The lyrics scope keeps only what moves lyrics: plays of a few songs, seeks, position reports, the
-// lyrics fetches and their waits, and the retry button, which the panel shows for a song that failed.
 function lyricTransitions({ model, env, pending }) {
   const out = [];
   const now = nowOf(model);
@@ -286,8 +279,6 @@ function step(state, transition) {
     .filter((_, index) => index !== transition.consumes)
     .map((item) => (isNewTimer && item.kind === 'timer' ? { ...item, isNewest: false } : item));
   if (state.config.lyrics) {
-    // A wait stays live while no fetch or newer wait for its song has started and its song has never
-    // been past its end since it started. Only a live wait may fetch.
     const restarted = new Set(commands.filter((command) => ['FetchLyrics', 'WaitBeforeRetryLyrics'].includes(command.name)).map((command) => command.args.songId));
     pending = pending.map((item) => {
       if (item.kind !== 'lyricsWait') return item;
@@ -677,7 +668,6 @@ const PROPERTIES = {
 // Remove a name once the code is fixed and the property passes.
 const KNOWN_FINDINGS = new Set();
 
-// The last config is the lyrics scope. Lyrics read no setting, so it runs with one.
 const CONFIGS = [
   ...[true, false].flatMap((isAutoplay) => ['Off', 'All', 'One'].map((repeat) => ({ isAutoplay, repeat }))),
   { isAutoplay: false, repeat: 'Off', lyrics: true },
@@ -689,7 +679,6 @@ function initialState(config) {
   const fetched = K.update(K.init(), K.Message.SucceededFetchSongs({ songs: ARCHIVE, goneVideoIds: SERVER_GONE })).model;
   const state = { model: { ...fetched, isAutoplay, repeat }, env: { phase: 'none', position: undefined, failed: [], refetched: false, loads: 1 }, pending: [], config };
   if (!config.lyrics) return state;
-  // The lyrics scope starts with s1 clicked and its video ready, so its depth goes to lyrics.
   const clicked = step(state, { message: K.Message.ClickedSong({ song: ARCHIVE[0] }), label: 'ClickedSong(s1)', kind: 'user' });
   return step(clicked, playerEvent(1, PlayerEvent.Ready(), 'Ready'));
 }
@@ -874,7 +863,6 @@ if (!isMainThread) {
 } else {
   const started = Date.now();
   // One worker per autoplay and repeat setting, because no step changes either.
-  // A run starts a worker only for a scope that holds one of its properties.
   const indexes = CONFIGS.flatMap((config, index) => (names.some((name) => belongsTo(name, config)) ? [index] : []));
   const results = await Promise.all(indexes.map((index) => new Promise((resolve, reject) => {
     const worker = new Worker(new URL(import.meta.url), { workerData: index, argv: args });

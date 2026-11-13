@@ -121,9 +121,6 @@ export const INFO_BUTTON_ID = 'karaoke-info-button'
 
 const SongsData = AsyncData.Schema(Schema.Array(PlayableSong), Schema.String)
 
-/** One song's lyrics. A `Failed` song is before its end in the video playing
- *  now and has exactly one retry wait on its way, named by `waitId`. A song
- *  that `GaveUp` has none. */
 export const LyricsFetch = defineTaggedUnion({
   Loading: { autoRetriesSpent: Schema.Number },
   Loaded: { lyrics: Lyrics },
@@ -816,8 +813,6 @@ const fetchLyrics = (
   commands: [FetchLyrics({ songId })],
 })
 
-/** The playhead has not passed the song's end in the video playing now. Before
- *  the play's first position report, the play is at the clicked song's start. */
 const isBeforeSongEnd = (model: Model, songId: string): boolean =>
   Option.exists(model.setlist.maybeNowPlaying, nowPlaying =>
     Option.exists(
@@ -830,8 +825,6 @@ const isBeforeSongEnd = (model: Model, songId: string): boolean =>
     ),
   )
 
-/** A fetch failed. It is tried again after a wait while automatic retries are
- *  left and the song is not over. */
 const failLyrics = (
   model: Model,
   songId: string,
@@ -857,8 +850,6 @@ const failLyrics = (
   }
 }
 
-/** Every message ends here, so a `Failed` song is always before its end in the
- *  video playing now, wherever the playhead or the play moved. */
 const giveUpEndedRetries = (model: Model): Model =>
   modifyFields(model, {
     lyricsBySongId: known =>
@@ -869,9 +860,6 @@ const giveUpEndedRetries = (model: Model): Model =>
       ),
   })
 
-/** Fetches the lyrics of the song being sung and of the next one. A song that
- *  failed is fetched again when it comes back into those two, so singing it
- *  again gives it a fresh start. */
 const ensureLyrics = (
   model: Model,
   previousIds: ReadonlyArray<string>,
@@ -1481,7 +1469,6 @@ const updateModel = (model: Model, message: Message) =>
         },
       ),
 
-    // NOTE: a retry, a give-up or a later failure since the wait started changed the song's waitId, so a late wait does nothing.
     CompletedWaitBeforeRetryLyrics: ({ songId, waitId }) =>
       Option.match(
         Option.filter(

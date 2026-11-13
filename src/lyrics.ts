@@ -118,8 +118,6 @@ const spansOf = (
 // NOTE: songs carry no duration, so a stream's last song has no end in the data. Six minutes is a judgment that covers most songs, not a measurement.
 const LAST_SONG_SECONDS = 360
 
-/** Where the song stops being sung: the next song's start, or for a stream's
- *  last song, a guess past its start. */
 export const endSecondsOf = (segment: Segment): number =>
   Option.getOrElse(
     segment.maybeEndSeconds,
