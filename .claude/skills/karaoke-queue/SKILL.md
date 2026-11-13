@@ -42,6 +42,7 @@ Each sequence has up to 150 actions, 52 to 80 consecutive plays to reach the his
 | `queue-plays-whatever-autoplay-says` | A video end or a failed video plays the queue head, with autoplay on or off. |
 | `archive-advance-skips-gone-videos` | The random pick after a video end or failure never lands on a video known to be gone. |
 | `unavailable-video-is-skipped` | A video that fails leaves no song of it in the queue or history. Playback moves to the queue head or, with autoplay on, the first song of a random other live video, without recording the failed song in history. It pauses with the reason if there is none. |
+| `failed-song-is-never-recorded` | A song whose video failed and that stayed on the bar does not enter the queue or history when a click, Next, Previous or a video end leaves it. |
 | `reload-restores-queue-and-history` | Saving and restoring keeps the queue and history, and nothing plays. |
 
 "Playing with no current song" is no longer a property, because the `NowPlaying` type cannot represent it.

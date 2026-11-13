@@ -86,7 +86,6 @@ import {
   play,
   playFromQueue,
   playNext,
-  playPicked,
   playPrevious,
   removeFromQueue,
   restoreSaved,
@@ -1138,6 +1137,7 @@ const updateModel = (model: Model, message: Message) =>
                 const { cleaned, advance } = planSkip(
                   goneModel.setlist,
                   continuationOf(goneModel),
+                  STREAM_GONE,
                 )
                 return Advance.matchOrElse(
                   advance,
@@ -1157,7 +1157,7 @@ const updateModel = (model: Model, message: Message) =>
                     }),
                   },
                   () => {
-                    const setlist = applySkip(cleaned, advance, STREAM_GONE)
+                    const setlist = applySkip(cleaned, advance)
                     const saveSetlist = SaveSetlist({
                       json: toPersistedJson(setlist),
                     })
@@ -1204,7 +1204,7 @@ const updateModel = (model: Model, message: Message) =>
         {
           onNone: () => ({ model }),
           onSome: ({ song: previousSong }) => {
-            const setlist = playPicked(model.setlist, song, cause)
+            const setlist = play(model.setlist, song)
             const saveSetlist = SaveSetlist({ json: toPersistedJson(setlist) })
             const dismissId = setlist.playCount
             return cause === 'Ended'

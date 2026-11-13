@@ -580,6 +580,46 @@ test('with autoplay off a failed video stays, says why, and shows no toast', () 
   )
 })
 
+test('a failed song left on the bar stays out of history, so Previous does not bring it back', () => {
+  story(
+    update,
+    given(init()),
+    message(Message.SucceededFetchSongs({ songs: [a, b], goneVideoIds: [] })),
+    ...autoplayOff,
+    message(Message.ClickedSong({ song: b })),
+    saved,
+    message(Message.ClickedSong({ song: a })),
+    saved,
+    message(failVideo(2)),
+    saved,
+    message(Message.ClickedSong({ song: b })),
+    saved,
+    model(current => {
+      expect(current.setlist.history).toEqual([b])
+    }),
+    message(Message.ClickedPrevious()),
+    saved,
+    model(current => {
+      expect(currentIdOf(current)).toEqual(Option.some('b'))
+      expect(current.setlist.queue).toEqual([b])
+      expect(current.setlist.history).toEqual([])
+    }),
+  )
+})
+
+test('a song clicked while the pick after a failed video is on its way leaves the failed song out of history', () => {
+  const clicked = [
+    Message.SucceededFetchSongs({ songs: [a, b], goneVideoIds: [] }),
+    Message.ClickedSong({ song: a }),
+    failVideo(1),
+    Message.ClickedSong({ song: b }),
+  ].reduce<UpdateReturn>((previous, next) => update(previous.model, next), {
+    model: init(),
+  })
+  expect(currentIdOf(clicked.model)).toEqual(Option.some('b'))
+  expect(clicked.model.setlist.history).toEqual([])
+})
+
 test('a queued gone song is skipped with a toast naming it', () => {
   story(
     update,

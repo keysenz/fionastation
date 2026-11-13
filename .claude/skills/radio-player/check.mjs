@@ -290,7 +290,8 @@ const PROPERTIES = {
       if (history.length === 0) return sameSetlist(pre, post) ? undefined : 'it changed the setlist with no history';
       const after = post.model.setlist;
       if (startedNewPlay(pre, post)?.song.id !== history[0].id) return `expected a new play of ${history[0].id}`;
-      if (ids(after.queue) !== ids([now.song, ...queue])) return `queue ${ids(after.queue)}, expected ${ids([now.song, ...queue])}`;
+      const expectedQueue = failed ? queue : [now.song, ...queue];
+      if (ids(after.queue) !== ids(expectedQueue)) return `queue ${ids(after.queue)}, expected ${ids(expectedQueue)}`;
       if (ids(after.history) !== ids(history.slice(1))) return 'history did not drop its newest song';
     },
   },
@@ -437,7 +438,6 @@ const PROPERTIES = {
 // Properties the current code breaks. Each is a finding, reported on every run, and does not fail the run.
 // Remove a name once the code is fixed and the property passes.
 const KNOWN_FINDINGS = new Set([
-  'failed-video-leaves-queue-and-history',
   'pick-rechecks-gone-at-delivery',
 ]);
 
@@ -538,6 +538,8 @@ const MUTANTS = [
   { property: 'gone-video-never-auto-starts', file: 'src/page/karaoke/setlist.ts', from: 'song => !isGone(song) && song.video_url !== current.video_url,', to: 'song => song.video_url !== current.video_url,' },
   { property: 'gone-video-never-auto-starts', file: 'src/page/karaoke/karaoke.ts', from: 'isGone: song => goneIds.has(song.video_url),', to: 'isGone: () => false,' },
   { property: 'gone-video-never-auto-starts', file: 'src/page/karaoke/karaoke.ts', from: 'goneVideoIds: known =>\n                    Array.dedupe([...known, nowPlayingSong.video_url]),', to: 'goneVideoIds: known => known,' },
+  { property: 'failed-video-leaves-queue-and-history', file: 'src/page/karaoke/setlist.ts', from: 'Option.isNone(maybeLoadError) ? Option.some(song) : Option.none(),', to: 'Option.some(song),' },
+  { property: 'failed-video-leaves-queue-and-history', file: 'src/page/karaoke/setlist.ts', from: 'const cleaned = failLoad(', to: 'const cleaned = (setlist => setlist)(' },
   { property: 'player-reports-never-echo', file: 'src/page/karaoke/karaoke.ts', from: "Playing: () =>\n                recordFromPlayer(model, setStatus(model.setlist, 'Playing')),", to: "Playing: () =>\n                changeSetlist(model, setStatus(model.setlist, 'Playing'))," },
   { property: 'player-reports-never-echo', file: 'src/page/karaoke/karaoke.ts', from: "Paused: () =>\n                recordFromPlayer(model, setStatus(model.setlist, 'Paused')),", to: "Paused: () =>\n                changeSetlist(model, setStatus(model.setlist, 'Paused'))," },
   { property: 'player-reports-never-echo', file: 'src/page/karaoke/karaoke.ts', from: "status === 'Paused'\n                    ? [\n                        ApplyPlayback({ isPlaying: false }),", to: "status === 'Playing'\n                    ? [\n                        ApplyPlayback({ isPlaying: false })," },
