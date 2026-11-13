@@ -650,7 +650,11 @@ const songListView = (model: Model, h: HtmlBuilder<Message>): Html => {
     groups.map(group => [group.videoId, group.songs.length]),
   )
   const shown = searchVideos(groups, model.search)
-  const selection = resolveSelection(shown, model.maybeSelectedVideoId)
+  const selection = resolveSelection(
+    shown,
+    model.maybeSelectedVideoId,
+    Option.map(model.setlist.maybeNowPlaying, ({ song }) => song.video_url),
+  )
   return Option.match(selection.maybeVideo, {
     onNone: () =>
       h.div(

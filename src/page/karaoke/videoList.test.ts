@@ -125,12 +125,16 @@ test('a query that matches nothing shows nothing', () => {
 
 test('a chosen video the search hides falls back to the first match, and returns when the search clears', () => {
   const chosen = Option.some('old')
-  const hidden = resolveSelection(searchVideos(groups, 'satu bulan'), chosen)
+  const hidden = resolveSelection(
+    searchVideos(groups, 'satu bulan'),
+    chosen,
+    Option.none(),
+  )
   expect(Option.map(hidden.maybeVideo, video => video.videoId)).toEqual(
     Option.some('new'),
   )
   expect(hidden.isChosen).toBe(false)
-  const cleared = resolveSelection(groups, chosen)
+  const cleared = resolveSelection(groups, chosen, Option.none())
   expect(Option.map(cleared.maybeVideo, video => video.videoId)).toEqual(
     Option.some('old'),
   )
@@ -140,13 +144,46 @@ test('a chosen video the search hides falls back to the first match, and returns
 test('with nothing chosen the first video shows, and an empty search shows none', () => {
   expect(
     Option.map(
-      resolveSelection(groups, Option.none()).maybeVideo,
+      resolveSelection(groups, Option.none(), Option.none()).maybeVideo,
       video => video.videoId,
     ),
   ).toEqual(Option.some('new'))
   expect(
-    Option.isNone(resolveSelection([], Option.some('new')).maybeVideo),
+    Option.isNone(
+      resolveSelection([], Option.some('new'), Option.none()).maybeVideo,
+    ),
   ).toBe(true)
+})
+
+const shownVideoId = (selection: ReturnType<typeof resolveSelection>) =>
+  Option.map(selection.maybeVideo, video => video.videoId)
+
+test('with nothing chosen the playing video shows, without counting as chosen', () => {
+  const selection = resolveSelection(groups, Option.none(), Option.some('old'))
+  expect(shownVideoId(selection)).toEqual(Option.some('old'))
+  expect(selection.isChosen).toBe(false)
+})
+
+test('a chosen video wins over the playing video', () => {
+  const selection = resolveSelection(
+    groups,
+    Option.some('mid'),
+    Option.some('old'),
+  )
+  expect(shownVideoId(selection)).toEqual(Option.some('mid'))
+  expect(selection.isChosen).toBe(true)
+})
+
+test('a playing video the search hides falls back to the first shown video', () => {
+  expect(
+    shownVideoId(
+      resolveSelection(
+        searchVideos(groups, 'hello'),
+        Option.none(),
+        Option.some('old'),
+      ),
+    ),
+  ).toEqual(Option.some('mid'))
 })
 
 test('a video group carries the publish date of its songs', () => {

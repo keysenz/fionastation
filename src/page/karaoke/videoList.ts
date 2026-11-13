@@ -109,16 +109,23 @@ export type Selection = {
   isChosen: boolean
 }
 
-/** A choice the search hides falls back to the first shown video, and comes back when the search clears. */
+/** A choice the search hides falls back to the playing video, then to the
+ *  first shown video, and comes back when the search clears. */
 export const resolveSelection = (
   shown: ReadonlyArray<VideoGroup>,
   maybeSelectedVideoId: Option.Option<string>,
+  maybePlayingVideoId: Option.Option<string>,
 ): Selection => {
-  const maybeChosen = Option.flatMap(maybeSelectedVideoId, videoId =>
-    Array.findFirst(shown, group => group.videoId === videoId),
-  )
-  return Option.match(maybeChosen, {
-    onNone: () => ({ maybeVideo: Array.head(shown), isChosen: false }),
+  const findShown = (videoId: string) =>
+    Array.findFirst(shown, group => group.videoId === videoId)
+  return Option.match(Option.flatMap(maybeSelectedVideoId, findShown), {
+    onNone: () => ({
+      maybeVideo: Option.orElse(
+        Option.flatMap(maybePlayingVideoId, findShown),
+        () => Array.head(shown),
+      ),
+      isChosen: false,
+    }),
     onSome: video => ({ maybeVideo: Option.some(video), isChosen: true }),
   })
 }
