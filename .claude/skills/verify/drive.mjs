@@ -721,11 +721,10 @@ const journeys = {
       });
       await bar.locator('button:not([role="switch"]) i.fa-play').waitFor({ timeout: 15000 });
     });
-    await step('player', 'video end moves on to the next song of the same video', async () => {
+    await step('player', 'the end of a stream clicked on its first song plays another live video, not the same stream again', async () => {
       await playVideo(page);
       await seekNearEnd(page);
-      await bar.getByRole('heading', { name: nextRow.song_title }).waitFor({ timeout: 40000 });
-      await videoLoads(page, [nextRow.video_url], { startSeconds: secondsOf(nextRow.timestamp) });
+      await videoLoads(page, videos.filter((v) => !v.is_gone && v.video_url !== rows[start].video_url).map((v) => v.video_url), { timeout: 40000 });
     });
     check('player', 'only one player exists after moving on', (await page.locator('iframe[src*="youtube"]').count()) === 1);
 
