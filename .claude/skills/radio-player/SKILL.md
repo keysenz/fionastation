@@ -5,9 +5,9 @@ description: Exhaustive bounded check of the Fio Radio player loop, the real `up
 
 # Radio player check
 
-**Promise.** The radio does what the visitor and the player last asked for. A late event from a replaced player never skips a song. Next and Previous move in the order the visitor expects, and a seek never reloads the video. A gone video never starts by itself, and no change to the queue is lost on reload. A load that failed is never treated as a gone stream, its retries end, and no play stays loading or moving on forever.
+**Promise.** The radio does what the visitor and the player last asked for. A late event from a replaced player never skips a song. Next and Previous move in the order the visitor expects, and a seek never reloads the video. A gone video never starts by itself, and no change to the queue is lost on reload. A load that failed is never treated as a gone stream, its retries end, and no play stays loading or moving on forever. A song whose lyrics failed keeps retrying until the playhead passes its end, never after, and gets a fresh fetch when it is sung again.
 
-**Harm.** Songs get skipped or replayed, the radio jumps to another video when it should stay in the stream, a network blip removes a stream's songs from the queue, the bar shows a spinner that never ends, or the visitor's queue disappears. Each of these depends on the order in which async results arrive, which tests and manual clicking rarely reach.
+**Harm.** Songs get skipped or replayed, the radio jumps to another video when it should stay in the stream, a network blip removes a stream's songs from the queue, the bar shows a spinner that never ends, the visitor's queue disappears, or a song's lyrics stay failed for good after one bad minute. Each of these depends on the order in which async results arrive, which tests and manual clicking rarely reach.
 
 **Tool.** `check.mjs` is an explicit-state explorer written in Node. It imports the real `update` from `karaoke.ts` and does not use a hand-written model. A state is the page `Model`, plus the Command results still on their way, plus what the YouTube player has done for the current play. From each state, it tries every message that the browser could deliver next and keeps every new state, breadth first. Every order of steps up to the depth bound is covered, and each counterexample is a shortest one. Seeded random walks then go past the bound. They sample, so a walk does not cover every order.
 
@@ -17,10 +17,11 @@ TLA+ is not used. A TLA+ model would check a copy of the logic, and this explore
 
 Run the check if you change any of these:
 
+- `LyricsFetch`, `ensureLyrics`, `failLyrics`, `fetchLyrics`, `isBeforeSongEnd`, `giveUpEndedRetries`, `currentAndNextSongIds`, the lyrics Messages, `FetchLyrics` or `WaitBeforeRetryLyrics` in `src/page/karaoke/karaoke.ts`.
 - `update`, `updateModel`, `withLoadTimeout`, `seekBeside`, `playheadOf`, `progressed`, `pickAnotherVideo`, `skipGoneVideo`, `failCurrentLoad`, `retryCurrentLoad`, `songOnBar`, `changeSetlist`, `recordFromPlayer`, `continuationOf`, `nowSingingOf`, or a Message or Command in `src/page/karaoke/karaoke.ts`.
 - `PlayerEvent` or `videoEvents` in `src/youtube.ts`. These define which events the explorer may send. See "Updating".
 - `Phase`, `intentOf`, `planAdvance`, `applyAdvance`, `planSkip`, `applySkip`, `play`, `playNext`, `playPrevious`, `failLoad`, `retryLoad`, `settleGone`, `loadRetryDelaySeconds`, the `report*` functions or `firstSongOfEachOtherLiveVideo` in `src/page/karaoke/setlist.ts`. Run the `karaoke-queue` skill for these too.
-- `segmentAt` or `songBeside` in `src/lyrics.ts`.
+- `segmentAt`, `segmentOf`, `songBeside` or `endSecondsOf` in `src/lyrics.ts`.
 
 ## Run
 
@@ -28,14 +29,15 @@ Node 26.13 or later runs the TypeScript directly. The skill has no dependencies 
 
 ```sh
 cd .claude/skills/radio-player
-node --disable-warning=ExperimentalWarning check.mjs            # every property, 60 to 70 s on 12 cores
-node --disable-warning=ExperimentalWarning check.mjs --mutants  # proves that each property can fail, about 9 min
+node --disable-warning=ExperimentalWarning check.mjs            # every property, about 75 s on 12 cores
+node --disable-warning=ExperimentalWarning check.mjs --mutants  # proves that each property can fail, about 10 min
 ```
 
-The run uses one worker thread for each autoplay and repeat setting.
+The run uses one worker thread for each autoplay and repeat setting, and one more for the lyrics scope. A run starts only the workers whose scope holds a property it checks.
 
 - `--only <property>` checks one property.
 - `--depth <n>` changes the bound. The default is 6, and each extra step costs about 5 times more time. The stale-timer case of `skip-toast-always-clears` needs exactly six steps, so a lower depth leaves it to the random walks. The fourth failed load, where the automatic retries stop, needs eight steps, so only the random walks reach it. The karaoke-queue check and a story test cover that stop directly.
+- `--lyrics-depth <n>` changes the bound of the lyrics scope. The default is 8, which reaches the fourth failed fetch, where the automatic retries stop. Depth 9 takes about 135 s.
 - `--walks <n>` sets the number of random walks for each setting. The default is 300.
 
 Exit code 0 means that every property passes, except any known findings listed below, which print `FINDING`. Exit code 1 means that a property failed. `--mutants` exits with 0 only when every mutant is caught.
@@ -62,8 +64,15 @@ Exit code 0 means that every property passes, except any known findings listed b
   - The explorer keeps its own count of the loads of the song on the bar since it last played. A retry adds one, and any other new play or a `Playing` report starts it at 1. The expected waits come from this count, not from the model's `attempt`.
   - Every other Command's result message returns the model unchanged in `update`, so it is not delivered.
   - A refetch (`SucceededFetchSongs`) that newly reports `single` as gone can arrive while a pick is pending.
-- **Left out.** Lyrics, volume, layers, search and queue drags are not in the state, and the explorer sends none of their messages. No setlist branch reads them.
-- **Depth 6, measured at 2c2f783.** About 2.5 million distinct states and 8.4 million steps in 60 to 70 s, then 72,000 random-walk steps of 40 actions each.
+- **Lyrics scope.** Lyrics read no setlist branch, and adding their fetches to every setting would multiply the states. So they run in a scope of their own, one more root with autoplay off and repeat Off, where the setlist settings' transitions are replaced by these:
+  - The root has `s1` clicked and its video ready.
+  - The visitor clicks `s1`, `s3` or `solo`, uses Next and Previous, and clicks the lyrics retry button for the sung song while it is `Failed` or `GaveUp`, because the panel shows the button only then.
+  - The player sends `Ready` for a new play, then `Progressed` at 70, 200, 400 and 700 seconds in `stream` and at 40 and 400 in `single`. These are a point inside each song and a point past the last song's end, which is its start plus six minutes: 660 for `s3` and 390 for `solo`.
+  - Every `FetchLyrics` stays pending, and each one is delivered as a success or a failure. Every `WaitBeforeRetryLyrics` stays pending until it is delivered, at any time.
+  - The explorer marks a wait live until a fetch or a newer wait for its song starts, or until its song has been past its end or out of the playing video after any step. Only a live wait may fetch. The lyrics map, the wait count and the pending lyrics items are in the state key, with `waitId` taken relative to the count.
+  - The setlist properties do not run in this scope, and the lyrics properties run only in it.
+- **Left out.** Volume, layers, search and queue drags are not in the state, and the explorer sends none of their messages. No setlist branch reads them. The setlist settings ignore lyrics, and the lyrics scope sends no queue, play-pause, gone or failed-load events.
+- **Depth 6 and lyrics depth 8, measured at the commit in the coverage record.** About 2.9 million distinct states and 9.5 million steps in about 75 s, then 84,000 random-walk steps of 40 actions each. The lyrics scope alone is about 363,000 states.
 
 ## What it checks
 
@@ -88,6 +97,10 @@ Exit code 0 means that every property passes, except any known findings listed b
 | `moving-on-always-resolves` | A play in `MovingOn` always has a random pick for it on the way. A gone play (`MovingOn` or `Gone`) never becomes live again under the same playId. |
 | `loading-always-ends` | A play in `Loading` always has its load timeout on the way, and that timeout puts it in `LoadFailed`. |
 | `failed-play-ignores-player-reports` | A gone play ignores every report of its player. A failed load ignores every report but `VideoGone` and `Playing`: no setlist change, no playhead move, no gone video, no toast and no Command. |
+| `no-lyrics-retry-after-the-songs-end` | Automatic lyrics retries stop once the playhead passes the song's end in video time: the next song's start, or the last song's start plus six minutes. A song out of the playing video is past its end. A wait whose song went past its end never fetches, even if the song comes back before the wait ends. A failed fetch past the end starts no wait, and no song is left `Failed` past its end. |
+| `lyrics-retry-continues-until-the-songs-end` | Every `Failed` song has its own live wait on the way, and a live wait fetches its song again, whether or not the song is sung or next. |
+| `replaying-a-song-fetches-its-lyrics-again` | A song that comes into the sung-or-next pair, by a position report, a seek or a new play, is `Loading` or `Loaded` after that step, even after its retries gave up. Moving from next to sung does not count as coming in. |
+| `stale-lyrics-timer-changes-nothing` | A wait that a fetch, a newer wait or a give-up replaced changes no lyrics, leaves the wait count alone and sends nothing. |
 | `setlist-change-is-saved` | Every change to the queue or history sends `SaveSetlist` with exactly the new queue and history. |
 
 The expected values come from the fixture alone: songs sorted by seconds and filtered by video. They never come from the module's own helpers.
@@ -116,6 +129,7 @@ A `FAIL` prints the property's promise, the steps in message names (`ClickedSong
 **Covered.**
 
 - The real `update` and the setlist, segment and continuation functions that it calls.
+- The lyrics fetch, its retry waits and its give-up rule, in the lyrics scope up to depth 8.
 - Every order of the steps above, up to depth 6, for each of the six settings.
 - Random walks of 40 steps past that bound.
 
@@ -123,7 +137,9 @@ A `FAIL` prints the property's promise, the steps in message names (`ClickedSong
 
 - The YouTube iframe itself, and whether the `nowPlayingVideo` subscription and `videoEvents` keep their own promises. The explorer assumes the event orders listed under "Bounds and assumptions". The `player` journey of the `verify` skill drives the real player.
 - Queues of more than one song added by the visitor, and long histories past the bound. The `karaoke-queue` skill checks these on the pure functions.
-- Lyrics fetches and retries, volume, layers, URL sync, drags and loading saved data.
+- Volume, layers, URL sync, drags and loading saved data.
+- Lyrics together with queue changes, failed loads or gone videos, and lyrics with a playhead before a stream's first song. The lyrics scope leaves these out.
+- The 15-second length of a lyrics wait. The explorer delivers it at any time.
 - Autoplay or repeat changes during a run, and archives with other shapes, such as a stream whose song timestamps are out of order.
 - A visitor's seek that lands while a pick for the same play is pending. A late pick result then still replaces the song, but in practice the window is tiny.
 - How long the timers wait in real time. The explorer delivers a timer at any point, so it does not show that 20 seconds is long enough for a slow load.
@@ -133,9 +149,9 @@ A `FAIL` prints the property's promise, the steps in message names (`ClickedSong
 
 The check was last confirmed to describe the code at commit `2c2f7834ae29b7442d6b3472f2ab523e60121ee1`. It covers these files and functions:
 
-- `src/page/karaoke/karaoke.ts`: `update`, `updateModel` (every setlist and player branch), `seekBeside`, `playheadOf`, `progressed`, `nowSingingOf`, `pickAnotherVideo`, `skipGoneVideo`, `failCurrentLoad`, `retryCurrentLoad`, `songOnBar`, `withLoadTimeout`, `continuationOf`, `changeSetlist`, `recordFromPlayer`, `withSkipToast`, and the Commands `PickRandomVideo`, `SeekPlayer`, `ApplyPlayback`, `SaveSetlist`, `WaitBeforeDismissToast`, `WaitBeforeRetryLoad` and `WaitBeforeLoadTimeout`.
+- `src/page/karaoke/karaoke.ts`: `update`, `updateModel` (every setlist and player branch), `seekBeside`, `playheadOf`, `progressed`, `nowSingingOf`, `ensureLyrics`, `failLyrics`, `fetchLyrics`, `isBeforeSongEnd`, `giveUpEndedRetries`, `currentAndNextSongIds`, `LyricsFetch`, `pickAnotherVideo`, `skipGoneVideo`, `failCurrentLoad`, `retryCurrentLoad`, `songOnBar`, `withLoadTimeout`, `continuationOf`, `changeSetlist`, `recordFromPlayer`, `withSkipToast`, and the Commands `PickRandomVideo`, `SeekPlayer`, `ApplyPlayback`, `SaveSetlist`, `WaitBeforeDismissToast`, `WaitBeforeRetryLoad`, `WaitBeforeLoadTimeout`, `FetchLyrics` and `WaitBeforeRetryLyrics`.
 - `src/page/karaoke/setlist.ts`: `Phase`, `intentOf`, `play`, `playNext`, `playPrevious`, `playFromQueue`, `togglePlaying`, `pause`, `reportReady`, `reportPlaying`, `reportPaused`, `failLoad`, `retryLoad`, `settleGone`, `loadRetryDelaySeconds`, `planAdvance`, `applyAdvance`, `planSkip`, `applySkip` and `firstSongOfEachOtherLiveVideo`.
-- `src/lyrics.ts`: `segmentAt` and `songBeside`.
+- `src/lyrics.ts`: `segmentAt`, `segmentOf`, `songBeside` and `endSecondsOf`.
 - `src/youtube.ts`: `PlayerEvent`, and `loadedVideoEvents` for the order of events.
 
 To find changes since then, run `git log 2c2f7834ae29b7442d6b3472f2ab523e60121ee1..HEAD -- src/page/karaoke/karaoke.ts src/page/karaoke/setlist.ts src/lyrics.ts src/youtube.ts`. Move this commit forward only after you have read those changes, confirmed that `transitions()` and the properties still describe the code, and run both commands. The `/maintain-formal-verification-skill` skill does this pass.

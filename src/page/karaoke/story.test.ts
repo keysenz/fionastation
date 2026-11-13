@@ -1973,6 +1973,26 @@ test('a lyrics retry wait fetches nothing once another video plays', () => {
   )
 })
 
+test('a lyrics retry wait stays given up when the video changes and comes back before it ends, and the next position fetches again', () => {
+  const other = makeSong('other', 'elsewhere')
+  const fetched = update(
+    init(),
+    Message.SucceededFetchSongs({
+      songs: [early, late, other],
+      goneVideoIds: [],
+    }),
+  ).model
+  const failed = failLyrics(
+    tick(update(fetched, Message.ClickedSong({ song: early })).model, 70).model,
+    'early',
+  )
+  const away = update(failed.model, Message.ClickedSong({ song: other })).model
+  const back = update(away, Message.ClickedSong({ song: early })).model
+  const elapsed = update(back, lyricsWaitOf(failed))
+  expect(fetchedIds(elapsed) ?? []).toEqual([])
+  expect(fetchedIds(tick(elapsed.model, 70, 3))).toEqual(['early'])
+})
+
 test('after the automatic retries run out, later ticks in the same song fetch nothing, and the retry button still fetches', () => {
   const exhausted = Array.from({ length: 3 }).reduce<UpdateReturn>(
     retry =>

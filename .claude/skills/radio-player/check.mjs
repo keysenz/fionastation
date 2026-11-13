@@ -41,6 +41,7 @@ const flag = (name) => {
   return at > -1 ? args[at + 1] : undefined;
 };
 const DEPTH = Number(flag('--depth') ?? 6);
+const LYRIC_DEPTH = Number(flag('--lyrics-depth') ?? 8);
 const ONLY = flag('--only');
 const QUEUE_MAX = 1;
 const WALKS = Number(flag('--walks') ?? 300);
@@ -66,6 +67,11 @@ const REFETCH_GONE = ['gone', 'single'];
 const startOf = (song) => song.timestamp.split(':').map(Number).reduce((total, part) => total * 60 + part, 0);
 // Each song's start and a point inside it, plus second 0, before the stream's first song.
 const PLAYHEADS = { stream: [0, 60, 120, 180, 240, 300, 360], single: [30, 90], duet: [30, 90], gone: [30] };
+// The lyrics scope needs a point inside each song and a point past the last song's end, which is its
+// start plus six minutes because songs carry no duration: 660 for s3 and 390 for solo.
+const LYRIC_PLAYHEADS = { stream: [70, 200, 400, 700], single: [40, 400], duet: [40], gone: [40] };
+const LAST_SONG_SECONDS = 360;
+const LYRIC_CLICKS = ['s1', 's3', 'solo'];
 
 // ORACLE, worked out from the fixture alone, never from the module under test.
 const songsOfVideo = (video) => ARCHIVE.filter((song) => song.video_url === video).sort((a, b) => startOf(a) - startOf(b));
@@ -76,6 +82,10 @@ const songBefore = (song) => {
   return songs[songs.findIndex(({ id }) => id === song.id) - 1];
 };
 const lastStartOf = (video) => startOf(songsOfVideo(video).at(-1));
+const endOf = (song) => {
+  const next = songAfter(song.video_url, startOf(song));
+  return next ? startOf(next) : startOf(song) + LAST_SONG_SECONDS;
+};
 const otherLiveFirstSongs = (video, gone) => {
   const seen = new Set();
   return ARCHIVE.filter((song) => {
@@ -114,6 +124,22 @@ const barSongOf = (model) => {
   return (seconds === undefined ? undefined : sungAt(now.song.video_url, seconds)) ?? now.song;
 };
 const WAITS = [2, 4, 8];
+// Where the play is: its last position, or the clicked song's start before the first one.
+const positionOf = (model) => playheadOf(model) ?? startOf(nowOf(model).song);
+const isBeforeEnd = (model, songId) => {
+  const now = nowOf(model);
+  const song = ARCHIVE.find(({ id }) => id === songId);
+  return Boolean(now) && song.video_url === now.song.video_url && positionOf(model) < endOf(song);
+};
+// The song sung at the playhead and the one after it, the two whose lyrics the page wants.
+const lyricWindowOf = (model) => {
+  const seconds = playheadOf(model);
+  const sung = seconds === undefined ? undefined : sungAt(nowOf(model).song.video_url, seconds);
+  if (!sung) return [];
+  const next = songAfter(sung.video_url, startOf(sung));
+  return next ? [sung.id, next.id] : [sung.id];
+};
+const lyricsTagOf = (model, songId) => model.lyricsBySongId[songId]?._tag;
 const goneOf = (model, env) => new Set([...model.goneVideoIds, ...env.failed]);
 const named = (commands, name) => (commands ?? []).filter((command) => command.name === name);
 
@@ -122,9 +148,12 @@ const named = (commands, name) => (commands ?? []).filter((command) => command.n
 // because two toasts can share a dismissId. `env.loads` is the explorer's own count of the loads of the
 // song on the bar since it last played.
 // Every other Command's result message returns the model unchanged in `update`.
-// Lyrics, volume, layers and drags are left out: no setlist branch reads them.
+// Volume, layers and drags are left out: no setlist branch reads them. Lyrics fetches and their waits
+// are pending only in the lyrics scope.
 const keyOf = ({ model, env, pending, config }) => {
   const base = model.setlist.playCount;
+  const waits = model.lyricsWaitCount;
+  const lyrics = config.lyrics && Object.entries(model.lyricsBySongId).sort().map(([id, fetch]) => [id, fetch._tag, fetch.autoRetriesSpent, fetch.waitId === undefined ? null : waits - fetch.waitId]);
   const playhead = some(model.maybePlayhead);
   const toast = some(model.maybeSkipToast);
   return JSON.stringify([
@@ -134,14 +163,49 @@ const keyOf = ({ model, env, pending, config }) => {
     pending.map((item) => JSON.stringify(item.kind === 'pick'
       ? [item.kind, item.playId - base, ids(item.candidates)]
       : item.kind === 'timer' ? [item.kind, item.dismissId - base, item.isNewest]
+      : item.kind === 'lyricsFetch' ? [item.kind, item.songId]
+      : item.kind === 'lyricsWait' ? [item.kind, item.songId, waits - item.waitId, item.isLive, item.wasPastEnd]
       : [item.kind, item.playId - base, item.delaySeconds])).sort(),
+    lyrics,
   ]);
 };
 
 // TRANSITIONS: what the UI offers, what the YouTube player can report, and what Commands return.
 const playerEvent = (playId, event, label) => ({ message: K.Message.ReceivedPlayerEvent({ playId, event }), label: `ReceivedPlayerEvent(playId ${playId}, ${label})`, kind: 'player', playId, event });
 
-function transitions({ model, env, pending }) {
+const MISSING_LYRICS = { _tag: 'Missing', reason: 'NotFound' };
+
+// The lyrics scope keeps only what moves lyrics: plays of a few songs, seeks, position reports, the
+// lyrics fetches and their waits, and the retry button, which the panel shows for a song that failed.
+function lyricTransitions({ model, env, pending }) {
+  const out = [];
+  const now = nowOf(model);
+  const user = (message, label) => out.push({ message, label, kind: 'user' });
+  for (const id of LYRIC_CLICKS) user(K.Message.ClickedSong({ song: ARCHIVE.find((song) => song.id === id) }), `ClickedSong(${id})`);
+  user(K.Message.ClickedNext(), 'ClickedNext');
+  user(K.Message.ClickedPrevious(), 'ClickedPrevious');
+  const sung = lyricWindowOf(model)[0];
+  if (sung && ['Failed', 'GaveUp'].includes(lyricsTagOf(model, sung))) user(K.Message.ClickedRetryLyrics({ songId: sung }), `ClickedRetryLyrics(${sung})`);
+  if (env.phase === 'fresh') out.push(playerEvent(now.playId, PlayerEvent.Ready(), 'Ready'));
+  if (env.phase === 'loaded') {
+    for (const seconds of LYRIC_PLAYHEADS[now.song.video_url]) {
+      out.push(playerEvent(now.playId, PlayerEvent.Progressed({ seconds }), `Progressed ${seconds}s`));
+    }
+  }
+  pending.forEach((item, index) => {
+    if (item.kind === 'lyricsFetch') {
+      out.push({ message: K.Message.SucceededFetchLyrics({ songId: item.songId, lyrics: MISSING_LYRICS }), label: `SucceededFetchLyrics(${item.songId})`, kind: 'lyricsResult', songId: item.songId, consumes: index });
+      out.push({ message: K.Message.FailedFetchLyrics({ songId: item.songId, error: 'down' }), label: `FailedFetchLyrics(${item.songId})`, kind: 'lyricsResult', songId: item.songId, consumes: index });
+    } else if (item.kind === 'lyricsWait') {
+      out.push({ message: K.Message.CompletedWaitBeforeRetryLyrics({ songId: item.songId, waitId: item.waitId }), label: `CompletedWaitBeforeRetryLyrics(${item.songId}, wait ${item.waitId})`, kind: 'lyricsWait', wait: item, consumes: index });
+    }
+  });
+  return out;
+}
+
+function transitions(state) {
+  if (state.config.lyrics) return lyricTransitions(state);
+  const { model, env, pending } = state;
   const out = [];
   const now = nowOf(model);
   const gone = new Set(model.goneVideoIds);
@@ -221,7 +285,20 @@ function step(state, transition) {
   let pending = state.pending
     .filter((_, index) => index !== transition.consumes)
     .map((item) => (isNewTimer && item.kind === 'timer' ? { ...item, isNewest: false } : item));
+  if (state.config.lyrics) {
+    // A wait stays live while no fetch or newer wait for its song has started and its song has never
+    // been past its end since it started. Only a live wait may fetch.
+    const restarted = new Set(commands.filter((command) => ['FetchLyrics', 'WaitBeforeRetryLyrics'].includes(command.name)).map((command) => command.args.songId));
+    pending = pending.map((item) => {
+      if (item.kind !== 'lyricsWait') return item;
+      const wasPastEnd = item.wasPastEnd || !isBeforeEnd(model, item.songId);
+      return { ...item, isLive: item.isLive && !restarted.has(item.songId) && !wasPastEnd, wasPastEnd };
+    });
+  }
   for (const command of commands) {
+    if (command.name === 'FetchLyrics' && state.config.lyrics) pending.push({ kind: 'lyricsFetch', songId: command.args.songId });
+    if (command.name === 'WaitBeforeRetryLyrics' && state.config.lyrics) pending.push({ kind: 'lyricsWait', ...command.args, isLive: true, wasPastEnd: false });
+    if (state.config.lyrics) continue;
     if (command.name === 'PickRandomVideo') pending.push({ kind: 'pick', ...command.args });
     if (command.name === 'WaitBeforeDismissToast') pending.push({ kind: 'timer', dismissId: command.args.dismissId, isNewest: true });
     if (command.name === 'WaitBeforeRetryLoad') pending.push({ kind: 'retry', ...command.args });
@@ -544,6 +621,46 @@ const PROPERTIES = {
       if (post.commands.length) return `${tag} on a ${tagOf(now)} play sent ${post.commands.map((c) => c.name)}`;
     },
   },
+  'no-lyrics-retry-after-the-songs-end': {
+    promise: "Automatic lyrics retries stop once the playhead passes the song's end in video time, or another video plays. A wait for such a song never fetches, even if the song comes back, and no failed song is left waiting past its end.",
+    check(pre, t, post) {
+      const fetched = named(post.commands, 'FetchLyrics').map((command) => command.args.songId);
+      const waited = named(post.commands, 'WaitBeforeRetryLyrics').map((command) => command.args.songId);
+      if (t.kind === 'lyricsWait' && t.wait.wasPastEnd && fetched.length) return `a wait for ${t.wait.songId}, whose song went past its end, fetched ${fetched}`;
+      const late = waited.find((songId) => !isBeforeEnd(post.model, songId));
+      if (late) return `a failed fetch of ${late} started a wait past its end`;
+      const stuck = Object.keys(post.model.lyricsBySongId).find((songId) => lyricsTagOf(post.model, songId) === 'Failed' && !isBeforeEnd(post.model, songId));
+      if (stuck) return `${stuck} is still waiting to retry past its end`;
+    },
+  },
+  'lyrics-retry-continues-until-the-songs-end': {
+    promise: "Every failed song has its own retry wait on the way, and that wait fetches again while the playhead is before the song's end, whether or not the song is sung or next.",
+    check(pre, t, post) {
+      if (t.kind === 'lyricsWait' && t.wait.isLive) {
+        const fetched = named(post.commands, 'FetchLyrics').map((command) => command.args.songId);
+        if (fetched.join() !== t.wait.songId) return `the live wait for ${t.wait.songId} fetched [${fetched}]`;
+      }
+      const orphan = Object.keys(post.model.lyricsBySongId).find((songId) => lyricsTagOf(post.model, songId) === 'Failed' && !post.pending.some((item) => item.kind === 'lyricsWait' && item.songId === songId && item.isLive));
+      if (orphan) return `${orphan} failed with no live wait on the way, so it never retries`;
+    },
+  },
+  'replaying-a-song-fetches-its-lyrics-again': {
+    promise: 'A song that comes back into the sung-or-next pair, by a position report, a seek or a new play, has its lyrics loaded or being fetched, even after its retries gave up.',
+    check(pre, t, post) {
+      const before = nowOf(pre.model)?.playId === nowOf(post.model)?.playId ? lyricWindowOf(pre.model) : [];
+      const entered = lyricWindowOf(post.model).filter((songId) => !before.includes(songId));
+      const left = entered.find((songId) => !['Loading', 'Loaded'].includes(lyricsTagOf(post.model, songId)));
+      if (left) return `${left} came back into the window as ${lyricsTagOf(post.model, left) ?? 'never fetched'}`;
+    },
+  },
+  'stale-lyrics-timer-changes-nothing': {
+    promise: 'A lyrics retry wait that a retry, a newer failure or a give-up replaced changes no lyrics and sends nothing.',
+    check(pre, t, post) {
+      if (t.kind !== 'lyricsWait' || t.wait.isLive) return;
+      if (post.commands.length) return `the stale wait for ${t.wait.songId} sent ${post.commands.map((c) => c.name)}`;
+      if (!same(post.model.lyricsBySongId, pre.model.lyricsBySongId) || post.model.lyricsWaitCount !== pre.model.lyricsWaitCount) return `the stale wait for ${t.wait.songId} changed the lyrics`;
+    },
+  },
   'setlist-change-is-saved': {
     promise: 'Every change to the queue or history saves exactly what the page now shows, so a reload restores it.',
     check(pre, t, post) {
@@ -560,17 +677,29 @@ const PROPERTIES = {
 // Remove a name once the code is fixed and the property passes.
 const KNOWN_FINDINGS = new Set();
 
-const CONFIGS = [true, false].flatMap((isAutoplay) => ['Off', 'All', 'One'].map((repeat) => ({ isAutoplay, repeat })));
-const configLabel = ({ isAutoplay, repeat }) => `autoplay ${isAutoplay ? 'on' : 'off'}, repeat ${repeat}`;
+// The last config is the lyrics scope. Lyrics read no setting, so it runs with one.
+const CONFIGS = [
+  ...[true, false].flatMap((isAutoplay) => ['Off', 'All', 'One'].map((repeat) => ({ isAutoplay, repeat }))),
+  { isAutoplay: false, repeat: 'Off', lyrics: true },
+];
+const configLabel = ({ isAutoplay, repeat, lyrics }) => `${lyrics ? 'lyrics scope, ' : ''}autoplay ${isAutoplay ? 'on' : 'off'}, repeat ${repeat}`;
 
 function initialState(config) {
+  const { isAutoplay, repeat } = config;
   const fetched = K.update(K.init(), K.Message.SucceededFetchSongs({ songs: ARCHIVE, goneVideoIds: SERVER_GONE })).model;
-  return { model: { ...fetched, ...config }, env: { phase: 'none', position: undefined, failed: [], refetched: false, loads: 1 }, pending: [], config };
+  const state = { model: { ...fetched, isAutoplay, repeat }, env: { phase: 'none', position: undefined, failed: [], refetched: false, loads: 1 }, pending: [], config };
+  if (!config.lyrics) return state;
+  // The lyrics scope starts with s1 clicked and its video ready, so its depth goes to lyrics.
+  const clicked = step(state, { message: K.Message.ClickedSong({ song: ARCHIVE[0] }), label: 'ClickedSong(s1)', kind: 'user' });
+  return step(clicked, playerEvent(1, PlayerEvent.Ready(), 'Ready'));
 }
+
+const LYRIC_PROPERTIES = new Set(['no-lyrics-retry-after-the-songs-end', 'lyrics-retry-continues-until-the-songs-end', 'replaying-a-song-fetches-its-lyrics-again', 'stale-lyrics-timer-changes-nothing']);
+const belongsTo = (name, config) => LYRIC_PROPERTIES.has(name) === Boolean(config.lyrics);
 
 const checkStep = (names, found, pre, transition, post, traceOf) => {
   for (const name of names) {
-    if (found.has(name)) continue;
+    if (found.has(name) || !belongsTo(name, pre.config)) continue;
     const why = PROPERTIES[name].check(pre, transition, post);
     if (why) found.set(name, { why, steps: traceOf() });
   }
@@ -591,7 +720,9 @@ function explore(config, names) {
     for (let at = id; at !== -1; at = parent[at]) trace.unshift(label[at]);
     return trace;
   };
-  for (let depth = 0; depth < DEPTH && frontier.length && found.size < names.length; depth++) {
+  const scoped = names.filter((name) => belongsTo(name, config));
+  const bound = config.lyrics ? LYRIC_DEPTH : DEPTH;
+  for (let depth = 0; depth < bound && frontier.length && found.size < scoped.length; depth++) {
     const next = [];
     for (const { state: pre, id } of frontier) {
       for (const transition of transitions(pre)) {
@@ -623,7 +754,8 @@ function walk(config, names, seed) {
   };
   const found = new Map();
   let steps = 0;
-  for (let w = 0; w < WALKS && found.size < names.length; w++) {
+  const scoped = names.filter((name) => belongsTo(name, config));
+  for (let w = 0; w < WALKS && found.size < scoped.length; w++) {
     let state = initialState(config);
     const trace = [configLabel(config)];
     for (let i = 0; i < WALK_LENGTH; i++) {
@@ -690,6 +822,13 @@ const MUTANTS = [
   { property: "loading-always-ends", file: "src/page/karaoke/karaoke.ts", from: "nowPlaying.phase._tag === 'Loading'\n            ? failCurrentLoad", to: "false\n            ? failCurrentLoad" },
   { property: "failed-play-ignores-player-reports", file: "src/page/karaoke/karaoke.ts", from: "                      () => ({ model }),\n                    )\n                  : { model },", to: "                      () => progressed(model, playId, 0),\n                    )\n                  : { model }," },
   { property: "failed-play-ignores-player-reports", file: "src/page/karaoke/karaoke.ts", from: "                      () => ({ model }),\n                    )\n                  : { model },", to: "                      () => ({ model }),\n                    )\n                  : progressed(model, playId, 0)," },
+  { property: "no-lyrics-retry-after-the-songs-end", file: "src/page/karaoke/karaoke.ts", from: "LyricsFetch.guards.Failed(fetch) && !isBeforeSongEnd(model, songId)", to: "LyricsFetch.guards.Failed(fetch) && false" },
+  { property: "no-lyrics-retry-after-the-songs-end", file: "src/page/karaoke/karaoke.ts", from: "autoRetriesSpent >= MAX_AUTO_LYRICS_RETRIES ||\n    !isBeforeSongEnd(model, songId)", to: "autoRetriesSpent >= MAX_AUTO_LYRICS_RETRIES" },
+  { property: "no-lyrics-retry-after-the-songs-end", file: "src/lyrics.ts", from: "() => segment.startSeconds + LAST_SONG_SECONDS,", to: "() => Infinity," },
+  { property: "lyrics-retry-continues-until-the-songs-end", file: "src/page/karaoke/karaoke.ts", from: "onSome: ({ autoRetriesSpent }) =>\n            fetchLyrics(model, songId, autoRetriesSpent + 1),", to: "onSome: ({ autoRetriesSpent }) =>\n            currentAndNextSongIds(model).includes(songId) ? fetchLyrics(model, songId, autoRetriesSpent + 1) : { model }," },
+  { property: "lyrics-retry-continues-until-the-songs-end", file: "src/page/karaoke/karaoke.ts", from: "onSome: ({ autoRetriesSpent }) =>\n            fetchLyrics(model, songId, autoRetriesSpent + 1),", to: "onSome: () => ({ model })," },
+  { property: "replaying-a-song-fetches-its-lyrics-again", file: "src/page/karaoke/karaoke.ts", from: "!previousIds.includes(id) &&", to: "false &&" },
+  { property: "stale-lyrics-timer-changes-nothing", file: "src/page/karaoke/karaoke.ts", from: "failed => failed.waitId === waitId,", to: "() => true," },
 ];
 
 function runMutants() {
@@ -702,7 +841,7 @@ function runMutants() {
       continue;
     }
     const started = Date.now();
-    const run = spawnSync(process.execPath, ['--disable-warning=ExperimentalWarning', fileURLToPath(import.meta.url), '--only', m.property, '--depth', String(DEPTH)], {
+    const run = spawnSync(process.execPath, ['--disable-warning=ExperimentalWarning', fileURLToPath(import.meta.url), '--only', m.property, '--depth', String(DEPTH), '--lyrics-depth', String(LYRIC_DEPTH)], {
       env: { ...process.env, RADIO_MUTANT: JSON.stringify(m) }, encoding: 'utf8',
     });
     // A mutant that crashes the module also exits 1, so only the property's own FAIL line counts.
@@ -735,13 +874,15 @@ if (!isMainThread) {
 } else {
   const started = Date.now();
   // One worker per autoplay and repeat setting, because no step changes either.
-  const results = await Promise.all(CONFIGS.map((_, index) => new Promise((resolve, reject) => {
+  // A run starts a worker only for a scope that holds one of its properties.
+  const indexes = CONFIGS.flatMap((config, index) => (names.some((name) => belongsTo(name, config)) ? [index] : []));
+  const results = await Promise.all(indexes.map((index) => new Promise((resolve, reject) => {
     const worker = new Worker(new URL(import.meta.url), { workerData: index, argv: args });
     worker.once('message', resolve);
     worker.once('error', reject);
   })));
   const total = (key) => results.reduce((sum, result) => sum + result[key], 0);
-  console.log(`explored ${total('states')} states and ${total('steps')} steps to depth ${DEPTH}, then ${total('walkSteps')} steps of random walks, in ${((Date.now() - started) / 1000).toFixed(1)}s`);
+  console.log(`explored ${total('states')} states and ${total('steps')} steps to depth ${DEPTH} (lyrics scope ${LYRIC_DEPTH}), then ${total('walkSteps')} steps of random walks, in ${((Date.now() - started) / 1000).toFixed(1)}s`);
   const shortest = (key, name) => results.map((result) => new Map(result[key]).get(name)).filter(Boolean).sort((a, b) => a.steps.length - b.steps.length)[0];
   let exit = 0;
   for (const name of names) {

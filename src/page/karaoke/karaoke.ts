@@ -121,8 +121,9 @@ export const INFO_BUTTON_ID = 'karaoke-info-button'
 
 const SongsData = AsyncData.Schema(Schema.Array(PlayableSong), Schema.String)
 
-/** One song's lyrics. A `Failed` song has exactly one retry wait on its way,
- *  named by `waitId`, and a song that `GaveUp` has none. */
+/** One song's lyrics. A `Failed` song is before its end in the video playing
+ *  now and has exactly one retry wait on its way, named by `waitId`. A song
+ *  that `GaveUp` has none. */
 export const LyricsFetch = defineTaggedUnion({
   Loading: { autoRetriesSpent: Schema.Number },
   Loaded: { lyrics: Lyrics },
@@ -856,6 +857,8 @@ const failLyrics = (
   }
 }
 
+/** Every message ends here, so a `Failed` song is always before its end in the
+ *  video playing now, wherever the playhead or the play moved. */
 const giveUpEndedRetries = (model: Model): Model =>
   modifyFields(model, {
     lyricsBySongId: known =>
@@ -917,7 +920,7 @@ const progressed = (
   const moved = modifyFields(model, {
     maybePlayhead: () => Option.some({ playId, seconds }),
   })
-  return ensureLyrics(giveUpEndedRetries(moved), currentAndNextSongIds(model))
+  return ensureLyrics(moved, currentAndNextSongIds(model))
 }
 
 const continuationOf = (model: Model): Continuation => {
@@ -1491,9 +1494,7 @@ const updateModel = (model: Model, message: Message) =>
         {
           onNone: () => ({ model }),
           onSome: ({ autoRetriesSpent }) =>
-            isBeforeSongEnd(model, songId)
-              ? fetchLyrics(model, songId, autoRetriesSpent + 1)
-              : { model: setLyrics(model, songId, LyricsFetch.GaveUp()) },
+            fetchLyrics(model, songId, autoRetriesSpent + 1),
         },
       ),
 
@@ -1578,7 +1579,11 @@ const withLoadTimeout = (before: Model, result: UpdateReturn): UpdateReturn =>
  *  the topmost one. A change that came from the address bar already has its
  *  entry, so it only repairs a URL that says something the model does not. */
 export const update = (model: Model, message: Message): UpdateReturn => {
-  const result = withLoadTimeout(model, updateModel(model, message))
+  const updated = withLoadTimeout(model, updateModel(model, message))
+  const result = {
+    ...updated,
+    model: giveUpEndedRetries(updated.model),
+  }
   const sync = (change: 'OpenVideo' | 'OpenOverlay' | 'Replace' | 'Close') =>
     SyncUrl({ url: layersToUrl(layersOf(result.model)), change })
   const fromUrl =
