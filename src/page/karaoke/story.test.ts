@@ -623,7 +623,7 @@ const playing = (...messages: ReadonlyArray<Message>) =>
     model: init(),
   })
 
-test('the next song of the same video plays at the end, with no random pick', () => {
+test('the end of a stream clicked on its first song asks for another video, and does not replay the stream', () => {
   story(
     update,
     given(init()),
@@ -635,10 +635,14 @@ test('the next song of the same video plays at the end, with no random pick', ()
     message(
       Message.ReceivedPlayerEvent({ playId: 1, event: PlayerEvent.Ended() }),
     ),
+    Command.resolve(
+      PickRandomVideo,
+      Message.CompletedPickRandomVideo({ playId: 1, song: b, cause: 'Ended' }),
+    ),
     saved,
     model(current => {
-      expect(currentIdOf(current)).toEqual(Option.some('a2'))
-      expect(statusOf(current)).toEqual(Option.some('Playing'))
+      expect(currentIdOf(current)).toEqual(Option.some('b'))
+      expect(current.setlist.history).toEqual([a])
     }),
   )
 })

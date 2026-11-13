@@ -161,31 +161,14 @@ const properties = {
     });
   },
 
-  // With autoplay on and an empty queue, a video end plays the next song of the same video.
-  'end-of-video-continues-within-the-video': (scene) => {
-    if (!scene.isAutoplay) return;
-    walk(scene, (a, before, after, candidates) => {
-      if (a.type !== 'end' || !current(before) || before.queue.length) return;
-      const now = current(before).song;
-      const index = archive.findIndex((s) => s.id === now.id);
-      const next = archive.slice(index + 1).find((s) => s.video_url === now.video_url && !scene.goneVideos.includes(s.video_url));
-      if (!next) return;
-      if (!same(current(after).song, next)) fail(`end after ${now.id} played ${current(after).song.id}, expected ${next.id} of the same video`);
-      if (current(after).status !== 'Playing') fail('end did not keep playing');
-      if (candidates) fail('end with a song left in the video asked for a random video');
-    });
-  },
-
-  // With autoplay on, an empty queue, and no song left in the video, a video end picks among the first
-  // songs of every other live video, and pauses the same song when there are none.
+  // With autoplay on and an empty queue, a video end picks among the first songs of every other live
+  // video, and pauses the same song when there are none. YouTube ends a video only at its end, so no
+  // later song of the same video is left to play.
   'end-of-video-picks-another-video-or-pauses': (scene) => {
     if (!scene.isAutoplay) return;
     walk(scene, (a, before, after, candidates) => {
       if (a.type !== 'end' || !current(before) || before.queue.length) return;
       const now = current(before).song;
-      const index = archive.findIndex((s) => s.id === now.id);
-      const hasNextInVideo = archive.slice(index + 1).some((s) => s.video_url === now.video_url && !scene.goneVideos.includes(s.video_url));
-      if (hasNextInVideo) return;
       const firsts = expectedFirsts(scene, now);
       if (!firsts.length) {
         if (candidates) fail('end with no other live video asked for a random video');
@@ -336,22 +319,17 @@ const MUTANTS = [
   { property: 'history-is-bounded-and-newest-first', from: 'Array.take([nowPlaying.song, ...history], HISTORY_LIMIT)', to: '[nowPlaying.song, ...history]' },
   { property: 'history-is-bounded-and-newest-first', from: '[nowPlaying.song, ...history]', to: '[...history, nowPlaying.song]' },
   { property: 'new-play-gets-a-new-player', from: 'playCount: count => count + 1,', to: 'playCount: count => count,' },
-  { property: 'end-of-video-continues-within-the-video', from: 'Array.drop(archive, index + 1)', to: 'Array.drop(archive, index)' },
-  { property: 'end-of-video-picks-another-video-or-pauses', from: 'song => song.video_url === current.video_url && !isGone(song),', to: 'song => song.video_url === current.video_url,' },
-  { property: 'end-of-video-continues-within-the-video', from: 'Array.findFirstIndex(archive, ({ id }) => id === current.id),', to: 'Array.findFirstIndex(Array.filter(archive, song => !isGone(song)), ({ id }) => id === current.id),' },
-  { property: 'end-of-video-continues-within-the-video', from: ': nextSongInVideo(continuation, current)', to: ': Option.none()' },
   { property: 'end-of-video-picks-another-video-or-pauses', from: "Stop: () => setStatus(setlist, 'Paused'),", to: 'Stop: () => setlist,' },
-  { property: 'end-of-video-picks-another-video-or-pauses', from: 'onEmpty: () => Advance.Stop(),', to: 'onEmpty: () => Advance.PlaySong({ song: current }),' },
+  { property: 'end-of-video-picks-another-video-or-pauses', from: 'onEmpty: () => Advance.Stop(),', to: 'onEmpty: () => Advance.Replay(),' },
   { property: 'random-pick-lands-on-another-live-video-first-song', from: 'song => !isGone(song) && song.video_url !== current.video_url,', to: 'song => !isGone(song),' },
   { property: 'random-pick-lands-on-another-live-video-first-song', from: 'song => !isGone(song) && song.video_url !== current.video_url,', to: 'song => song.video_url !== current.video_url,' },
   { property: 'random-pick-lands-on-another-live-video-first-song', from: '  Array.dedupeWith(\n    Array.filter(\n      archive,\n      song => !isGone(song) && song.video_url !== current.video_url,\n    ),\n    (first, second)', to: '  Array.dedupeWith(\n    Array.reverse(Array.filter(\n      archive,\n      song => !isGone(song) && song.video_url !== current.video_url,\n    )),\n    (first, second)' },
   { property: 'random-pick-lands-on-another-live-video-first-song', from: 'onNonEmpty: candidates => Advance.PickRandomVideo({ candidates }),', to: 'onNonEmpty: candidates => Advance.PickRandomVideo({ candidates: [candidates[0], ...candidates] }),' },
   { property: 'history-is-bounded-and-newest-first', from: "cause === 'Ended' ? play(setlist, song) : startPlay(setlist, song)", to: 'startPlay(setlist, song)' },
   { property: 'unavailable-video-is-skipped', from: "cause === 'Ended' ? play(setlist, song) : startPlay(setlist, song)", to: 'play(setlist, song)' },
-  { property: 'autoplay-off-never-starts-an-archive-song', from: 'if (!continuation.isAutoplay) {', to: 'if (false) {' },
+  { property: 'autoplay-off-never-starts-an-archive-song', from: '  continuation.isAutoplay\n    ? Array.match(', to: '  true\n    ? Array.match(' },
   { property: 'queue-plays-whatever-autoplay-says', from: 'Array.isReadonlyArrayNonEmpty(setlist.queue)\n    ? Advance.PlayQueued()', to: 'continuation.isAutoplay && Array.isReadonlyArrayNonEmpty(setlist.queue)\n    ? Advance.PlayQueued()' },
   { property: 'queue-plays-whatever-autoplay-says', from: 'Array.isReadonlyArrayNonEmpty(cleaned.queue)\n          ? Advance.PlayQueued()', to: 'continuation.isAutoplay && Array.isReadonlyArrayNonEmpty(cleaned.queue)\n          ? Advance.PlayQueued()' },
-  { property: 'unavailable-video-is-skipped', from: 'const maybeNextInVideo = isVideoDead\n    ? Option.none()', to: 'const maybeNextInVideo = false\n    ? Option.none()' },
   { property: 'queue-is-fifo-and-lossless', from: 'queue: queue => [\n            ...Option.match(setlist.maybeNowPlaying, {\n              onNone: () => [],\n              onSome: ({ song }) => [song],\n            }),\n            ...queue,\n          ],', to: 'queue: queue => queue,' },
   { property: 'unavailable-video-is-skipped', from: 'queue: queue => Array.filter(queue, isOtherVideo),', to: 'queue: queue => queue,' },
   { property: 'unavailable-video-is-skipped', from: 'history: history => Array.filter(history, isOtherVideo),', to: 'history: history => history,' },

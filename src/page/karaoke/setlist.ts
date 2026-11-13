@@ -215,7 +215,6 @@ export type Continuation = {
 export const Advance = defineTaggedUnion({
   PlayQueued: {},
   Replay: {},
-  PlaySong: { song: PlayableSong },
   PickRandomVideo: { candidates: Schema.NonEmptyArray(PlayableSong) },
   Stop: {},
 })
@@ -224,20 +223,6 @@ export type Advance = typeof Advance.Type
 /** Why a random video was needed: the video ended, or it cannot be played. */
 export const PickCause = Schema.Literals(['Ended', 'Unavailable'])
 export type PickCause = typeof PickCause.Type
-
-// NOTE: the index comes from the full archive, because a known-gone song is not in a filtered list.
-const nextSongInVideo = (
-  { archive, isGone }: Continuation,
-  current: PlayableSong,
-): Option.Option<PlayableSong> =>
-  Option.flatMap(
-    Array.findFirstIndex(archive, ({ id }) => id === current.id),
-    index =>
-      Array.findFirst(
-        Array.drop(archive, index + 1),
-        song => song.video_url === current.video_url && !isGone(song),
-      ),
-  )
 
 export const firstSongOfEachOtherLiveVideo = (
   { archive, isGone }: Continuation,
@@ -251,33 +236,23 @@ export const firstSongOfEachOtherLiveVideo = (
     (first, second) => first.video_url === second.video_url,
   )
 
-/** With autoplay on, the rest of the current video plays, then a random other
- *  live video from its first song. A video that cannot play has no rest. */
+/** Nothing of the current video is left: YouTube ends a video only at its end,
+ *  and a dead one cannot play. With autoplay on, a random other live video plays
+ *  from its first song. */
 const planFromArchive = (
   continuation: Continuation,
   current: PlayableSong,
-  isVideoDead: boolean,
-): Advance => {
-  if (!continuation.isAutoplay) {
-    return Advance.Stop()
-  }
-  const maybeNextInVideo = isVideoDead
-    ? Option.none()
-    : nextSongInVideo(continuation, current)
-  return Option.match(maybeNextInVideo, {
-    onSome: song => Advance.PlaySong({ song }),
-    onNone: () =>
-      Array.match(firstSongOfEachOtherLiveVideo(continuation, current), {
+): Advance =>
+  continuation.isAutoplay
+    ? Array.match(firstSongOfEachOtherLiveVideo(continuation, current), {
         onEmpty: () => Advance.Stop(),
         onNonEmpty: candidates => Advance.PickRandomVideo({ candidates }),
-      }),
-  })
-}
+      })
+    : Advance.Stop()
 
 /** When a song ends, repeat One replays it and repeat All sends it to the end
  *  of the queue and plays the head. Otherwise the queue plays first. Then, with
- *  autoplay on, the next song of the same video or a random other one. Autoplay
- *  off stops. */
+ *  autoplay on, a random other video. Autoplay off stops. */
 export const planAdvance = (
   setlist: Setlist,
   continuation: Continuation,
@@ -293,7 +268,7 @@ export const planAdvance = (
     ? Advance.PlayQueued()
     : Option.match(setlist.maybeNowPlaying, {
         onNone: () => Advance.Stop(),
-        onSome: ({ song }) => planFromArchive(continuation, song, false),
+        onSome: ({ song }) => planFromArchive(continuation, song),
       })
 }
 
@@ -311,7 +286,6 @@ export const applyAdvance = (
         onNone: () => setlist,
         onSome: ({ song }) => startPlay(setlist, song),
       }),
-    PlaySong: ({ song }) => play(setlist, song),
     PickRandomVideo: () => setlist,
     Stop: () => setStatus(setlist, 'Paused'),
   })
@@ -335,7 +309,7 @@ export const planSkip = (
         cleaned,
         advance: Array.isReadonlyArrayNonEmpty(cleaned.queue)
           ? Advance.PlayQueued()
-          : planFromArchive(continuation, failedSong, true),
+          : planFromArchive(continuation, failedSong),
       }
     },
   })
@@ -358,7 +332,6 @@ export const applySkip = (
             nextSong,
           ),
       }),
-    PlaySong: ({ song }) => startPlay(cleaned, song),
     PickRandomVideo: () => cleaned,
     Stop: () => failLoad(cleaned, reason),
   })

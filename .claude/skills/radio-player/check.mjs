@@ -436,7 +436,6 @@ const PROPERTIES = {
 const KNOWN_FINDINGS = new Set([
   'failed-video-leaves-queue-and-history',
   'next-and-previous-with-unknown-playhead',
-  'end-of-stream-does-not-replay-it',
   'pick-rechecks-gone-at-delivery',
 ]);
 
@@ -532,16 +531,15 @@ const MUTANTS = [
   { property: 'seek-never-reloads', file: 'src/page/karaoke/karaoke.ts', from: '          model: moved.model,\n          commands: [...(moved.commands ?? []), SeekPlayer({ seconds })],', to: '          model: modifyFields(moved.model, { setlist: setlist => play(setlist, song) }),\n          commands: [...(moved.commands ?? []), SeekPlayer({ seconds })],' },
   { property: 'seek-never-reloads', file: 'src/page/karaoke/karaoke.ts', from: 'const moved = progressed(model, nowPlaying.playId, seconds)', to: 'const moved = { model }' },
   { property: 'gone-video-never-auto-starts', file: 'src/page/karaoke/setlist.ts', from: 'song => !isGone(song) && song.video_url !== current.video_url,', to: 'song => song.video_url !== current.video_url,' },
-  // No mutant of isVideoDead in planFromArchive, or of !isGone in nextSongInVideo: through update each
-  // backs up the other, because VideoFailed marks the video gone first. karaoke-queue breaks each alone.
   { property: 'gone-video-never-auto-starts', file: 'src/page/karaoke/karaoke.ts', from: 'isGone: song => goneIds.has(song.video_url),', to: 'isGone: () => false,' },
   { property: 'gone-video-never-auto-starts', file: 'src/page/karaoke/karaoke.ts', from: 'goneVideoIds: known =>\n                    Array.dedupe([...known, nowPlayingSong.video_url]),', to: 'goneVideoIds: known => known,' },
   { property: 'player-reports-never-echo', file: 'src/page/karaoke/karaoke.ts', from: "Playing: () =>\n                recordFromPlayer(model, setStatus(model.setlist, 'Playing')),", to: "Playing: () =>\n                changeSetlist(model, setStatus(model.setlist, 'Playing'))," },
   { property: 'player-reports-never-echo', file: 'src/page/karaoke/karaoke.ts', from: "Paused: () =>\n                recordFromPlayer(model, setStatus(model.setlist, 'Paused')),", to: "Paused: () =>\n                changeSetlist(model, setStatus(model.setlist, 'Paused'))," },
   { property: 'player-reports-never-echo', file: 'src/page/karaoke/karaoke.ts', from: "status === 'Paused'\n                    ? [\n                        ApplyPlayback({ isPlaying: false }),", to: "status === 'Playing'\n                    ? [\n                        ApplyPlayback({ isPlaying: false })," },
   { property: 'play-pause-reaches-the-player', file: 'src/page/karaoke/karaoke.ts', from: 'before.playId === after.playId && before.status !== after.status', to: 'false' },
+  { property: 'end-of-stream-does-not-replay-it', file: 'src/page/karaoke/setlist.ts', from: 'onSome: ({ song }) => planFromArchive(continuation, song),', to: 'onSome: () => Advance.Replay(),' },
   { property: 'ended-never-stalls', file: 'src/page/karaoke/karaoke.ts', from: "                      commands: [\n                        PickRandomVideo({\n                          playId,\n                          candidates,\n                          cause: 'Ended',\n                        }),\n                      ],", to: '                      commands: [],' },
-  { property: 'ended-never-stalls', file: 'src/page/karaoke/setlist.ts', from: 'if (!continuation.isAutoplay) {', to: 'if (continuation.isAutoplay) {' },
+  { property: 'ended-never-stalls', file: 'src/page/karaoke/setlist.ts', from: '  continuation.isAutoplay\n    ? Array.match(', to: '  !continuation.isAutoplay\n    ? Array.match(' },
   { property: 'skip-toast-always-clears', file: 'src/page/karaoke/karaoke.ts', from: 'Option.filter(maybeToast, toast => toast.dismissId !== dismissId)', to: 'Option.none()' },
   { property: 'skip-toast-always-clears', file: 'src/page/karaoke/karaoke.ts', from: 'const dismissId = setlist.playCount\n', to: 'const dismissId = setlist.playCount - 1\n' },
   { property: 'skip-toast-always-clears', file: 'src/page/karaoke/karaoke.ts', from: '                  commands: [\n                    saveSetlist,\n                    WaitBeforeDismissToast({ dismissId }),\n                  ],', to: '                  commands: [saveSetlist],' },
