@@ -19,6 +19,7 @@ import {
   type Update,
 } from 'foldkit'
 import { defineMessageUnion } from 'foldkit/message'
+import { defineTaggedUnion } from 'foldkit/schema'
 import { modifyFields } from 'foldkit/struct'
 
 import { fetchJson } from '../../api'
@@ -38,11 +39,13 @@ import {
   Playhead,
   type Segment,
   cursorAt,
+  endSecondsOf,
   msIntoLyrics,
   nudge,
   nudgeOf,
   parseNudges,
   segmentAt,
+  segmentOf,
   songBeside,
   toNudgesJson,
 } from '../../lyrics.ts'
@@ -117,7 +120,16 @@ export const INFO_BUTTON_ID = 'karaoke-info-button'
 // MODEL
 
 const SongsData = AsyncData.Schema(Schema.Array(PlayableSong), Schema.String)
-const LyricsData = AsyncData.Schema(Lyrics, Schema.String)
+
+/** One song's lyrics. A `Failed` song has exactly one retry wait on its way,
+ *  named by `waitId`, and a song that `GaveUp` has none. */
+export const LyricsFetch = defineTaggedUnion({
+  Loading: { autoRetriesSpent: Schema.Number },
+  Loaded: { lyrics: Lyrics },
+  Failed: { autoRetriesSpent: Schema.Number, waitId: Schema.Number },
+  GaveUp: {},
+})
+export type LyricsFetch = typeof LyricsFetch.Type
 
 export const SkipToast = Schema.Struct({
   firstSkippedTitle: Schema.String,
@@ -152,8 +164,8 @@ export const Model = Schema.Struct({
   maybeSelectedVideoId: Schema.Option(Schema.String),
   maybeQueueDrag: Schema.Option(QueueDrag),
   maybePlayhead: Schema.Option(Playhead),
-  lyricsBySongId: Schema.Record(Schema.String, LyricsData.schema),
-  autoRetriesSpentBySongId: Schema.Record(Schema.String, Schema.Number),
+  lyricsBySongId: Schema.Record(Schema.String, LyricsFetch),
+  lyricsWaitCount: Schema.Number,
   lyricNudges: Nudges,
 })
 export type Model = typeof Model.Type
@@ -197,7 +209,10 @@ export const Message = defineMessageUnion({
   SucceededFetchLyrics: { songId: Schema.String, lyrics: Lyrics },
   FailedFetchLyrics: { songId: Schema.String, error: Schema.String },
   ClickedRetryLyrics: { songId: Schema.String },
-  ElapsedLyricsRetryDelay: { songId: Schema.String },
+  CompletedWaitBeforeRetryLyrics: {
+    songId: Schema.String,
+    waitId: Schema.Number,
+  },
   ClickedNudgeLyrics: { songId: Schema.String, by: Schema.Literals([-1, 1]) },
   ClickedResetLyricsNudge: { songId: Schema.String },
   CompletedLoadLyricNudges: { maybeJson: Schema.Option(Schema.String) },
@@ -271,11 +286,11 @@ const LYRICS_RETRY_DELAY_SECONDS = 15
 export const MAX_AUTO_LYRICS_RETRIES = 3
 
 export const WaitBeforeRetryLyrics = Command.define('WaitBeforeRetryLyrics', {
-  args: { songId: Schema.String },
-  messages: [Message.ElapsedLyricsRetryDelay],
-  execute: ({ songId }) =>
+  args: { songId: Schema.String, waitId: Schema.Number },
+  messages: [Message.CompletedWaitBeforeRetryLyrics],
+  execute: ({ songId, waitId }) =>
     Effect.sleep(Duration.seconds(LYRICS_RETRY_DELAY_SECONDS)).pipe(
-      Effect.as(Message.ElapsedLyricsRetryDelay({ songId })),
+      Effect.as(Message.CompletedWaitBeforeRetryLyrics({ songId, waitId })),
     ),
 })
 
@@ -655,7 +670,7 @@ export const init = (): Model => ({
   maybeQueueDrag: Option.none(),
   maybePlayhead: Option.none(),
   lyricsBySongId: {},
-  autoRetriesSpentBySongId: {},
+  lyricsWaitCount: 0,
   lyricNudges: {},
 })
 
@@ -696,7 +711,7 @@ export const allSongs = (model: Model): ReadonlyArray<PlayableSong> =>
 
 export type NowSinging = Readonly<{
   segment: Segment
-  maybeLyrics: Option.Option<AsyncData.AsyncData<Lyrics, string>>
+  maybeLyrics: Option.Option<LyricsFetch>
   nudge: LaterNudgeSteps
   maybeCursor: Option.Option<LyricCursor>
 }>
@@ -726,12 +741,10 @@ export const nowSingingOf = (model: Model): Option.Option<NowSinging> =>
       nowPlaying.song,
       playhead.seconds,
     )
-    const maybeLyrics = Option.fromNullishOr(
-      model.lyricsBySongId[segment.song.id],
-    )
+    const maybeLyrics = Record.get(model.lyricsBySongId, segment.song.id)
     const nudgeSteps = nudgeOf(model.lyricNudges, segment.song.id)
     const maybeCursor = Option.flatMap(
-      Option.flatMap(maybeLyrics, AsyncData.getData),
+      Option.flatMap(maybeLyrics, loadedLyricsOf),
       lyrics =>
         Lyrics.match(lyrics, {
           Synced: ({ lines, offsetMs }) =>
@@ -781,22 +794,104 @@ const seekBeside = (
     },
   )
 
+export const loadedLyricsOf = (fetch: LyricsFetch): Option.Option<Lyrics> =>
+  LyricsFetch.matchOrElse(
+    fetch,
+    { Loaded: ({ lyrics }) => Option.some(lyrics) },
+    () => Option.none(),
+  )
+
+const setLyrics = (model: Model, songId: string, fetch: LyricsFetch): Model =>
+  modifyFields(model, {
+    lyricsBySongId: known => Record.set(known, songId, fetch),
+  })
+
+const fetchLyrics = (
+  model: Model,
+  songId: string,
+  autoRetriesSpent: number,
+): UpdateReturn => ({
+  model: setLyrics(model, songId, LyricsFetch.Loading({ autoRetriesSpent })),
+  commands: [FetchLyrics({ songId })],
+})
+
+/** The playhead has not passed the song's end in the video playing now. Before
+ *  the play's first position report, the play is at the clicked song's start. */
+const isBeforeSongEnd = (model: Model, songId: string): boolean =>
+  Option.exists(model.setlist.maybeNowPlaying, nowPlaying =>
+    Option.exists(
+      segmentOf(allSongs(model), nowPlaying.song, songId),
+      segment =>
+        Option.match(playheadOf(model, nowPlaying), {
+          onNone: () => timestampToSeconds(nowPlaying.song.timestamp),
+          onSome: ({ seconds }) => seconds,
+        }) < endSecondsOf(segment),
+    ),
+  )
+
+/** A fetch failed. It is tried again after a wait while automatic retries are
+ *  left and the song is not over. */
+const failLyrics = (
+  model: Model,
+  songId: string,
+  autoRetriesSpent: number,
+): UpdateReturn => {
+  if (
+    autoRetriesSpent >= MAX_AUTO_LYRICS_RETRIES ||
+    !isBeforeSongEnd(model, songId)
+  ) {
+    return { model: setLyrics(model, songId, LyricsFetch.GaveUp()) }
+  }
+  const waitId = model.lyricsWaitCount + 1
+  return {
+    model: modifyFields(
+      setLyrics(
+        model,
+        songId,
+        LyricsFetch.Failed({ autoRetriesSpent, waitId }),
+      ),
+      { lyricsWaitCount: () => waitId },
+    ),
+    commands: [WaitBeforeRetryLyrics({ songId, waitId })],
+  }
+}
+
+const giveUpEndedRetries = (model: Model): Model =>
+  modifyFields(model, {
+    lyricsBySongId: known =>
+      Record.map(known, (fetch, songId) =>
+        LyricsFetch.guards.Failed(fetch) && !isBeforeSongEnd(model, songId)
+          ? LyricsFetch.GaveUp()
+          : fetch,
+      ),
+  })
+
+/** Fetches the lyrics of the song being sung and of the next one. A song that
+ *  failed is fetched again when it comes back into those two, so singing it
+ *  again gives it a fresh start. */
 const ensureLyrics = (
   model: Model,
-  songIds: ReadonlyArray<string>,
+  previousIds: ReadonlyArray<string>,
 ): UpdateReturn => {
-  const missing = Array.dedupe(songIds).filter(
-    id => !(id in model.lyricsBySongId),
+  const toFetch = currentAndNextSongIds(model).filter(id =>
+    Option.match(Record.get(model.lyricsBySongId, id), {
+      onNone: () => true,
+      onSome: fetch =>
+        !previousIds.includes(id) &&
+        LyricsFetch.isAnyOf(['Failed', 'GaveUp'])(fetch),
+    }),
   )
   return {
-    model: modifyFields(model, {
-      lyricsBySongId: known =>
-        missing.reduce(
-          (lyricsById, id) => Record.set(lyricsById, id, AsyncData.Loading()),
-          known,
+    model: toFetch.reduce(
+      (fetching, songId) =>
+        setLyrics(
+          fetching,
+          songId,
+          LyricsFetch.Loading({ autoRetriesSpent: 0 }),
         ),
-    }),
-    commands: missing.map(songId => FetchLyrics({ songId })),
+      model,
+    ),
+    commands: toFetch.map(songId => FetchLyrics({ songId })),
   }
 }
 
@@ -822,8 +917,7 @@ const progressed = (
   const moved = modifyFields(model, {
     maybePlayhead: () => Option.some({ playId, seconds }),
   })
-  const ids = currentAndNextSongIds(moved)
-  return ids.length === 0 ? { model: moved } : ensureLyrics(moved, ids)
+  return ensureLyrics(giveUpEndedRetries(moved), currentAndNextSongIds(model))
 }
 
 const continuationOf = (model: Model): Continuation => {
@@ -1368,62 +1462,47 @@ const updateModel = (model: Model, message: Message) =>
     CompletedMountPlayer: () => ({ model }),
 
     SucceededFetchLyrics: ({ songId, lyrics }) => ({
-      model: modifyFields(model, {
-        lyricsBySongId: known => ({
-          ...known,
-          [songId]: AsyncData.succeed(lyrics),
-        }),
-      }),
+      model: setLyrics(model, songId, LyricsFetch.Loaded({ lyrics })),
     }),
 
-    FailedFetchLyrics: ({ songId, error }) => ({
-      model: modifyFields(model, {
-        lyricsBySongId: known => ({
-          ...known,
-          [songId]: AsyncData.fail(error),
-        }),
-      }),
-      commands:
-        (model.autoRetriesSpentBySongId[songId] ?? 0) < MAX_AUTO_LYRICS_RETRIES
-          ? [WaitBeforeRetryLyrics({ songId })]
-          : [],
-    }),
+    FailedFetchLyrics: ({ songId }) =>
+      Option.match(
+        Option.filter(
+          Record.get(model.lyricsBySongId, songId),
+          LyricsFetch.guards.Loading,
+        ),
+        {
+          onNone: () => ({ model }),
+          onSome: ({ autoRetriesSpent }) =>
+            failLyrics(model, songId, autoRetriesSpent),
+        },
+      ),
 
-    ElapsedLyricsRetryDelay: ({ songId }) =>
-      Option.exists(
-        Option.fromNullishOr(model.lyricsBySongId[songId]),
-        AsyncData.isFailure,
-      ) && currentAndNextSongIds(model).includes(songId)
-        ? {
-            model: modifyFields(model, {
-              lyricsBySongId: known => ({
-                ...known,
-                [songId]: AsyncData.Loading(),
-              }),
-              autoRetriesSpentBySongId: known => ({
-                ...known,
-                [songId]: (known[songId] ?? 0) + 1,
-              }),
-            }),
-            commands: [FetchLyrics({ songId })],
-          }
-        : { model },
+    // NOTE: a retry, a give-up or a later failure since the wait started changed the song's waitId, so a late wait does nothing.
+    CompletedWaitBeforeRetryLyrics: ({ songId, waitId }) =>
+      Option.match(
+        Option.filter(
+          Option.filter(
+            Record.get(model.lyricsBySongId, songId),
+            LyricsFetch.guards.Failed,
+          ),
+          failed => failed.waitId === waitId,
+        ),
+        {
+          onNone: () => ({ model }),
+          onSome: ({ autoRetriesSpent }) =>
+            isBeforeSongEnd(model, songId)
+              ? fetchLyrics(model, songId, autoRetriesSpent + 1)
+              : { model: setLyrics(model, songId, LyricsFetch.GaveUp()) },
+        },
+      ),
 
     ClickedRetryLyrics: ({ songId }) =>
       Option.exists(
-        Option.fromNullishOr(model.lyricsBySongId[songId]),
-        AsyncData.isFailure,
+        Record.get(model.lyricsBySongId, songId),
+        LyricsFetch.isAnyOf(['Failed', 'GaveUp']),
       )
-        ? {
-            model: modifyFields(model, {
-              lyricsBySongId: known => ({
-                ...known,
-                [songId]: AsyncData.Loading(),
-              }),
-              autoRetriesSpentBySongId: known => Record.remove(known, songId),
-            }),
-            commands: [FetchLyrics({ songId })],
-          }
+        ? fetchLyrics(model, songId, 0)
         : { model },
 
     ClickedNudgeLyrics: ({ songId, by }) =>

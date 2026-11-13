@@ -1,5 +1,4 @@
 import { Array, Option } from 'effect'
-import { AsyncData } from 'foldkit'
 import type { Html, HtmlBuilder } from 'foldkit/html'
 import { twMerge } from 'tailwind-merge'
 
@@ -11,7 +10,12 @@ import {
   type MissingReason,
   NUDGE_STEP_MS,
 } from '../../lyrics.ts'
-import { Message, type NowSinging } from './karaoke'
+import {
+  LyricsFetch,
+  Message,
+  type NowSinging,
+  loadedLyricsOf,
+} from './karaoke'
 
 const ROW_REM = 3.25
 const WINDOW_ROWS = 5
@@ -25,13 +29,11 @@ const MISSING_TEXT: Record<MissingReason, string> = {
 type SyncedLyrics = Extract<Lyrics, { _tag: 'Synced' }>
 
 const syncedOf = (singing: NowSinging): Option.Option<SyncedLyrics> =>
-  Option.flatMap(
-    Option.flatMap(singing.maybeLyrics, AsyncData.getData),
-    lyrics =>
-      Lyrics.match(lyrics, {
-        Synced: synced => Option.some(synced),
-        Missing: () => Option.none(),
-      }),
+  Option.flatMap(Option.flatMap(singing.maybeLyrics, loadedLyricsOf), lyrics =>
+    Lyrics.match(lyrics, {
+      Synced: synced => Option.some(synced),
+      Missing: () => Option.none(),
+    }),
   )
 
 export const currentLineOf = (singing: NowSinging): Option.Option<string> =>
@@ -50,7 +52,7 @@ export const currentLineOf = (singing: NowSinging): Option.Option<string> =>
   )
 
 export const hasLyricsPanel = (singing: NowSinging): boolean =>
-  Option.match(Option.flatMap(singing.maybeLyrics, AsyncData.getData), {
+  Option.match(Option.flatMap(singing.maybeLyrics, loadedLyricsOf), {
     onNone: () => true,
     onSome: lyrics =>
       Lyrics.match(lyrics, {
@@ -134,15 +136,27 @@ const noteView = (text: string, h: HtmlBuilder<Message>): Html =>
     [text],
   )
 
-const retryView = (songId: string, h: HtmlBuilder<Message>): Html =>
+const retryView = (
+  songId: string,
+  retry: 'Waiting' | 'GaveUp',
+  h: HtmlBuilder<Message>,
+): Html =>
   h.div(
     [
+      h.DataAttribute('lyrics-retry', retry),
       h.Class(
         'flex flex-col items-center justify-center gap-2 h-full px-4 py-4 text-center text-sm text-gray-400',
       ),
     ],
     [
-      h.p([], ['Lyrics are unavailable right now']),
+      h.p(
+        [],
+        [
+          retry === 'Waiting'
+            ? 'Lyrics are unavailable right now, trying again soon'
+            : 'Lyrics are unavailable right now',
+        ],
+      ),
       h.button(
         [
           h.Type('button'),
@@ -250,11 +264,12 @@ const lyricsBodyView = (
     [
       Option.match(singing.maybeLyrics, {
         onNone: () => skeletonView(h),
-        onSome: data =>
-          AsyncData.matchData(data, {
-            onEmpty: () => skeletonView(h),
-            onFailure: () => retryView(singing.segment.song.id, h),
-            onData: lyrics =>
+        onSome: fetch =>
+          LyricsFetch.match(fetch, {
+            Loading: () => skeletonView(h),
+            Failed: () => retryView(singing.segment.song.id, 'Waiting', h),
+            GaveUp: () => retryView(singing.segment.song.id, 'GaveUp', h),
+            Loaded: ({ lyrics }) =>
               Lyrics.match(lyrics, {
                 Synced: synced => lyricLinesView(singing, synced, h),
                 Missing: ({ reason }) => noteView(MISSING_TEXT[reason], h),

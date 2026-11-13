@@ -157,3 +157,61 @@ test('a player that is not open cannot be opened while its video cannot play', (
     inside(bar, expect(button('Expand player')).toBeDisabled()),
   )
 })
+
+const inStream = (id: string, timestamp: string): PlayableSong => ({
+  ...makeSong(id),
+  video_url: 'stream',
+  timestamp,
+})
+const [first, second] = [
+  inStream('first', '00:01:00'),
+  inStream('second', '00:05:00'),
+]
+const firstLyricsFailed = Message.FailedFetchLyrics({
+  songId: 'first',
+  error: 'down',
+})
+const waitEnded = (waitId: number) =>
+  Message.CompletedWaitBeforeRetryLyrics({ songId: 'first', waitId })
+const singingFirst = [
+  fetched(first, second),
+  Message.ClickedSong({ song: first }),
+  reported(PlayerEvent.Ready()),
+  Message.ClickedToggleExpanded(),
+  reported(PlayerEvent.Progressed({ seconds: 70 })),
+  firstLyricsFailed,
+]
+const retryWaiting = selector('[data-lyrics-retry="Waiting"]')
+const retryGaveUp = selector('[data-lyrics-retry="GaveUp"]')
+
+test('failed lyrics show a retry on its way, with a button to retry now', () => {
+  scene(
+    { update, view },
+    given(after(...singingFirst)),
+    playerMounted,
+    expect(retryWaiting).toExist(),
+    expect(retryGaveUp).toBeAbsent(),
+    inside(retryWaiting, expect(button('Try again')).toBeEnabled()),
+  )
+})
+
+test('lyrics whose automatic retries ran out show that the radio gave up, and still offer a retry', () => {
+  scene(
+    { update, view },
+    given(
+      after(
+        ...singingFirst,
+        waitEnded(1),
+        firstLyricsFailed,
+        waitEnded(2),
+        firstLyricsFailed,
+        waitEnded(3),
+        firstLyricsFailed,
+      ),
+    ),
+    playerMounted,
+    expect(retryGaveUp).toExist(),
+    expect(retryWaiting).toBeAbsent(),
+    inside(retryGaveUp, expect(button('Try again')).toBeEnabled()),
+  )
+})

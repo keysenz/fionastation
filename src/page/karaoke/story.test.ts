@@ -1740,7 +1740,7 @@ test('next on a play that failed asks for another video instead of seeking in it
 
 test('a position before the first song fetches nothing and sings nothing', () => {
   const before = tick(playingStream(), 30)
-  expect(before.commands).toBeUndefined()
+  expect(before.commands).toEqual([])
   expect(singingId(before.model)).toEqual(Option.none())
 })
 
@@ -1807,117 +1807,11 @@ test('saved nudges load, and garbage loads as none', () => {
   expect(garbage.model.lyricNudges).toEqual({})
 })
 
-test('retrying failed lyrics fetches again, and retrying anything else does nothing', () => {
-  const failed = update(
-    tick(playingStream(), 70).model,
-    Message.FailedFetchLyrics({ songId: 'early', error: 'down' }),
-  ).model
-  expect(failed.lyricsBySongId['early']?._tag).toBe('Failure')
-  const retried = update(
-    failed,
-    Message.ClickedRetryLyrics({ songId: 'early' }),
-  )
-  expect(fetchedIds(retried)).toEqual(['early'])
-  expect(retried.model.lyricsBySongId['early']?._tag).toBe('Loading')
-  expect(
-    update(retried.model, Message.ClickedRetryLyrics({ songId: 'early' }))
-      .commands,
-  ).toBeUndefined()
-})
-
-const failedSinging = (): Model =>
-  update(
-    tick(playingStream(), 70).model,
-    Message.FailedFetchLyrics({ songId: 'early', error: 'down' }),
-  ).model
-
-test('a failed fetch schedules a delayed retry', () => {
-  const failed = update(
-    tick(playingStream(), 70).model,
-    Message.FailedFetchLyrics({ songId: 'early', error: 'down' }),
-  )
-  expect(failed.commands?.map(({ name }) => name)).toEqual([
-    WaitBeforeRetryLyrics.name,
-  ])
-  expect(failed.commands?.[0]?.args?.['songId']).toBe('early')
-})
-
-test('the delayed retry fetches again while the song is still failed and current', () => {
-  const retried = update(
-    failedSinging(),
-    Message.ElapsedLyricsRetryDelay({ songId: 'early' }),
-  )
-  expect(fetchedIds(retried)).toEqual(['early'])
-  expect(retried.model.lyricsBySongId['early']?._tag).toBe('Loading')
-})
-
-test('the delayed retry also covers the next song', () => {
-  const failed = update(
-    tick(playingStream(), 70).model,
-    Message.FailedFetchLyrics({ songId: 'late', error: 'down' }),
-  ).model
-  expect(
-    fetchedIds(
-      update(failed, Message.ElapsedLyricsRetryDelay({ songId: 'late' })),
-    ),
-  ).toEqual(['late'])
-})
-
-test('the delayed retry does nothing once the lyrics arrived', () => {
-  const arrived = update(
-    failedSinging(),
-    Message.SucceededFetchLyrics({ songId: 'early', lyrics: threeLines }),
-  ).model
-  const elapsed = update(
-    arrived,
-    Message.ElapsedLyricsRetryDelay({ songId: 'early' }),
-  )
-  expect(elapsed.commands).toBeUndefined()
-  expect(elapsed.model.lyricsBySongId['early']?._tag).toBe('Success')
-})
-
-test('the delayed retry does nothing once the song is no longer current or next', () => {
-  const moved = tick(failedSinging(), 400).model
-  expect(singingId(moved)).toEqual(Option.some('late'))
-  expect(
-    update(moved, Message.ElapsedLyricsRetryDelay({ songId: 'early' }))
-      .commands,
-  ).toBeUndefined()
-})
-
-test('automatic retries stop after three, and a manual retry starts the count again', () => {
-  let current = failedSinging()
-  for (let round = 1; round <= 3; round++) {
-    const retried = update(
-      current,
-      Message.ElapsedLyricsRetryDelay({ songId: 'early' }),
-    )
-    expect(fetchedIds(retried)).toEqual(['early'])
-    current = update(
-      retried.model,
-      Message.FailedFetchLyrics({ songId: 'early', error: 'down' }),
-    ).model
-  }
-  const capped = update(
-    current,
-    Message.FailedFetchLyrics({ songId: 'early', error: 'down' }),
-  )
-  expect(capped.commands).toEqual([])
-  const manual = update(
-    capped.model,
-    Message.ClickedRetryLyrics({ songId: 'early' }),
-  )
-  const failedAgain = update(
-    manual.model,
-    Message.FailedFetchLyrics({ songId: 'early', error: 'down' }),
-  )
-  expect(failedAgain.commands?.map(({ name }) => name)).toEqual([
-    WaitBeforeRetryLyrics.name,
-  ])
-})
-
 const waitElapsed = (args: Record<string, unknown>) =>
-  Message.ElapsedLyricsRetryDelay({ songId: String(args['songId']) })
+  Message.CompletedWaitBeforeRetryLyrics({
+    songId: String(args['songId']),
+    waitId: Number(args['waitId']),
+  })
 
 const lyricsWaitOf = (result: UpdateReturn) => {
   const waits = (result.commands ?? []).filter(
@@ -1930,6 +1824,82 @@ const lyricsWaitOf = (result: UpdateReturn) => {
 const failLyrics = (current: Model, songId: string) =>
   update(current, Message.FailedFetchLyrics({ songId, error: 'down' }))
 
+test('retrying failed lyrics fetches again, and retrying anything else does nothing', () => {
+  const failed = failLyrics(tick(playingStream(), 70).model, 'early').model
+  expect(failed.lyricsBySongId['early']?._tag).toBe('Failed')
+  const retried = update(
+    failed,
+    Message.ClickedRetryLyrics({ songId: 'early' }),
+  )
+  expect(fetchedIds(retried)).toEqual(['early'])
+  expect(retried.model.lyricsBySongId['early']?._tag).toBe('Loading')
+  expect(
+    update(retried.model, Message.ClickedRetryLyrics({ songId: 'early' }))
+      .commands,
+  ).toBeUndefined()
+})
+
+test('a failed fetch schedules a delayed retry', () => {
+  const failed = failLyrics(tick(playingStream(), 70).model, 'early')
+  expect(failed.commands?.map(({ name }) => name)).toEqual([
+    WaitBeforeRetryLyrics.name,
+  ])
+  expect(failed.commands?.[0]?.args?.['songId']).toBe('early')
+})
+
+test('the delayed retry fetches again while the song is still failed and current', () => {
+  const failed = failLyrics(tick(playingStream(), 70).model, 'early')
+  const retried = update(failed.model, lyricsWaitOf(failed))
+  expect(fetchedIds(retried)).toEqual(['early'])
+  expect(retried.model.lyricsBySongId['early']?._tag).toBe('Loading')
+})
+
+test('the delayed retry also covers the next song', () => {
+  const failed = failLyrics(tick(playingStream(), 70).model, 'late')
+  expect(fetchedIds(update(failed.model, lyricsWaitOf(failed)))).toEqual([
+    'late',
+  ])
+})
+
+test('the delayed retry does nothing once the lyrics arrived', () => {
+  const failed = failLyrics(tick(playingStream(), 70).model, 'early')
+  const arrived = update(
+    failed.model,
+    Message.SucceededFetchLyrics({ songId: 'early', lyrics: threeLines }),
+  ).model
+  const elapsed = update(arrived, lyricsWaitOf(failed))
+  expect(elapsed.commands).toBeUndefined()
+  expect(elapsed.model.lyricsBySongId['early']?._tag).toBe('Loaded')
+})
+
+test("a position past the song's end gives up its retry, and the wait then does nothing", () => {
+  const failed = failLyrics(tick(playingStream(), 70).model, 'early')
+  const moved = tick(failed.model, 400).model
+  expect(singingId(moved)).toEqual(Option.some('late'))
+  expect(moved.lyricsBySongId['early']?._tag).toBe('GaveUp')
+  const elapsed = update(moved, lyricsWaitOf(failed))
+  expect(elapsed.commands).toBeUndefined()
+  expect(elapsed.model).toEqual(moved)
+})
+
+test('automatic retries stop after three, and a manual retry starts the count again', () => {
+  const capped = Array.from({ length: 3 }).reduce<UpdateReturn>(
+    retry => {
+      const retried = update(retry.model, lyricsWaitOf(retry))
+      expect(fetchedIds(retried)).toEqual(['early'])
+      return failLyrics(retried.model, 'early')
+    },
+    failLyrics(tick(playingStream(), 70).model, 'early'),
+  )
+  expect(capped.commands).toBeUndefined()
+  expect(capped.model.lyricsBySongId['early']?._tag).toBe('GaveUp')
+  const manual = update(
+    capped.model,
+    Message.ClickedRetryLyrics({ songId: 'early' }),
+  )
+  expect(lyricsWaitOf(failLyrics(manual.model, 'early'))).toBeDefined()
+})
+
 test('a lyrics retry that waits past the song gives up, and singing the song again fetches its lyrics', () => {
   const failed = failLyrics(tick(playingStream(), 70).model, 'early')
   const elapsed = lyricsWaitOf(failed)
@@ -1940,9 +1910,10 @@ test('a lyrics retry that waits past the song gives up, and singing the song aga
 })
 
 test("a lyrics retry fires for a song that is neither sung nor next, as long as the playhead is before the song's end", () => {
+  const two = lyricSong('two', '00:03:00')
   const songs = [
     lyricSong('one', '00:01:00'),
-    lyricSong('two', '00:03:00'),
+    two,
     lyricSong('three', '00:05:00'),
   ]
   const fetched = update(
@@ -1950,7 +1921,7 @@ test("a lyrics retry fires for a song that is neither sung nor next, as long as 
     Message.SucceededFetchSongs({ songs, goneVideoIds: [] }),
   ).model
   const inTwo = tick(
-    update(fetched, Message.ClickedSong({ song: songs[1] })).model,
+    update(fetched, Message.ClickedSong({ song: two })).model,
     200,
   ).model
   const failed = failLyrics(inTwo, 'three')
@@ -2009,7 +1980,7 @@ test('after the automatic retries run out, later ticks in the same song fetch no
     failLyrics(tick(playingStream(), 70).model, 'early'),
   )
   expect(
-    exhausted.commands?.filter(
+    (exhausted.commands ?? []).filter(
       ({ name }) => name === WaitBeforeRetryLyrics.name,
     ),
   ).toEqual([])
