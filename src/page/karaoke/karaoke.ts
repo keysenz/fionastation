@@ -65,7 +65,6 @@ import {
   Advance,
   type Continuation,
   type NowPlaying,
-  PickCause,
   Repeat,
   Setlist,
   Volume,
@@ -77,10 +76,11 @@ import {
   enqueueAll,
   failLoad,
   firstSongOfEachOtherLiveVideo,
-  markPlayerReady,
+  intentOf,
   moveInQueue,
   nextRepeat,
   parseVolume,
+  pause,
   planAdvance,
   planSkip,
   play,
@@ -88,9 +88,12 @@ import {
   playNext,
   playPrevious,
   removeFromQueue,
+  reportPaused,
+  reportPlaying,
+  reportReady,
   restoreSaved,
   setLevel,
-  setStatus,
+  settleGone,
   toPersistedJson,
   toVolumeJson,
   toggleMute,
@@ -102,7 +105,6 @@ const AUTOPLAY_KEY = 'karaoke-autoplay'
 const REPEAT_KEY = 'karaoke-repeat'
 const VOLUME_KEY = 'karaoke-volume'
 const LYRIC_NUDGES_KEY = 'karaoke-lyric-nudges'
-export const STREAM_GONE = 'This stream is gone'
 const PLAYER_HOST_ID = 'karaoke'
 export const SONG_LIST_ID = 'karaoke-song-list'
 export const SETLIST_PANE_ID = 'karaoke-setlist-pane'
@@ -223,7 +225,6 @@ export const Message = defineMessageUnion({
   CompletedPickRandomVideo: {
     playId: Schema.Number,
     song: PlayableSong,
-    cause: PickCause,
   },
   CompletedWaitBeforeDismissToast: { dismissId: Schema.Number },
 })
@@ -478,14 +479,11 @@ export const PickRandomVideo = Command.define('PickRandomVideo', {
   args: {
     playId: Schema.Number,
     candidates: Schema.NonEmptyArray(PlayableSong),
-    cause: PickCause,
   },
   messages: [Message.CompletedPickRandomVideo],
-  execute: ({ playId, candidates, cause }) =>
+  execute: ({ playId, candidates }) =>
     Random.choice(candidates).pipe(
-      Effect.map(song =>
-        Message.CompletedPickRandomVideo({ playId, song, cause }),
-      ),
+      Effect.map(song => Message.CompletedPickRandomVideo({ playId, song })),
     ),
 })
 
@@ -723,8 +721,8 @@ const seekBeside = (
 ): UpdateReturn =>
   Option.match(
     Option.flatMap(
-      Option.filter(model.setlist.maybeNowPlaying, ({ maybeLoadError }) =>
-        Option.isNone(maybeLoadError),
+      Option.filter(model.setlist.maybeNowPlaying, ({ phase }) =>
+        Option.isSome(intentOf(phase)),
       ),
       nowPlaying =>
         Option.map(
@@ -807,7 +805,6 @@ const continuationOf = (model: Model): Continuation => {
 
 const pickAnotherVideo = (
   model: Model,
-  cause: PickCause,
   onNoneLeft: () => UpdateReturn,
 ): UpdateReturn =>
   Option.match(model.setlist.maybeNowPlaying, {
@@ -817,7 +814,7 @@ const pickAnotherVideo = (
         onEmpty: onNoneLeft,
         onNonEmpty: candidates => ({
           model,
-          commands: [PickRandomVideo({ playId, candidates, cause })],
+          commands: [PickRandomVideo({ playId, candidates })],
         }),
       }),
   })
@@ -872,8 +869,12 @@ const changeSetlist = (model: Model, setlist: Setlist): UpdateReturn => {
       after: setlist.maybeNowPlaying,
     }),
     ({ before, after }) =>
-      before.playId === after.playId && before.status !== after.status
-        ? Option.some(ApplyPlayback({ isPlaying: after.status === 'Playing' }))
+      before.playId === after.playId
+        ? Option.flatMap(intentOf(after.phase), intent =>
+            Option.contains(intentOf(before.phase), intent)
+              ? Option.none()
+              : Option.some(ApplyPlayback({ isPlaying: intent === 'Playing' })),
+          )
         : Option.none(),
   )
   return {
@@ -916,6 +917,47 @@ const withSkipToast = (
     maybeSkipToast: maybeToast =>
       Option.some(addSkip(maybeToast, failedTitle, dismissId)),
   })
+
+/** YouTube no longer has the video, so it is remembered as gone and the radio
+ *  moves on: to the queue head, to a random other video, or nowhere. */
+const skipGoneVideo = (
+  model: Model,
+  { playId, song: goneSong }: NowPlaying,
+): UpdateReturn => {
+  const goneModel = modifyFields(model, {
+    goneVideoIds: known => Array.dedupe([...known, goneSong.video_url]),
+  })
+  const { cleaned, advance } = planSkip(
+    goneModel.setlist,
+    continuationOf(goneModel),
+  )
+  const setlist = applySkip(cleaned, advance)
+  const skipped = modifyFields(goneModel, { setlist: () => setlist })
+  const saveSetlist = SaveSetlist({ json: toPersistedJson(setlist) })
+  return Advance.matchOrElse(
+    advance,
+    {
+      PickRandomVideo: ({ candidates }) => ({
+        model: skipped,
+        commands: [saveSetlist, PickRandomVideo({ playId, candidates })],
+      }),
+    },
+    () =>
+      Option.match(
+        Option.filter(
+          setlist.maybeNowPlaying,
+          after => after.playId !== playId,
+        ),
+        {
+          onNone: () => ({ model: skipped, commands: [saveSetlist] }),
+          onSome: ({ playId: dismissId }) => ({
+            model: withSkipToast(skipped, songLabel(goneSong), dismissId),
+            commands: [saveSetlist, WaitBeforeDismissToast({ dismissId })],
+          }),
+        },
+      ),
+  )
+}
 
 const updateModel = (model: Model, message: Message) =>
   Message.match<UpdateReturn>(message, {
@@ -1047,7 +1089,7 @@ const updateModel = (model: Model, message: Message) =>
       Array.isReadonlyArrayNonEmpty(model.setlist.queue)
         ? changeSetlist(model, playNext(model.setlist, model.repeat))
         : seekBeside(model, 1, () =>
-            pickAnotherVideo(model, 'Ended', () => ({ model })),
+            pickAnotherVideo(model, () => ({ model })),
           ),
     ClickedPrevious: () =>
       seekBeside(model, -1, () =>
@@ -1082,6 +1124,7 @@ const updateModel = (model: Model, message: Message) =>
         : { model },
 
     // NOTE: the previous play's video can still have events on their way, and acting on a late end would skip a song.
+    // A video that failed keeps reporting too, so a play that cannot sound hears only that its stream is gone.
     ReceivedPlayerEvent: ({ playId, event }) =>
       Option.match(
         Option.filter(
@@ -1090,119 +1133,66 @@ const updateModel = (model: Model, message: Message) =>
         ),
         {
           onNone: () => ({ model }),
-          onSome: ({ status, song: nowPlayingSong }) =>
-            PlayerEvent.match<UpdateReturn>(event, {
-              Ready: () => ({
-                model: modifyFields(model, {
-                  setlist: markPlayerReady,
-                }),
-                // NOTE: loading a video starts it, and a play call while it seeks to the song's start can start it from 0.
-                commands:
-                  status === 'Paused'
-                    ? [
-                        ApplyPlayback({ isPlaying: false }),
-                        ApplyVolume(model.volume),
-                      ]
-                    : [ApplyVolume(model.volume)],
-              }),
-              Playing: () =>
-                recordFromPlayer(model, setStatus(model.setlist, 'Playing')),
-              Paused: () =>
-                recordFromPlayer(model, setStatus(model.setlist, 'Paused')),
-              Ended: () => {
-                const advance = planAdvance(
-                  model.setlist,
-                  continuationOf(model),
-                )
-                return Advance.matchOrElse(
-                  advance,
-                  {
-                    PickRandomVideo: ({ candidates }) => ({
-                      model,
-                      commands: [
-                        PickRandomVideo({
-                          playId,
-                          candidates,
-                          cause: 'Ended',
-                        }),
-                      ],
-                    }),
-                  },
-                  () =>
-                    changeSetlist(
-                      model,
-                      applyAdvance(model.setlist, advance, model.repeat),
-                    ),
-                )
-              },
-              VideoFailed: () => {
-                const goneModel = modifyFields(model, {
-                  goneVideoIds: known =>
-                    Array.dedupe([...known, nowPlayingSong.video_url]),
-                })
-                const { cleaned, advance } = planSkip(
-                  goneModel.setlist,
-                  continuationOf(goneModel),
-                  STREAM_GONE,
-                )
-                return Advance.matchOrElse(
-                  advance,
-                  {
-                    PickRandomVideo: ({ candidates }) => ({
-                      model: modifyFields(goneModel, {
-                        setlist: () => cleaned,
-                      }),
-                      commands: [
-                        SaveSetlist({ json: toPersistedJson(cleaned) }),
-                        PickRandomVideo({
-                          playId,
-                          candidates,
-                          cause: 'Unavailable',
-                        }),
-                      ],
-                    }),
-                  },
-                  () => {
-                    const setlist = applySkip(cleaned, advance)
-                    const saveSetlist = SaveSetlist({
-                      json: toPersistedJson(setlist),
-                    })
-                    const maybeSkippedTo = Option.filter(
-                      setlist.maybeNowPlaying,
-                      after => after.playId !== playId,
+          onSome: nowPlaying =>
+            Option.match(intentOf(nowPlaying.phase), {
+              onNone: () =>
+                event._tag === 'VideoFailed' &&
+                nowPlaying.phase._tag === 'LoadFailed'
+                  ? skipGoneVideo(model, nowPlaying)
+                  : { model },
+              onSome: intent =>
+                PlayerEvent.match<UpdateReturn>(event, {
+                  Ready: () => ({
+                    model: modifyFields(model, { setlist: reportReady }),
+                    // NOTE: loading a video starts it, and a play call while it seeks to the song's start can start it from 0.
+                    commands:
+                      intent === 'Paused'
+                        ? [
+                            ApplyPlayback({ isPlaying: false }),
+                            ApplyVolume(model.volume),
+                          ]
+                        : [ApplyVolume(model.volume)],
+                  }),
+                  Playing: () =>
+                    recordFromPlayer(model, reportPlaying(model.setlist)),
+                  Paused: () =>
+                    recordFromPlayer(model, reportPaused(model.setlist)),
+                  Ended: () => {
+                    const advance = planAdvance(
+                      model.setlist,
+                      continuationOf(model),
                     )
-                    return Option.match(maybeSkippedTo, {
-                      onNone: () => ({
-                        model: modifyFields(goneModel, {
-                          setlist: () => setlist,
+                    return Advance.matchOrElse(
+                      advance,
+                      {
+                        PickRandomVideo: ({ candidates }) => ({
+                          model,
+                          commands: [PickRandomVideo({ playId, candidates })],
                         }),
-                        commands: [saveSetlist],
-                      }),
-                      onSome: ({ playId: dismissId }) => ({
-                        model: withSkipToast(
-                          modifyFields(goneModel, { setlist: () => setlist }),
-                          songLabel(nowPlayingSong),
-                          dismissId,
+                      },
+                      () =>
+                        changeSetlist(
+                          model,
+                          applyAdvance(model.setlist, advance, model.repeat),
                         ),
-                        commands: [
-                          saveSetlist,
-                          WaitBeforeDismissToast({ dismissId }),
-                        ],
-                      }),
-                    })
+                    )
                   },
-                )
-              },
-              PlayerFailed: ({ reason }) =>
-                recordFromPlayer(model, failLoad(model.setlist, reason)),
-              Progressed: ({ seconds }) => progressed(model, playId, seconds),
+                  VideoFailed: () => skipGoneVideo(model, nowPlaying),
+                  PlayerFailed: () =>
+                    recordFromPlayer(
+                      model,
+                      failLoad(model.setlist, 'PlayerUnavailable'),
+                    ),
+                  Progressed: ({ seconds }) =>
+                    progressed(model, playId, seconds),
+                }),
             }),
         },
       ),
 
     // NOTE: a click while the pick was pending changed the playId, and the visitor's choice wins.
     // A refetch can report the picked video gone after the pick was asked for, so it is drawn again.
-    CompletedPickRandomVideo: ({ playId, song, cause }) =>
+    CompletedPickRandomVideo: ({ playId, song }) =>
       Option.match(
         Option.filter(
           model.setlist.maybeNowPlaying,
@@ -1210,23 +1200,19 @@ const updateModel = (model: Model, message: Message) =>
         ),
         {
           onNone: () => ({ model }),
-          onSome: ({ song: previousSong }) => {
+          onSome: ({ song: previousSong, phase }) => {
             if (continuationOf(model).isGone(song)) {
-              return pickAnotherVideo(model, cause, () =>
-                cause === 'Ended'
-                  ? changeSetlist(model, setStatus(model.setlist, 'Paused'))
-                  : { model },
+              return pickAnotherVideo(model, () =>
+                Option.isSome(intentOf(phase))
+                  ? changeSetlist(model, pause(model.setlist))
+                  : { model: modifyFields(model, { setlist: settleGone }) },
               )
             }
             const setlist = play(model.setlist, song)
             const saveSetlist = SaveSetlist({ json: toPersistedJson(setlist) })
             const dismissId = setlist.playCount
-            return cause === 'Ended'
+            return phase._tag === 'MovingOn'
               ? {
-                  model: modifyFields(model, { setlist: () => setlist }),
-                  commands: [saveSetlist],
-                }
-              : {
                   model: withSkipToast(
                     modifyFields(model, { setlist: () => setlist }),
                     songLabel(previousSong),
@@ -1236,6 +1222,10 @@ const updateModel = (model: Model, message: Message) =>
                     saveSetlist,
                     WaitBeforeDismissToast({ dismissId }),
                   ],
+                }
+              : {
+                  model: modifyFields(model, { setlist: () => setlist }),
+                  commands: [saveSetlist],
                 }
           },
         },

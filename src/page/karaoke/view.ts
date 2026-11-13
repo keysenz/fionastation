@@ -29,9 +29,13 @@ import {
   lyricsWindowView,
 } from './lyricsView.ts'
 import {
+  type LoadFailure,
   type NowPlaying,
+  Phase,
+  type PlaybackIntent,
   type Repeat,
   type Volume,
+  intentOf,
   isSilent,
 } from './setlist.ts'
 import {
@@ -72,9 +76,8 @@ const playbackOf = (model: Model): Playback => ({
     model.setlist.maybeNowPlaying,
     nowPlaying => shownSongOf(model, nowPlaying).id,
   ),
-  isPlaying: Option.exists(
-    model.setlist.maybeNowPlaying,
-    nowPlaying => nowPlaying.status === 'Playing',
+  isPlaying: Option.exists(model.setlist.maybeNowPlaying, ({ phase }) =>
+    Option.contains(intentOf(phase), 'Playing'),
   ),
 })
 
@@ -1213,15 +1216,83 @@ const repeatButtonView = (
     ],
   )
 
+const LOAD_FAILURE_TEXT: Record<LoadFailure, string> = {
+  PlayerUnavailable: 'Could not load the YouTube player',
+  VideoUnplayable: 'Could not load this video',
+}
+
+/** What the bar says in place of the song's kind while the song cannot sound. */
+const troubleOf = ({ phase }: NowPlaying): Option.Option<string> =>
+  Phase.matchOrElse(
+    phase,
+    {
+      MovingOn: () => Option.some('This stream is gone. Finding another video'),
+      Gone: () => Option.some('This stream is gone'),
+      LoadFailed: ({ reason }) => Option.some(LOAD_FAILURE_TEXT[reason]),
+    },
+    () => Option.none<string>(),
+  )
+
+/** The middle button of the bar and of the phone controls. It plays or pauses a
+ *  video that can sound, and otherwise shows why it cannot. */
+const playControlView = (
+  { phase }: NowPlaying,
+  shapeClass: string,
+  h: HtmlBuilder<Message>,
+): Html => {
+  const unplayableView = (): Html =>
+    h.button(
+      [
+        h.Type('button'),
+        h.Disabled(true),
+        h.AriaLabel('Play'),
+        h.Class(twMerge(shapeClass, 'opacity-40 cursor-not-allowed')),
+      ],
+      [h.i([h.Class('fas fa-play pl-1'), h.AriaHidden(true)])],
+    )
+  const playPauseView = (intent: PlaybackIntent): Html =>
+    h.button(
+      [
+        h.Type('button'),
+        h.AriaLabel(intent === 'Playing' ? 'Pause' : 'Play'),
+        h.OnClick(Message.ClickedPlayPause()),
+        h.Class(shapeClass),
+      ],
+      [
+        h.i([
+          h.Class(intent === 'Playing' ? 'fas fa-pause' : 'fas fa-play pl-1'),
+          h.AriaHidden(true),
+        ]),
+      ],
+    )
+  return Phase.match(phase, {
+    Loading: ({ intent }) => playPauseView(intent),
+    Playing: () => playPauseView('Playing'),
+    Paused: () => playPauseView('Paused'),
+    MovingOn: () =>
+      h.div(
+        [
+          h.Role('status'),
+          h.AriaLabel('Finding another video'),
+          h.Class(twMerge(shapeClass, 'bg-white/20 text-white')),
+        ],
+        [h.i([h.Class('fas fa-spinner fa-spin'), h.AriaHidden(true)])],
+      ),
+    Gone: unplayableView,
+    LoadFailed: unplayableView,
+  })
+}
+
 const playerBarView = (
   nowPlaying: NowPlaying,
   model: Model,
   h: HtmlBuilder<Message>,
 ): Html => {
-  const isPlayerReady = nowPlaying.player === 'Ready'
+  const isPlayerReady = Phase.isAnyOf(['Playing', 'Paused'])(nowPlaying.phase)
   const shownSong = shownSongOf(model, nowPlaying)
   const maybeLine = Option.flatMap(nowSingingOf(model), currentLineOf)
-  const subline = Option.getOrElse(nowPlaying.maybeLoadError, () =>
+  const maybeTrouble = troubleOf(nowPlaying)
+  const subline = Option.getOrElse(maybeTrouble, () =>
     kindLabel(shownSong.kind),
   )
   return h.div(
@@ -1320,7 +1391,7 @@ const playerBarView = (
               h.p(
                 [h.Class('sm:hidden text-xs text-gray-300 truncate')],
                 [
-                  Option.isSome(nowPlaying.maybeLoadError)
+                  Option.isSome(maybeTrouble)
                     ? subline
                     : Option.getOrElse(maybeLine, () => subline),
                 ],
@@ -1351,22 +1422,10 @@ const playerBarView = (
                 ],
                 [h.i([h.Class('fas fa-step-backward fa-lg drop-shadow-md')])],
               ),
-              h.button(
-                [
-                  h.OnClick(Message.ClickedPlayPause()),
-                  h.Class(
-                    'w-10 h-10 rounded-full bg-white text-black flex items-center justify-center hover:scale-110 active:scale-95 transition shadow-lg hover:shadow-sky-500/20',
-                  ),
-                ],
-                [
-                  h.i([
-                    h.Class(
-                      nowPlaying.status === 'Playing'
-                        ? 'fas fa-pause'
-                        : 'fas fa-play pl-1',
-                    ),
-                  ]),
-                ],
+              playControlView(
+                nowPlaying,
+                'w-10 h-10 rounded-full bg-white text-black flex items-center justify-center hover:scale-110 active:scale-95 transition shadow-lg hover:shadow-sky-500/20',
+                h,
               ),
               h.button(
                 [
@@ -1594,25 +1653,10 @@ const phoneControlsView = (
         ],
         [h.i([h.Class('fas fa-step-backward fa-lg'), h.AriaHidden(true)])],
       ),
-      h.button(
-        [
-          h.Type('button'),
-          h.AriaLabel(nowPlaying.status === 'Playing' ? 'Pause' : 'Play'),
-          h.OnClick(Message.ClickedPlayPause()),
-          h.Class(
-            'w-16 h-16 rounded-full bg-white text-black flex items-center justify-center text-2xl active:scale-95 transition shadow-lg',
-          ),
-        ],
-        [
-          h.i([
-            h.Class(
-              nowPlaying.status === 'Playing'
-                ? 'fas fa-pause'
-                : 'fas fa-play pl-1',
-            ),
-            h.AriaHidden(true),
-          ]),
-        ],
+      playControlView(
+        nowPlaying,
+        'w-16 h-16 rounded-full bg-white text-black flex items-center justify-center text-2xl active:scale-95 transition shadow-lg',
+        h,
       ),
       h.button(
         [
