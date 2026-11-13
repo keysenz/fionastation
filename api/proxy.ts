@@ -30,5 +30,12 @@ export async function GET(request: Request): Promise<Response> {
   for (const name of DROPPED_HEADERS) {
     headers.delete(name)
   }
+  // NOTE: the hop to devbox takes 1-3 s, so Vercel's CDN answers from cache and refreshes in the background; browsers still revalidate every load.
+  if (upstream.ok) {
+    headers.set(
+      'Vercel-CDN-Cache-Control',
+      'max-age=60, stale-while-revalidate=86400',
+    )
+  }
   return new Response(upstream.body, { status: upstream.status, headers })
 }
