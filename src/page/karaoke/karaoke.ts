@@ -43,7 +43,7 @@ import {
   nudgeOf,
   parseNudges,
   segmentAt,
-  segmentSongBeside,
+  songBeside,
   toNudgesJson,
 } from '../../lyrics.ts'
 import {
@@ -64,6 +64,7 @@ import {
 import {
   Advance,
   type Continuation,
+  type NowPlaying,
   PickCause,
   Repeat,
   Setlist,
@@ -677,13 +678,19 @@ export type NowSinging = Readonly<{
   maybeCursor: Option.Option<LyricCursor>
 }>
 
+const playheadOf = (
+  model: Model,
+  nowPlaying: NowPlaying,
+): Option.Option<Playhead> =>
+  Option.filter(
+    model.maybePlayhead,
+    ({ playId }) => playId === nowPlaying.playId,
+  )
+
 export const nowSingingOf = (model: Model): Option.Option<NowSinging> =>
   Option.gen(function* () {
     const nowPlaying = yield* model.setlist.maybeNowPlaying
-    const playhead = yield* Option.filter(
-      model.maybePlayhead,
-      ({ playId }) => playId === nowPlaying.playId,
-    )
+    const playhead = yield* playheadOf(model, nowPlaying)
     const segment = yield* segmentAt(
       allSongs(model),
       nowPlaying.song,
@@ -716,12 +723,21 @@ const seekBeside = (
   otherwise: () => UpdateReturn,
 ): UpdateReturn =>
   Option.match(
-    Option.all({
-      song: Option.flatMap(nowSingingOf(model), ({ segment }) =>
-        segmentSongBeside(allSongs(model), segment, by),
+    Option.flatMap(
+      Option.filter(model.setlist.maybeNowPlaying, ({ maybeLoadError }) =>
+        Option.isNone(maybeLoadError),
       ),
-      nowPlaying: model.setlist.maybeNowPlaying,
-    }),
+      nowPlaying =>
+        Option.map(
+          songBeside(
+            allSongs(model),
+            nowPlaying.song,
+            Option.map(playheadOf(model, nowPlaying), ({ seconds }) => seconds),
+            by,
+          ),
+          song => ({ song, nowPlaying }),
+        ),
+    ),
     {
       onNone: otherwise,
       onSome: ({ song, nowPlaying }) => {
@@ -761,7 +777,7 @@ const currentAndNextSongIds = (model: Model): ReadonlyArray<string> =>
       segment.song.id,
       ...Option.toArray(
         Option.map(
-          segmentSongBeside(allSongs(model), segment, 1),
+          songBeside(allSongs(model), segment.song, Option.none(), 1),
           song => song.id,
         ),
       ),

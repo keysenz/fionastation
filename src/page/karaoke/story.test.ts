@@ -1556,6 +1556,58 @@ test('next on the last song of a video with an empty queue picks another live vi
   ])
 })
 
+const seeksOf = (result: UpdateReturn) =>
+  result.commands
+    ?.filter(({ name }) => name === SeekPlayer.name)
+    .map(({ args }) => args?.['seconds'])
+
+test('next before the first position report seeks to the next song of the stream', () => {
+  const clicked = playingStream()
+  const next = update(clicked, Message.ClickedNext())
+  expect(seeksOf(next)).toEqual([300])
+  expect(singingId(next.model)).toEqual(Option.some('late'))
+  expect(next.model.setlist).toEqual(clicked.setlist)
+})
+
+test('previous before the first position report seeks to the song before the clicked one', () => {
+  const fetched = update(
+    init(),
+    Message.SucceededFetchSongs({ songs: [early, late], goneVideoIds: [] }),
+  ).model
+  const clicked = update(fetched, Message.ClickedSong({ song: late })).model
+  const back = update(clicked, Message.ClickedPrevious())
+  expect(seeksOf(back)).toEqual([60])
+  expect(singingId(back.model)).toEqual(Option.some('early'))
+  expect(back.model.setlist).toEqual(clicked.setlist)
+})
+
+test('next with the playhead before the first song seeks to the first song', () => {
+  const next = update(tick(playingStream(), 30).model, Message.ClickedNext())
+  expect(seeksOf(next)).toEqual([60])
+  expect(singingId(next.model)).toEqual(Option.some('early'))
+})
+
+test('next on a play that failed asks for another video instead of seeking in it', () => {
+  const other = makeSong('other', 'elsewhere')
+  const fetched = update(
+    init(),
+    Message.SucceededFetchSongs({
+      songs: [early, late, other],
+      goneVideoIds: [],
+    }),
+  ).model
+  const failed = update(
+    update(fetched, Message.ClickedSong({ song: early })).model,
+    Message.ReceivedPlayerEvent({
+      playId: 1,
+      event: PlayerEvent.PlayerFailed({ reason: 'blocked' }),
+    }),
+  ).model
+  const next = update(failed, Message.ClickedNext())
+  expect(seeksOf(next)).toEqual([])
+  expect(next.commands?.map(({ name }) => name)).toEqual([PickRandomVideo.name])
+})
+
 test('a position before the first song fetches nothing and sings nothing', () => {
   const before = tick(playingStream(), 30)
   expect(before.commands).toBeUndefined()

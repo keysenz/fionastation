@@ -17,10 +17,10 @@ TLA+ is not used. A TLA+ model would check a copy of the logic, and this explore
 
 Run the check if you change any of these:
 
-- `update`, `updateModel`, `seekBeside`, `progressed`, `pickAnotherVideo`, `changeSetlist`, `recordFromPlayer`, `continuationOf`, `nowSingingOf`, or a Message or Command in `src/page/karaoke/karaoke.ts`.
+- `update`, `updateModel`, `seekBeside`, `playheadOf`, `progressed`, `pickAnotherVideo`, `changeSetlist`, `recordFromPlayer`, `continuationOf`, `nowSingingOf`, or a Message or Command in `src/page/karaoke/karaoke.ts`.
 - `PlayerEvent` or `videoEvents` in `src/youtube.ts`. These define which events the explorer may send. See "Updating".
 - `planAdvance`, `applyAdvance`, `planSkip`, `applySkip`, `playPicked`, `playNext`, `playPrevious` or `firstSongOfEachOtherLiveVideo` in `src/page/karaoke/setlist.ts`. Run the `karaoke-queue` skill for these too.
-- `segmentAt` or `segmentSongBeside` in `src/lyrics.ts`.
+- `segmentAt` or `songBeside` in `src/lyrics.ts`.
 
 ## Run
 
@@ -67,9 +67,9 @@ Exit code 0 means that every property passes, except the known findings below, w
 | Property | Plain meaning |
 | --- | --- |
 | `stale-results-never-act` | A player event or random pick for a play that is no longer current changes nothing and sends nothing. |
-| `next-plays-queue-then-stream-then-other-video` | With a known playhead inside a song, Next does one of three things. With songs queued, it plays the queue head. With an empty queue, it sends `SeekPlayer` to the next song of the same video, with the same play, queue and history. With no later song in the video, it asks for one `PickRandomVideo` for the current play, among the first songs of the other live videos in archive order. |
-| `previous-seeks-in-stream-then-history` | With a known playhead inside a song, Previous seeks to the song before it in the same video. On the video's first song, it plays the newest history song and puts the current song at the front of the queue. With no history, it does nothing. |
-| `next-and-previous-with-unknown-playhead` | Before the first `Progressed`, or with the playhead before the first song, Next and Previous still move within the stream from the song on the bar. |
+| `next-plays-queue-then-stream-then-other-video` | With a known playhead inside a song, Next does one of three things. With songs queued, it plays the queue head. With an empty queue, it sends `SeekPlayer` to the next song of the same video, with the same play, queue and history. With no later song in the video, it asks for one `PickRandomVideo` for the current play, among the first songs of the other live videos in archive order. A play that failed to load never seeks, so Next goes to the queue or another video. |
+| `previous-seeks-in-stream-then-history` | With a known playhead inside a song, Previous seeks to the song before it in the same video. On the video's first song, or when the play failed to load, it plays the newest history song and puts the current song at the front of the queue. With no history, it does nothing. |
+| `next-and-previous-with-unknown-playhead` | Before the first `Progressed`, Next and Previous move within the stream from the start of the clicked song, where the play began. With the playhead before the first song, Next seeks to the first song. |
 | `seek-never-reloads` | Every `SeekPlayer` keeps the playId and song, so the `nowPlayingVideo` subscription does not reload the video. The model's playhead is the seek target, and `nowSingingOf` names the song at that point. |
 | `gone-video-never-auto-starts` | A `PickRandomVideo` never offers the current video or a gone video, which includes one that failed this session. An archive advance never starts a gone video. A song from the queue and a repeat replay are excluded, because they play whatever the visitor chose. |
 | `failed-video-leaves-queue-and-history` | After a video fails, none of its songs is left in the queue or history. This is the promise of `planSkip` and `applySkip`. |
@@ -87,7 +87,6 @@ The expected values come from the fixture alone: songs sorted by seconds and fil
 
 These properties fail on the current code. The run prints them as `FINDING` and does not fail because of them. Each trace is the explorer's shortest one.
 
-2. **`next-and-previous-with-unknown-playhead`: Next leaves the stream before the first progress report.** The steps are `ClickedSong(s1)` and then `ClickedNext`. Next asks for a random other video and does not seek to `s2`, because `seekBeside` needs `nowSingingOf`, which needs a playhead. The same happens when the playhead is before the first song, and Previous then goes to history and does not seek. The window is short: the time until the first `Progressed`, or an intro before the first song.
 3. **`failed-video-leaves-queue-and-history`: a failed song comes back into history or the queue.** With autoplay off, `VideoFailed` leaves the dead `s1` on the bar, paused with the reason, and no pick is pending. The visitor then clicks `solo`, and `s1` is in history. Previous then plays `s1` again. The explorer's shortest trace is the same three steps with autoplay on. `play()` records the dead current song. `playPrevious` puts it at the front of the queue in the same way. Previous or the queue can then try the dead video again, and that failure is shown as one more skip.
 4. **`pick-rechecks-gone-at-delivery`: a pick can start a video that a refetch just reported gone.** The steps are `ClickedSong(s1)`, `ClickedNext`, a refetch that reports `single` gone, and then `CompletedPickRandomVideo(solo)`. In practice the window is tiny, because `Random.choice` resolves almost at once.
 
@@ -128,9 +127,9 @@ A `FAIL` prints the property's promise, the steps in message names (`ClickedSong
 
 The check was last confirmed to describe the code at commit `36bbeed283a24211d89f18a2bc739bd7c54bc651`. It covers these files and functions:
 
-- `src/page/karaoke/karaoke.ts`: `update`, `updateModel` (every setlist and player branch), `seekBeside`, `progressed`, `nowSingingOf`, `pickAnotherVideo`, `continuationOf`, `changeSetlist`, `recordFromPlayer`, `withSkipToast`, and the Commands `PickRandomVideo`, `SeekPlayer`, `ApplyPlayback`, `SaveSetlist` and `WaitBeforeDismissToast`.
+- `src/page/karaoke/karaoke.ts`: `update`, `updateModel` (every setlist and player branch), `seekBeside`, `playheadOf`, `progressed`, `nowSingingOf`, `pickAnotherVideo`, `continuationOf`, `changeSetlist`, `recordFromPlayer`, `withSkipToast`, and the Commands `PickRandomVideo`, `SeekPlayer`, `ApplyPlayback`, `SaveSetlist` and `WaitBeforeDismissToast`.
 - `src/page/karaoke/setlist.ts`: `play`, `playNext`, `playPrevious`, `playFromQueue`, `planAdvance`, `applyAdvance`, `planSkip`, `applySkip`, `playPicked` and `firstSongOfEachOtherLiveVideo`.
-- `src/lyrics.ts`: `segmentAt` and `segmentSongBeside`.
+- `src/lyrics.ts`: `segmentAt` and `songBeside`.
 - `src/youtube.ts`: `PlayerEvent`, and `loadedVideoEvents` for the order of events.
 
 To find changes since then, run `git log 36bbeed283a24211d89f18a2bc739bd7c54bc651..HEAD -- src/page/karaoke/karaoke.ts src/page/karaoke/setlist.ts src/lyrics.ts src/youtube.ts`. Move this commit forward only after you have read those changes, confirmed that `transitions()` and the properties still describe the code, and run both commands. The `/maintain-formal-verification-skill` skill does this pass.
