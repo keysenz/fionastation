@@ -1034,6 +1034,53 @@ const journeys = {
     await step('unavailable', 'the toast disappears on its own', () => toast.waitFor({ state: 'detached', timeout: 15000 }));
   },
 
+  async loadRetry(page) {
+    const { body: videos } = await pageVideos();
+    const rows = songRows(videos);
+    const row = rows[await findRowIndex(rows, isPublic)];
+    const scriptRequests = () => page.evaluate(() => performance.getEntriesByType('resource').filter((entry) => entry.name.includes('youtube.com/iframe_api')).length);
+    await page.routeAbort('**/iframe_api*');
+    await page.goto(BASE + '/');
+    await videoRows(page).first().waitFor();
+    await (await songRowOf(page, videos, row)).click();
+    const bar = page.locator('[data-player-bar]');
+    const retry = bar.getByRole('button', { name: 'Retry', exact: true });
+    await step('loadRetry', 'a YouTube script that cannot load leaves the song on the bar with a Retry button, and skips nothing', async () => {
+      await retry.waitFor({ timeout: 15000 });
+      await bar.getByRole('heading', { name: row.song_title }).waitFor();
+      if (await bar.locator('button:not([role="switch"]) i.fa-pause, button:not([role="switch"]) i.fa-play').count()) throw new Error('the bar still offers play or pause for a song that did not load');
+      if (await page.locator('[role="status"]').count()) throw new Error('a skip toast or a moving-on spinner shows for a load that failed');
+      if (await page.locator(`${STREAMS} li [aria-disabled="true"], ${SETLIST} li [aria-disabled="true"]`).evaluateAll((els, title) => els.some((el) => el.textContent.includes(title)), row.song_title)) throw new Error('the song was disabled as gone');
+      await page.screenshot({ path: join(out, 'load-retry-failed.png') });
+    }, page);
+    await step('loadRetry', 'the radio asks for the script again by itself three times, 2, 4 and 8 seconds apart, and then stops', async () => {
+      await page.waitForFunction(() => performance.getEntriesByType('resource').filter((entry) => entry.name.includes('youtube.com/iframe_api')).length >= 4, null, { timeout: 30000, polling: 250 });
+      await page.waitForTimeout(12000);
+      const requests = await scriptRequests();
+      if (requests !== 4) throw new Error(`${requests} requests for the script, expected the first and three retries`);
+      const starts = await page.evaluate(() => performance.getEntriesByType('resource').filter((entry) => entry.name.includes('youtube.com/iframe_api')).map((entry) => entry.startTime));
+      const gaps = starts.slice(1).map((start, i) => Math.round((start - starts[i]) / 1000));
+      if (gaps.join() !== '2,4,8') throw new Error(`the retries came ${gaps} seconds apart`);
+      await retry.waitFor();
+      await bar.getByRole('heading', { name: row.song_title }).waitFor();
+    }, page);
+    await page.unroute('**/iframe_api*');
+    await step('loadRetry', 'Retry, pressed from the keyboard once YouTube is reachable, loads the script again and plays the same song', async () => {
+      await retry.focus();
+      await page.keyboard.press('Enter');
+      await playerReady(page);
+      await videoLoads(page, [row.video_url], { startSeconds: secondsOf(row.timestamp) });
+      await bar.locator('button:not([role="switch"]) i.fa-pause, button:not([role="switch"]) i.fa-play').first().waitFor({ timeout: 15000 });
+      if (await retry.count()) throw new Error('Retry still shows after the song loaded');
+      if ((await page.locator('iframe[src*="youtube"]').count()) !== 1) throw new Error('more than one player');
+      if ((await scriptRequests()) !== 5) throw new Error(`${await scriptRequests()} requests for the script after one manual retry`);
+      await bar.getByRole('heading', { name: row.song_title }).waitFor();
+      const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('karaoke-storage') ?? '{"state":{"history":[],"queue":[]}}').state);
+      if (stored.history.length || stored.queue.length) throw new Error('the retries changed the queue or history');
+      await page.screenshot({ path: join(out, 'load-retry-playing.png') });
+    }, page);
+  },
+
   async fetchFailure(page) {
     await page.routeAbort('**/api/get-karaoke');
     await page.goto(BASE + '/');
@@ -1491,7 +1538,7 @@ const journeys = {
       }
       await page.waitForFunction(() => !document.querySelector('.fixed.z-50.inset-0 button[aria-label^="Remove "]'));
       await page.screenshot({ path: join(out, 'mobile-player-full-empty.png') });
-    });
+    }, page);
     await step('mobilePlayer', 'the queue drawer header has the labeled Autoplay switch at 375px', async () => {
       await full.locator('button:has(i.fa-chevron-down)').click();
       await bar.waitFor({ state: 'visible' });

@@ -49,9 +49,9 @@ Require `server: ours`, the expected Foldkit version, and a non-zero count of so
 (cd .claude/skills/verify && node drive.mjs karaoke info)   # chosen journeys
 ```
 
-The journeys are `site`, `radio`, `karaoke`, `songs`, `player`, `segmentSkip`, `strictAutoplay`, `queueReorder`, `queueReorderTouch`, `unavailable`, `fetchFailure`, `storage`, `navigation`, `paths`, `info`, `volume`, `mobilePlayer`, `mobile`, and `api`. `features/README.md` maps each one to what it proves. The exit code is non-zero if any check fails. A failed `step` that passes its page saves `<journey>-step-<n>-failure.png`.
+The journeys are `site`, `radio`, `karaoke`, `songs`, `player`, `segmentSkip`, `strictAutoplay`, `queueReorder`, `queueReorderTouch`, `unavailable`, `loadRetry`, `fetchFailure`, `storage`, `navigation`, `paths`, `info`, `volume`, `mobilePlayer`, `mobile`, and `api`. `features/README.md` maps each one to what it proves. The exit code is non-zero if any check fails. A failed `step` that passes its page saves `<journey>-step-<n>-failure.png`.
 
-Three journeys use `agent-browser` in a different way than a plain page. `player` holds YouTube's `iframe_api` script with `network route --body` and releases it by running the real script. `fetchFailure` makes `/api/get-karaoke` fail with `network route --abort`. The blocked-storage checks in `player` and `storage` and the `strictAutoplay` and `queueReorderTouch` journeys each start a second session, because launch flags (`--init-script`, `--args`) apply only to a session's first command.
+Four journeys use `agent-browser` in a different way than a plain page. `player` holds YouTube's `iframe_api` script with `network route --body` and releases it by running the real script. `loadRetry` makes that script fail with `network route --abort` and later removes the route. `fetchFailure` makes `/api/get-karaoke` fail the same way. The blocked-storage checks in `player` and `storage` and the `strictAutoplay` and `queueReorderTouch` journeys each start a second session, because launch flags (`--init-script`, `--args`) apply only to a session's first command.
 
 ## Evidence
 
