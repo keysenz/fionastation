@@ -135,6 +135,8 @@ const FILE_TYPES: Record<string, string> = {
   '.png': 'image/png',
   '.jpeg': 'image/jpeg',
   '.mp3': 'audio/mpeg',
+  '.woff2': 'font/woff2',
+  '.ttf': 'font/ttf',
 }
 
 const isText = (contentType: string) => contentType.includes('charset=utf-8')
