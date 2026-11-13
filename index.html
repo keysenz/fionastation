@@ -6,13 +6,28 @@
     <title>Fio Radio - Fiona Clearesta karaoke, covers and originals</title>
     <link rel="stylesheet" href="/styles/globals.css" />
     <link rel="shortcut icon" href="/FioTSKR.webp" />
+    <script>
+      if (location.pathname === '/') {
+        const preload = document.createElement('link')
+        Object.assign(preload, { rel: 'preload', as: 'fetch', href: '/api/get-karaoke', crossOrigin: 'anonymous' })
+        document.head.append(preload)
+      }
+    </script>
     <meta property="twitter:title" content="Fio Radio: Fiona Clearesta karaoke, covers and originals" />
     <meta property="twitter:description" content="Fan-made Website to navigate through Fiona's karaoke, covers and originals on Fio Radio, you can play them or just find them" />
     <meta property="twitter:card" content="summary_large_image" />
     <meta property="description" content="Fan-made Website to navigate through Fiona's karaoke, covers and originals on Fio Radio, you can play them or just find them" />
   </head>
-  <body>
-    <div id="root"></div>
+  <body class="bg-[#d5c2ac]">
+    <div id="root">
+      <div class="relative flex min-h-screen items-center justify-center">
+        <img alt="" src="/pio_karaoke.webp" fetchpriority="high" class="absolute inset-0 -z-10 h-full w-full object-cover object-left lg:object-center" />
+        <div class="flex items-center gap-3 rounded-full bg-black/60 px-5 py-3 text-sm font-semibold text-white backdrop-blur-md">
+          <div class="h-5 w-5 animate-spin rounded-full border-b-2 border-white"></div>
+          Loading Fio Radio
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/entry.ts"></script>
   </body>
 </html>

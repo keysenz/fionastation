@@ -707,9 +707,21 @@ const spinnerView = (h: HtmlBuilder<Message>): Html =>
   h.div(
     [h.Class('flex justify-center items-center h-40')],
     [
-      h.div([
-        h.Class('animate-spin rounded-full h-8 w-8 border-b-2 border-white'),
-      ]),
+      h.div(
+        [
+          h.Class(
+            'flex items-center gap-3 rounded-full bg-black/60 px-5 py-3 text-sm font-semibold text-white backdrop-blur-md',
+          ),
+        ],
+        [
+          h.div([
+            h.Class(
+              'h-5 w-5 animate-spin rounded-full border-b-2 border-white',
+            ),
+          ]),
+          'Loading songs',
+        ],
+      ),
     ],
   )
 
