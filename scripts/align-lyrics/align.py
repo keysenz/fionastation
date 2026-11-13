@@ -128,9 +128,10 @@ def entry_for(model, song: dict, lrclib_id: int, cache: Path) -> dict:
     if len(segments) != len(texts):
         return {**base, "status": "Rejected", "reason": f"the aligner returned {len(segments)} segments for {len(texts)} lines"}
     verdict = keep(segments)
-    print(f"  {language}, {len(texts)} lines: {verdict if not isinstance(verdict, Kept) else f'kept {verdict.indices[0] + 1} to {verdict.indices[-1] + 1}'}")
     if not isinstance(verdict, Kept):
+        print(f"  {language}, {len(texts)} lines, rejected: {verdict.reason}", flush=True)
         return {**base, "status": "Rejected", "reason": verdict.reason}
+    print(f"  {language}, {len(texts)} lines, kept {verdict.indices[0] + 1} to {verdict.indices[-1] + 1}", flush=True)
     return {**base, "status": "Aligned", "lines": aligned_lines(lines, segments, verdict)}
 
 
