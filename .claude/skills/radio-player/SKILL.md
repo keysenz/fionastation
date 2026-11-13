@@ -147,11 +147,11 @@ A `FAIL` prints the property's promise, the steps in message names (`ClickedSong
 
 ## Coverage record
 
-The check was last confirmed to describe the code at commit `2c2f7834ae29b7442d6b3472f2ab523e60121ee1`. It covers these files and functions:
+The check was last confirmed to describe the code at commit `a2d9fcb5514801a275d13615c2e42a52bf24e72b`. It covers these files and functions:
 
 - `src/page/karaoke/karaoke.ts`: `update`, `updateModel` (every setlist and player branch), `seekBeside`, `playheadOf`, `progressed`, `nowSingingOf`, `ensureLyrics`, `failLyrics`, `fetchLyrics`, `isBeforeSongEnd`, `giveUpEndedRetries`, `currentAndNextSongIds`, `LyricsFetch`, `pickAnotherVideo`, `skipGoneVideo`, `failCurrentLoad`, `retryCurrentLoad`, `songOnBar`, `withLoadTimeout`, `continuationOf`, `changeSetlist`, `recordFromPlayer`, `withSkipToast`, and the Commands `PickRandomVideo`, `SeekPlayer`, `ApplyPlayback`, `SaveSetlist`, `WaitBeforeDismissToast`, `WaitBeforeRetryLoad`, `WaitBeforeLoadTimeout`, `FetchLyrics` and `WaitBeforeRetryLyrics`.
 - `src/page/karaoke/setlist.ts`: `Phase`, `intentOf`, `play`, `playNext`, `playPrevious`, `playFromQueue`, `togglePlaying`, `pause`, `reportReady`, `reportPlaying`, `reportPaused`, `failLoad`, `retryLoad`, `settleGone`, `loadRetryDelaySeconds`, `planAdvance`, `applyAdvance`, `planSkip`, `applySkip` and `firstSongOfEachOtherLiveVideo`.
 - `src/lyrics.ts`: `segmentAt`, `segmentOf`, `songBeside` and `endSecondsOf`.
 - `src/youtube.ts`: `PlayerEvent`, and `loadedVideoEvents` for the order of events.
 
-To find changes since then, run `git log 2c2f7834ae29b7442d6b3472f2ab523e60121ee1..HEAD -- src/page/karaoke/karaoke.ts src/page/karaoke/setlist.ts src/lyrics.ts src/youtube.ts`. Move this commit forward only after you have read those changes, confirmed that `transitions()` and the properties still describe the code, and run both commands. The `/maintain-formal-verification-skill` skill does this pass.
+To find changes since then, run `git log a2d9fcb5514801a275d13615c2e42a52bf24e72b..HEAD -- src/page/karaoke/karaoke.ts src/page/karaoke/setlist.ts src/lyrics.ts src/youtube.ts`. Move this commit forward only after you have read those changes, confirmed that `transitions()` and the properties still describe the code, and run both commands. The `/maintain-formal-verification-skill` skill does this pass.
