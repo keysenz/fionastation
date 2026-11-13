@@ -43,7 +43,7 @@ import {
   nudgeOf,
   parseNudges,
   segmentAt,
-  segmentSongBeside,
+  songBeside,
   toNudgesJson,
 } from '../../lyrics.ts'
 import {
@@ -64,6 +64,7 @@ import {
 import {
   Advance,
   type Continuation,
+  type NowPlaying,
   PickCause,
   Repeat,
   Setlist,
@@ -85,7 +86,6 @@ import {
   play,
   playFromQueue,
   playNext,
-  playPicked,
   playPrevious,
   removeFromQueue,
   restoreSaved,
@@ -677,13 +677,19 @@ export type NowSinging = Readonly<{
   maybeCursor: Option.Option<LyricCursor>
 }>
 
+const playheadOf = (
+  model: Model,
+  nowPlaying: NowPlaying,
+): Option.Option<Playhead> =>
+  Option.filter(
+    model.maybePlayhead,
+    ({ playId }) => playId === nowPlaying.playId,
+  )
+
 export const nowSingingOf = (model: Model): Option.Option<NowSinging> =>
   Option.gen(function* () {
     const nowPlaying = yield* model.setlist.maybeNowPlaying
-    const playhead = yield* Option.filter(
-      model.maybePlayhead,
-      ({ playId }) => playId === nowPlaying.playId,
-    )
+    const playhead = yield* playheadOf(model, nowPlaying)
     const segment = yield* segmentAt(
       allSongs(model),
       nowPlaying.song,
@@ -716,12 +722,21 @@ const seekBeside = (
   otherwise: () => UpdateReturn,
 ): UpdateReturn =>
   Option.match(
-    Option.all({
-      song: Option.flatMap(nowSingingOf(model), ({ segment }) =>
-        segmentSongBeside(allSongs(model), segment, by),
+    Option.flatMap(
+      Option.filter(model.setlist.maybeNowPlaying, ({ maybeLoadError }) =>
+        Option.isNone(maybeLoadError),
       ),
-      nowPlaying: model.setlist.maybeNowPlaying,
-    }),
+      nowPlaying =>
+        Option.map(
+          songBeside(
+            allSongs(model),
+            nowPlaying.song,
+            Option.map(playheadOf(model, nowPlaying), ({ seconds }) => seconds),
+            by,
+          ),
+          song => ({ song, nowPlaying }),
+        ),
+    ),
     {
       onNone: otherwise,
       onSome: ({ song, nowPlaying }) => {
@@ -761,7 +776,7 @@ const currentAndNextSongIds = (model: Model): ReadonlyArray<string> =>
       segment.song.id,
       ...Option.toArray(
         Option.map(
-          segmentSongBeside(allSongs(model), segment, 1),
+          songBeside(allSongs(model), segment.song, Option.none(), 1),
           song => song.id,
         ),
       ),
@@ -790,15 +805,19 @@ const continuationOf = (model: Model): Continuation => {
   }
 }
 
-const pickAnotherVideo = (model: Model): UpdateReturn =>
+const pickAnotherVideo = (
+  model: Model,
+  cause: PickCause,
+  onNoneLeft: () => UpdateReturn,
+): UpdateReturn =>
   Option.match(model.setlist.maybeNowPlaying, {
     onNone: () => ({ model }),
     onSome: ({ playId, song }) =>
       Array.match(firstSongOfEachOtherLiveVideo(continuationOf(model), song), {
-        onEmpty: () => ({ model }),
+        onEmpty: onNoneLeft,
         onNonEmpty: candidates => ({
           model,
-          commands: [PickRandomVideo({ playId, candidates, cause: 'Ended' })],
+          commands: [PickRandomVideo({ playId, candidates, cause })],
         }),
       }),
   })
@@ -1027,7 +1046,9 @@ const updateModel = (model: Model, message: Message) =>
     ClickedNext: () =>
       Array.isReadonlyArrayNonEmpty(model.setlist.queue)
         ? changeSetlist(model, playNext(model.setlist, model.repeat))
-        : seekBeside(model, 1, () => pickAnotherVideo(model)),
+        : seekBeside(model, 1, () =>
+            pickAnotherVideo(model, 'Ended', () => ({ model })),
+          ),
     ClickedPrevious: () =>
       seekBeside(model, -1, () =>
         changeSetlist(model, playPrevious(model.setlist)),
@@ -1122,6 +1143,7 @@ const updateModel = (model: Model, message: Message) =>
                 const { cleaned, advance } = planSkip(
                   goneModel.setlist,
                   continuationOf(goneModel),
+                  STREAM_GONE,
                 )
                 return Advance.matchOrElse(
                   advance,
@@ -1141,7 +1163,7 @@ const updateModel = (model: Model, message: Message) =>
                     }),
                   },
                   () => {
-                    const setlist = applySkip(cleaned, advance, STREAM_GONE)
+                    const setlist = applySkip(cleaned, advance)
                     const saveSetlist = SaveSetlist({
                       json: toPersistedJson(setlist),
                     })
@@ -1179,6 +1201,7 @@ const updateModel = (model: Model, message: Message) =>
       ),
 
     // NOTE: a click while the pick was pending changed the playId, and the visitor's choice wins.
+    // A refetch can report the picked video gone after the pick was asked for, so it is drawn again.
     CompletedPickRandomVideo: ({ playId, song, cause }) =>
       Option.match(
         Option.filter(
@@ -1188,7 +1211,14 @@ const updateModel = (model: Model, message: Message) =>
         {
           onNone: () => ({ model }),
           onSome: ({ song: previousSong }) => {
-            const setlist = playPicked(model.setlist, song, cause)
+            if (continuationOf(model).isGone(song)) {
+              return pickAnotherVideo(model, cause, () =>
+                cause === 'Ended'
+                  ? changeSetlist(model, setStatus(model.setlist, 'Paused'))
+                  : { model },
+              )
+            }
+            const setlist = play(model.setlist, song)
             const saveSetlist = SaveSetlist({ json: toPersistedJson(setlist) })
             const dismissId = setlist.playCount
             return cause === 'Ended'

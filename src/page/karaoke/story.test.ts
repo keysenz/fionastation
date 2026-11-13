@@ -580,6 +580,46 @@ test('with autoplay off a failed video stays, says why, and shows no toast', () 
   )
 })
 
+test('a failed song left on the bar stays out of history, so Previous does not bring it back', () => {
+  story(
+    update,
+    given(init()),
+    message(Message.SucceededFetchSongs({ songs: [a, b], goneVideoIds: [] })),
+    ...autoplayOff,
+    message(Message.ClickedSong({ song: b })),
+    saved,
+    message(Message.ClickedSong({ song: a })),
+    saved,
+    message(failVideo(2)),
+    saved,
+    message(Message.ClickedSong({ song: b })),
+    saved,
+    model(current => {
+      expect(current.setlist.history).toEqual([b])
+    }),
+    message(Message.ClickedPrevious()),
+    saved,
+    model(current => {
+      expect(currentIdOf(current)).toEqual(Option.some('b'))
+      expect(current.setlist.queue).toEqual([b])
+      expect(current.setlist.history).toEqual([])
+    }),
+  )
+})
+
+test('a song clicked while the pick after a failed video is on its way leaves the failed song out of history', () => {
+  const clicked = [
+    Message.SucceededFetchSongs({ songs: [a, b], goneVideoIds: [] }),
+    Message.ClickedSong({ song: a }),
+    failVideo(1),
+    Message.ClickedSong({ song: b }),
+  ].reduce<UpdateReturn>((previous, next) => update(previous.model, next), {
+    model: init(),
+  })
+  expect(currentIdOf(clicked.model)).toEqual(Option.some('b'))
+  expect(clicked.model.setlist.history).toEqual([])
+})
+
 test('a queued gone song is skipped with a toast naming it', () => {
   story(
     update,
@@ -623,7 +663,7 @@ const playing = (...messages: ReadonlyArray<Message>) =>
     model: init(),
   })
 
-test('the next song of the same video plays at the end, with no random pick', () => {
+test('the end of a stream clicked on its first song asks for another video, and does not replay the stream', () => {
   story(
     update,
     given(init()),
@@ -635,10 +675,14 @@ test('the next song of the same video plays at the end, with no random pick', ()
     message(
       Message.ReceivedPlayerEvent({ playId: 1, event: PlayerEvent.Ended() }),
     ),
+    Command.resolve(
+      PickRandomVideo,
+      Message.CompletedPickRandomVideo({ playId: 1, song: b, cause: 'Ended' }),
+    ),
     saved,
     model(current => {
-      expect(currentIdOf(current)).toEqual(Option.some('a2'))
-      expect(statusOf(current)).toEqual(Option.some('Playing'))
+      expect(currentIdOf(current)).toEqual(Option.some('b'))
+      expect(current.setlist.history).toEqual([a])
     }),
   )
 })
@@ -731,6 +775,53 @@ test('a pick that finishes after the visitor chose another song is ignored', () 
   expect(currentIdOf(late.model)).toEqual(Option.some('c'))
   expect(late.model.setlist).toEqual(chosen.model.setlist)
   expect(late.commands).toBeUndefined()
+})
+
+const refetchGone = (...goneVideoIds: ReadonlyArray<string>) =>
+  Message.SucceededFetchSongs({ songs: archive, goneVideoIds })
+
+test('a pick that lands on a video reported gone since it was asked for draws again among the live ones', () => {
+  const repicked = playing(
+    Message.ClickedSong({ song: a2 }),
+    Message.ReceivedPlayerEvent({ playId: 1, event: PlayerEvent.Ended() }),
+    refetchGone(b.video_url),
+    Message.CompletedPickRandomVideo({ playId: 1, song: b, cause: 'Ended' }),
+  )
+  expect(currentIdOf(repicked.model)).toEqual(Option.some('a2'))
+  expect(repicked.commands?.map(({ name, args }) => [name, args])).toEqual([
+    [PickRandomVideo.name, { playId: 1, candidates: [c], cause: 'Ended' }],
+  ])
+})
+
+test('a pick after an end whose videos have all gone since pauses the same song', () => {
+  const stopped = playing(
+    Message.ClickedSong({ song: a2 }),
+    Message.ReceivedPlayerEvent({ playId: 1, event: PlayerEvent.Ended() }),
+    refetchGone(b.video_url, c.video_url),
+    Message.CompletedPickRandomVideo({ playId: 1, song: b, cause: 'Ended' }),
+  )
+  expect(currentIdOf(stopped.model)).toEqual(Option.some('a2'))
+  expect(statusOf(stopped.model)).toEqual(Option.some('Paused'))
+  expect(
+    stopped.commands?.some(({ name }) => name === PickRandomVideo.name),
+  ).toBe(false)
+})
+
+test('a pick after a failed video whose videos have all gone since leaves the failed song paused with the reason', () => {
+  const stopped = playing(
+    Message.ClickedSong({ song: a }),
+    failVideo(1),
+    refetchGone(b.video_url, c.video_url),
+    Message.CompletedPickRandomVideo({
+      playId: 1,
+      song: b,
+      cause: 'Unavailable',
+    }),
+  )
+  expect(currentIdOf(stopped.model)).toEqual(Option.some('a'))
+  expect(statusOf(stopped.model)).toEqual(Option.some('Paused'))
+  expect(loadErrorOf(stopped.model)).toEqual(Option.some(STREAM_GONE))
+  expect(stopped.commands).toBeUndefined()
 })
 
 test('with autoplay off the end of a video never asks for a random video', () => {
@@ -1550,6 +1641,58 @@ test('next on the last song of a video with an empty queue picks another live vi
   expect(next.commands?.map(({ name, args }) => [name, args])).toEqual([
     [PickRandomVideo.name, { playId: 1, candidates: [other], cause: 'Ended' }],
   ])
+})
+
+const seeksOf = (result: UpdateReturn) =>
+  result.commands
+    ?.filter(({ name }) => name === SeekPlayer.name)
+    .map(({ args }) => args?.['seconds'])
+
+test('next before the first position report seeks to the next song of the stream', () => {
+  const clicked = playingStream()
+  const next = update(clicked, Message.ClickedNext())
+  expect(seeksOf(next)).toEqual([300])
+  expect(singingId(next.model)).toEqual(Option.some('late'))
+  expect(next.model.setlist).toEqual(clicked.setlist)
+})
+
+test('previous before the first position report seeks to the song before the clicked one', () => {
+  const fetched = update(
+    init(),
+    Message.SucceededFetchSongs({ songs: [early, late], goneVideoIds: [] }),
+  ).model
+  const clicked = update(fetched, Message.ClickedSong({ song: late })).model
+  const back = update(clicked, Message.ClickedPrevious())
+  expect(seeksOf(back)).toEqual([60])
+  expect(singingId(back.model)).toEqual(Option.some('early'))
+  expect(back.model.setlist).toEqual(clicked.setlist)
+})
+
+test('next with the playhead before the first song seeks to the first song', () => {
+  const next = update(tick(playingStream(), 30).model, Message.ClickedNext())
+  expect(seeksOf(next)).toEqual([60])
+  expect(singingId(next.model)).toEqual(Option.some('early'))
+})
+
+test('next on a play that failed asks for another video instead of seeking in it', () => {
+  const other = makeSong('other', 'elsewhere')
+  const fetched = update(
+    init(),
+    Message.SucceededFetchSongs({
+      songs: [early, late, other],
+      goneVideoIds: [],
+    }),
+  ).model
+  const failed = update(
+    update(fetched, Message.ClickedSong({ song: early })).model,
+    Message.ReceivedPlayerEvent({
+      playId: 1,
+      event: PlayerEvent.PlayerFailed({ reason: 'blocked' }),
+    }),
+  ).model
+  const next = update(failed, Message.ClickedNext())
+  expect(seeksOf(next)).toEqual([])
+  expect(next.commands?.map(({ name }) => name)).toEqual([PickRandomVideo.name])
 })
 
 test('a position before the first song fetches nothing and sings nothing', () => {

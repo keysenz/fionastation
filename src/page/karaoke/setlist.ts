@@ -70,14 +70,20 @@ const startPlay = (setlist: Setlist, song: PlayableSong): Setlist =>
     playCount: count => count + 1,
   })
 
+/** The song being left, unless its play failed. A song that never played is
+ *  neither history nor queued again, because its video may be gone. */
+const leftSong = (setlist: Setlist): Option.Option<PlayableSong> =>
+  Option.flatMap(setlist.maybeNowPlaying, ({ song, maybeLoadError }) =>
+    Option.isNone(maybeLoadError) ? Option.some(song) : Option.none(),
+  )
+
 export const play = (setlist: Setlist, song: PlayableSong): Setlist =>
   startPlay(
     modifyFields(setlist, {
       history: history =>
-        Option.match(setlist.maybeNowPlaying, {
+        Option.match(leftSong(setlist), {
           onNone: () => history,
-          onSome: nowPlaying =>
-            Array.take([nowPlaying.song, ...history], HISTORY_LIMIT),
+          onSome: left => Array.take([left, ...history], HISTORY_LIMIT),
         }),
     }),
     song,
@@ -165,9 +171,9 @@ export const togglePlaying = (setlist: Setlist): Setlist =>
 export const playNext = (setlist: Setlist, repeat: Repeat = 'Off'): Setlist => {
   const looped =
     repeat === 'All'
-      ? Option.match(setlist.maybeNowPlaying, {
+      ? Option.match(leftSong(setlist), {
           onNone: () => setlist,
-          onSome: ({ song }) => enqueue(setlist, song),
+          onSome: left => enqueue(setlist, left),
         })
       : setlist
   return Option.match(Array.head(looped.queue), {
@@ -187,13 +193,7 @@ export const playPrevious = (setlist: Setlist): Setlist =>
       startPlay(
         modifyFields(setlist, {
           history: history => Array.drop(history, 1),
-          queue: queue => [
-            ...Option.match(setlist.maybeNowPlaying, {
-              onNone: () => [],
-              onSome: ({ song }) => [song],
-            }),
-            ...queue,
-          ],
+          queue: queue => [...Option.toArray(leftSong(setlist)), ...queue],
         }),
         previousSong,
       ),
@@ -215,7 +215,6 @@ export type Continuation = {
 export const Advance = defineTaggedUnion({
   PlayQueued: {},
   Replay: {},
-  PlaySong: { song: PlayableSong },
   PickRandomVideo: { candidates: Schema.NonEmptyArray(PlayableSong) },
   Stop: {},
 })
@@ -224,20 +223,6 @@ export type Advance = typeof Advance.Type
 /** Why a random video was needed: the video ended, or it cannot be played. */
 export const PickCause = Schema.Literals(['Ended', 'Unavailable'])
 export type PickCause = typeof PickCause.Type
-
-// NOTE: the index comes from the full archive, because a known-gone song is not in a filtered list.
-const nextSongInVideo = (
-  { archive, isGone }: Continuation,
-  current: PlayableSong,
-): Option.Option<PlayableSong> =>
-  Option.flatMap(
-    Array.findFirstIndex(archive, ({ id }) => id === current.id),
-    index =>
-      Array.findFirst(
-        Array.drop(archive, index + 1),
-        song => song.video_url === current.video_url && !isGone(song),
-      ),
-  )
 
 export const firstSongOfEachOtherLiveVideo = (
   { archive, isGone }: Continuation,
@@ -251,33 +236,23 @@ export const firstSongOfEachOtherLiveVideo = (
     (first, second) => first.video_url === second.video_url,
   )
 
-/** With autoplay on, the rest of the current video plays, then a random other
- *  live video from its first song. A video that cannot play has no rest. */
+/** Nothing of the current video is left: YouTube ends a video only at its end,
+ *  and a dead one cannot play. With autoplay on, a random other live video plays
+ *  from its first song. */
 const planFromArchive = (
   continuation: Continuation,
   current: PlayableSong,
-  isVideoDead: boolean,
-): Advance => {
-  if (!continuation.isAutoplay) {
-    return Advance.Stop()
-  }
-  const maybeNextInVideo = isVideoDead
-    ? Option.none()
-    : nextSongInVideo(continuation, current)
-  return Option.match(maybeNextInVideo, {
-    onSome: song => Advance.PlaySong({ song }),
-    onNone: () =>
-      Array.match(firstSongOfEachOtherLiveVideo(continuation, current), {
+): Advance =>
+  continuation.isAutoplay
+    ? Array.match(firstSongOfEachOtherLiveVideo(continuation, current), {
         onEmpty: () => Advance.Stop(),
         onNonEmpty: candidates => Advance.PickRandomVideo({ candidates }),
-      }),
-  })
-}
+      })
+    : Advance.Stop()
 
 /** When a song ends, repeat One replays it and repeat All sends it to the end
  *  of the queue and plays the head. Otherwise the queue plays first. Then, with
- *  autoplay on, the next song of the same video or a random other one. Autoplay
- *  off stops. */
+ *  autoplay on, a random other video. Autoplay off stops. */
 export const planAdvance = (
   setlist: Setlist,
   continuation: Continuation,
@@ -293,12 +268,12 @@ export const planAdvance = (
     ? Advance.PlayQueued()
     : Option.match(setlist.maybeNowPlaying, {
         onNone: () => Advance.Stop(),
-        onSome: ({ song }) => planFromArchive(continuation, song, false),
+        onSome: ({ song }) => planFromArchive(continuation, song),
       })
 }
 
 /** Applies a plan. A random pick changes nothing yet, because the Command that
- *  picks it comes back through `playPicked`. A stop pauses the same song. */
+ *  picks it comes back through `play`. A stop pauses the same song. */
 export const applyAdvance = (
   setlist: Setlist,
   advance: Advance,
@@ -311,65 +286,46 @@ export const applyAdvance = (
         onNone: () => setlist,
         onSome: ({ song }) => startPlay(setlist, song),
       }),
-    PlaySong: ({ song }) => play(setlist, song),
     PickRandomVideo: () => setlist,
     Stop: () => setStatus(setlist, 'Paused'),
   })
 
-/** A dead video takes every song of it out of the queue and history. The plan
+/** A dead video takes every song of it out of the queue and history, and its
+ *  play is marked failed with the reason, so nothing records it later. The plan
  *  is for the cleaned setlist, so the song that hit it is never a candidate. */
 export const planSkip = (
   setlist: Setlist,
   continuation: Continuation,
+  reason: string,
 ): { cleaned: Setlist; advance: Advance } =>
   Option.match(setlist.maybeNowPlaying, {
     onNone: () => ({ cleaned: setlist, advance: Advance.Stop() }),
     onSome: ({ song: failedSong }) => {
       const isOtherVideo = (song: PlayableSong): boolean =>
         song.video_url !== failedSong.video_url
-      const cleaned = modifyFields(setlist, {
-        queue: queue => Array.filter(queue, isOtherVideo),
-        history: history => Array.filter(history, isOtherVideo),
-      })
+      const cleaned = failLoad(
+        modifyFields(setlist, {
+          queue: queue => Array.filter(queue, isOtherVideo),
+          history: history => Array.filter(history, isOtherVideo),
+        }),
+        reason,
+      )
       return {
         cleaned,
         advance: Array.isReadonlyArrayNonEmpty(cleaned.queue)
           ? Advance.PlayQueued()
-          : planFromArchive(continuation, failedSong, true),
+          : planFromArchive(continuation, failedSong),
       }
     },
   })
 
-/** The song that hit a dead video is not recorded in history, because Previous
- *  would land on it. With nothing to move to, it pauses with the reason. */
-export const applySkip = (
-  cleaned: Setlist,
-  advance: Advance,
-  reason: string,
-): Setlist =>
-  Advance.match<Setlist>(advance, {
-    Replay: () => failLoad(cleaned, reason),
-    PlayQueued: () =>
-      Option.match(Array.head(cleaned.queue), {
-        onNone: () => failLoad(cleaned, reason),
-        onSome: nextSong =>
-          startPlay(
-            modifyFields(cleaned, { queue: queue => Array.drop(queue, 1) }),
-            nextSong,
-          ),
-      }),
-    PlaySong: ({ song }) => startPlay(cleaned, song),
-    PickRandomVideo: () => cleaned,
-    Stop: () => failLoad(cleaned, reason),
-  })
-
-/** Plays the song a Command picked. Only a dead video leaves history alone. */
-export const playPicked = (
-  setlist: Setlist,
-  song: PlayableSong,
-  cause: PickCause,
-): Setlist =>
-  cause === 'Ended' ? play(setlist, song) : startPlay(setlist, song)
+/** With nothing to move to, the failed song stays, paused with the reason. */
+export const applySkip = (cleaned: Setlist, advance: Advance): Setlist =>
+  Advance.matchOrElse(
+    advance,
+    { PlayQueued: () => playNext(cleaned) },
+    () => cleaned,
+  )
 
 export const toPersistedJson = (setlist: Setlist): string =>
   Schema.encodeSync(PersistedSetlistJson)({

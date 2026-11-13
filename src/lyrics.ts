@@ -125,18 +125,31 @@ export const segmentAt = (
     segment => segment.startSeconds <= seconds,
   )
 
-export const segmentSongBeside = (
+/** The song `by` places from the one sung at `maybeSeconds` in the video of
+ *  `playing`. With no position, the play is at the start of `playing` itself,
+ *  where it began. Before the first song, the next song is the first. */
+export const songBeside = (
   archive: ReadonlyArray<PlayableSong>,
-  segment: Segment,
+  playing: PlayableSong,
+  maybeSeconds: Option.Option<number>,
   by: 1 | -1,
 ): Option.Option<PlayableSong> => {
-  const spans = spansOf(archive, segment.song)
+  const spans = spansOf(archive, playing)
+  const maybeIndex = Option.match(maybeSeconds, {
+    onNone: () =>
+      Array.findFirstIndex(spans, ({ song }) => song.id === playing.id),
+    onSome: seconds =>
+      Option.orElseSome(
+        Array.findLastIndex(
+          spans,
+          ({ startSeconds }) => startSeconds <= seconds,
+        ),
+        () => -1,
+      ),
+  })
   return Option.map(
-    Option.flatMap(
-      Array.findFirstIndex(spans, span => span.song.id === segment.song.id),
-      index => Array.get(spans, index + by),
-    ),
-    span => span.song,
+    Option.flatMap(maybeIndex, index => Array.get(spans, index + by)),
+    ({ song }) => song,
   )
 }
 

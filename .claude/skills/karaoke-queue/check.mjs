@@ -3,7 +3,7 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { Option } from 'effect';
+import { DateTime, Option } from 'effect';
 import fc from 'fast-check';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -15,7 +15,7 @@ const RUNS = Number(process.env.RUNS ?? 1000);
 const S = await import(pathToFileURL(modulePath).href);
 
 const makeSong = (n) => ({
-  id: `song-${n}`, song_title: `Song ${n}`, artist: '', original_title: '', version: '', note: '', timestamp: '00:00:01', created_at: 'x', video_url: `v${Math.ceil(n / 4)}`, title_text: 'Stream', membership: false, kind: ['karaoke', 'cover', 'original'][Math.ceil(n / 4) % 3],
+  id: `song-${n}`, song_title: `Song ${n}`, artist: '', original_title: '', version: '', note: '', timestamp: '00:00:01', created_at: 'x', video_url: `v${Math.ceil(n / 4)}`, title_text: 'Stream', membership: false, published_at: DateTime.makeUnsafe(0), kind: ['karaoke', 'cover', 'original'][Math.ceil(n / 4) % 3],
 });
 const archive = Array.from({ length: 12 }, (_, i) => makeSong(i + 1));
 const song = fc.integer({ min: 1, max: 12 }).map(makeSong);
@@ -69,14 +69,14 @@ function apply(setlist, a, continuation) {
     const applied = S.applyAdvance(setlist, advance, continuation.repeat);
     if (advance._tag !== 'PickRandomVideo') return { setlist: applied };
     const song = advance.candidates[a.pick % advance.candidates.length];
-    return { setlist: S.playPicked(applied, song, 'Ended'), candidates: advance.candidates };
+    return { setlist: S.play(applied, song), candidates: advance.candidates };
   }
   if (a.type === 'fail') {
-    const { cleaned, advance } = S.planSkip(setlist, continuation);
-    const applied = S.applySkip(cleaned, advance, 'gone');
+    const { cleaned, advance } = S.planSkip(setlist, continuation, 'gone');
+    const applied = S.applySkip(cleaned, advance);
     if (advance._tag !== 'PickRandomVideo') return { setlist: applied };
     const song = advance.candidates[a.pick % advance.candidates.length];
-    return { setlist: S.playPicked(applied, song, 'Unavailable'), candidates: advance.candidates };
+    return { setlist: S.play(applied, song), candidates: advance.candidates };
   }
   return { setlist: S.togglePlaying(setlist) };
 }
@@ -94,12 +94,16 @@ const continuationOf = ({ goneVideos, isAutoplay, repeat }) => ({
 const expectedFirsts = (scene, now) => archive.filter((s, i) => !scene.goneVideos.includes(s.video_url)
   && s.video_url !== now.video_url && archive.findIndex((o) => o.video_url === s.video_url) === i);
 
+// A fail that leaves the same play on the bar makes that play dead, as worked out from the actions alone.
 const walk = (scene, onStep) => {
   const continuation = continuationOf(scene);
   let setlist = S.emptySetlist;
+  let deadPlayId;
   for (const a of scene.seq) {
     const { setlist: after, candidates } = apply(setlist, a, continuation);
-    onStep(a, setlist, after, candidates);
+    const isDead = current(setlist) !== undefined && current(setlist).playId === deadPlayId;
+    onStep(a, setlist, after, candidates, isDead);
+    if (a.type === 'fail' && current(setlist) && current(after).playId === current(setlist).playId) deadPlayId = current(after).playId;
     setlist = after;
   }
   return setlist;
@@ -110,7 +114,7 @@ const properties = {
   // Previous is the one exception: the song it leaves goes to the front of the queue.
   'queue-is-fifo-and-lossless': (scene) => {
     const expectedQueue = [];
-    walk(scene, (a, before, after) => {
+    walk(scene, (a, before, after, _, isDead) => {
       if (a.type === 'enqueue') expectedQueue.push(a.song);
       if (a.type === 'move' && a.from !== a.to && a.from < expectedQueue.length && a.to < expectedQueue.length) {
         const [moved] = expectedQueue.splice(a.from, 1);
@@ -119,7 +123,7 @@ const properties = {
       if (a.type === 'move' && !same(after.playCount, before.playCount)) fail('move changed the play count');
       if (a.type === 'move' && !same(after.maybeNowPlaying, before.maybeNowPlaying)) fail('move changed what is playing');
       if (a.type === 'move' && !same(after.history, before.history)) fail('move changed the history');
-      if (a.type === 'previous' && current(before) && before.history.length) expectedQueue.unshift(current(before).song);
+      if (a.type === 'previous' && current(before) && before.history.length && !isDead) expectedQueue.unshift(current(before).song);
       if ((a.type === 'next' || a.type === 'end') && current(before) && expectedQueue.length) {
         const expected = expectedQueue.shift();
         if (!same(current(after).song, expected)) fail(`${a.type} played ${current(after).song.id}, expected ${expected.id}`);
@@ -139,10 +143,10 @@ const properties = {
 
   // History is capped at 50, and the song a new play (a click, or a video end) replaces is the newest entry.
   'history-is-bounded-and-newest-first': (scene) => {
-    walk(scene, (a, before, after) => {
+    walk(scene, (a, before, after, _, isDead) => {
       if (after.history.length > 50) fail(`history grew to ${after.history.length}`);
       const startedNewPlay = a.type === 'play' || (a.type === 'end' && current(before) && current(after).playId !== current(before).playId);
-      if (startedNewPlay && current(before) && !same(after.history[0], current(before).song)) {
+      if (startedNewPlay && current(before) && !isDead && !same(after.history[0], current(before).song)) {
         fail(`${a.type} did not record ${current(before).song.id} as newest history`);
       }
     });
@@ -161,31 +165,14 @@ const properties = {
     });
   },
 
-  // With autoplay on and an empty queue, a video end plays the next song of the same video.
-  'end-of-video-continues-within-the-video': (scene) => {
-    if (!scene.isAutoplay) return;
-    walk(scene, (a, before, after, candidates) => {
-      if (a.type !== 'end' || !current(before) || before.queue.length) return;
-      const now = current(before).song;
-      const index = archive.findIndex((s) => s.id === now.id);
-      const next = archive.slice(index + 1).find((s) => s.video_url === now.video_url && !scene.goneVideos.includes(s.video_url));
-      if (!next) return;
-      if (!same(current(after).song, next)) fail(`end after ${now.id} played ${current(after).song.id}, expected ${next.id} of the same video`);
-      if (current(after).status !== 'Playing') fail('end did not keep playing');
-      if (candidates) fail('end with a song left in the video asked for a random video');
-    });
-  },
-
-  // With autoplay on, an empty queue, and no song left in the video, a video end picks among the first
-  // songs of every other live video, and pauses the same song when there are none.
+  // With autoplay on and an empty queue, a video end picks among the first songs of every other live
+  // video, and pauses the same song when there are none. YouTube ends a video only at its end, so no
+  // later song of the same video is left to play.
   'end-of-video-picks-another-video-or-pauses': (scene) => {
     if (!scene.isAutoplay) return;
     walk(scene, (a, before, after, candidates) => {
       if (a.type !== 'end' || !current(before) || before.queue.length) return;
       const now = current(before).song;
-      const index = archive.findIndex((s) => s.id === now.id);
-      const hasNextInVideo = archive.slice(index + 1).some((s) => s.video_url === now.video_url && !scene.goneVideos.includes(s.video_url));
-      if (hasNextInVideo) return;
       const firsts = expectedFirsts(scene, now);
       if (!firsts.length) {
         if (candidates) fail('end with no other live video asked for a random video');
@@ -277,6 +264,15 @@ const properties = {
     });
   },
 
+  // A song whose video failed never went into history or the queue when the visitor leaves it.
+  'failed-song-is-never-recorded': (scene) => {
+    walk(scene, (a, before, after, _, isDead) => {
+      if (!isDead || current(after).playId === current(before).playId) return;
+      const count = (setlist) => [...setlist.queue, ...setlist.history].filter((s) => s.id === current(before).song.id).length;
+      if (count(after) > count(before)) fail(`${a.type} put the failed ${current(before).song.id} back into the queue or history`);
+    });
+  },
+
   // A page reload restores queue and history, and nothing starts playing on its own.
   'reload-restores-queue-and-history': (scene) => {
     const before = walk(scene, () => {});
@@ -301,9 +297,13 @@ const properties = {
   // Repeat All loses no song: leaving the current one by end or Next puts it at the end of the queue, and the head plays.
   'repeat-all-loops-the-queue': (scene) => {
     if (scene.repeat !== 'All') return;
-    walk(scene, (a, before, after) => {
+    walk(scene, (a, before, after, _, isDead) => {
       if ((a.type !== 'end' && a.type !== 'next') || !current(before)) return;
-      const expected = [...before.queue, current(before).song];
+      const expected = isDead ? before.queue : [...before.queue, current(before).song];
+      if (!expected.length) {
+        if (current(after).playId !== current(before).playId || current(after).status !== 'Paused') fail(`${a.type} under repeat All replayed the failed ${current(before).song.id}`);
+        return;
+      }
       if (!same(current(after).song, expected[0])) fail(`${a.type} under repeat All played ${current(after).song.id}, expected ${expected[0].id}`);
       if (!same(after.queue, expected.slice(1))) fail(`${a.type} under repeat All left queue [${after.queue.map((s) => s.id)}], expected [${expected.slice(1).map((s) => s.id)}]`);
     });
@@ -333,31 +333,26 @@ const MUTANTS = [
   { property: 'queue-is-fifo-and-lossless', from: 'queue: () => [...without.slice(0, to)', to: 'queue: () => [...queue.slice(0, to)' },
   { property: 'queue-is-fifo-and-lossless', from: 'from === to || !isInRange(from) || !isInRange(to)', to: 'from === to || !isInRange(from)' },
   { property: 'queue-is-fifo-and-lossless', from: 'queue => [...queue, song]', to: 'queue => [song, ...queue]' },
-  { property: 'history-is-bounded-and-newest-first', from: 'Array.take([nowPlaying.song, ...history], HISTORY_LIMIT)', to: '[nowPlaying.song, ...history]' },
-  { property: 'history-is-bounded-and-newest-first', from: '[nowPlaying.song, ...history]', to: '[...history, nowPlaying.song]' },
+  { property: 'history-is-bounded-and-newest-first', from: 'Array.take([left, ...history], HISTORY_LIMIT)', to: '[left, ...history]' },
+  { property: 'history-is-bounded-and-newest-first', from: '[left, ...history]', to: '[...history, left]' },
   { property: 'new-play-gets-a-new-player', from: 'playCount: count => count + 1,', to: 'playCount: count => count,' },
-  { property: 'end-of-video-continues-within-the-video', from: 'Array.drop(archive, index + 1)', to: 'Array.drop(archive, index)' },
-  { property: 'end-of-video-picks-another-video-or-pauses', from: 'song => song.video_url === current.video_url && !isGone(song),', to: 'song => song.video_url === current.video_url,' },
-  { property: 'end-of-video-continues-within-the-video', from: 'Array.findFirstIndex(archive, ({ id }) => id === current.id),', to: 'Array.findFirstIndex(Array.filter(archive, song => !isGone(song)), ({ id }) => id === current.id),' },
-  { property: 'end-of-video-continues-within-the-video', from: ': nextSongInVideo(continuation, current)', to: ': Option.none()' },
   { property: 'end-of-video-picks-another-video-or-pauses', from: "Stop: () => setStatus(setlist, 'Paused'),", to: 'Stop: () => setlist,' },
-  { property: 'end-of-video-picks-another-video-or-pauses', from: 'onEmpty: () => Advance.Stop(),', to: 'onEmpty: () => Advance.PlaySong({ song: current }),' },
+  { property: 'end-of-video-picks-another-video-or-pauses', from: 'onEmpty: () => Advance.Stop(),', to: 'onEmpty: () => Advance.Replay(),' },
   { property: 'random-pick-lands-on-another-live-video-first-song', from: 'song => !isGone(song) && song.video_url !== current.video_url,', to: 'song => !isGone(song),' },
   { property: 'random-pick-lands-on-another-live-video-first-song', from: 'song => !isGone(song) && song.video_url !== current.video_url,', to: 'song => song.video_url !== current.video_url,' },
   { property: 'random-pick-lands-on-another-live-video-first-song', from: '  Array.dedupeWith(\n    Array.filter(\n      archive,\n      song => !isGone(song) && song.video_url !== current.video_url,\n    ),\n    (first, second)', to: '  Array.dedupeWith(\n    Array.reverse(Array.filter(\n      archive,\n      song => !isGone(song) && song.video_url !== current.video_url,\n    )),\n    (first, second)' },
   { property: 'random-pick-lands-on-another-live-video-first-song', from: 'onNonEmpty: candidates => Advance.PickRandomVideo({ candidates }),', to: 'onNonEmpty: candidates => Advance.PickRandomVideo({ candidates: [candidates[0], ...candidates] }),' },
-  { property: 'history-is-bounded-and-newest-first', from: "cause === 'Ended' ? play(setlist, song) : startPlay(setlist, song)", to: 'startPlay(setlist, song)' },
-  { property: 'unavailable-video-is-skipped', from: "cause === 'Ended' ? play(setlist, song) : startPlay(setlist, song)", to: 'play(setlist, song)' },
-  { property: 'autoplay-off-never-starts-an-archive-song', from: 'if (!continuation.isAutoplay) {', to: 'if (false) {' },
+  { property: 'failed-song-is-never-recorded', from: 'Option.isNone(maybeLoadError) ? Option.some(song) : Option.none(),', to: 'Option.some(song),' },
+  { property: 'unavailable-video-is-skipped', from: 'const cleaned = failLoad(', to: 'const cleaned = (setlist => setlist)(' },
+  { property: 'autoplay-off-never-starts-an-archive-song', from: '  continuation.isAutoplay\n    ? Array.match(', to: '  true\n    ? Array.match(' },
   { property: 'queue-plays-whatever-autoplay-says', from: 'Array.isReadonlyArrayNonEmpty(setlist.queue)\n    ? Advance.PlayQueued()', to: 'continuation.isAutoplay && Array.isReadonlyArrayNonEmpty(setlist.queue)\n    ? Advance.PlayQueued()' },
   { property: 'queue-plays-whatever-autoplay-says', from: 'Array.isReadonlyArrayNonEmpty(cleaned.queue)\n          ? Advance.PlayQueued()', to: 'continuation.isAutoplay && Array.isReadonlyArrayNonEmpty(cleaned.queue)\n          ? Advance.PlayQueued()' },
-  { property: 'unavailable-video-is-skipped', from: 'const maybeNextInVideo = isVideoDead\n    ? Option.none()', to: 'const maybeNextInVideo = false\n    ? Option.none()' },
-  { property: 'queue-is-fifo-and-lossless', from: 'queue: queue => [\n            ...Option.match(setlist.maybeNowPlaying, {\n              onNone: () => [],\n              onSome: ({ song }) => [song],\n            }),\n            ...queue,\n          ],', to: 'queue: queue => queue,' },
+  { property: 'queue-is-fifo-and-lossless', from: 'queue: queue => [...Option.toArray(leftSong(setlist)), ...queue],', to: 'queue: queue => queue,' },
   { property: 'unavailable-video-is-skipped', from: 'queue: queue => Array.filter(queue, isOtherVideo),', to: 'queue: queue => queue,' },
   { property: 'unavailable-video-is-skipped', from: 'history: history => Array.filter(history, isOtherVideo),', to: 'history: history => history,' },
-  { property: 'unavailable-video-is-skipped', from: 'startPlay(\n            modifyFields(cleaned,', to: 'play(\n            modifyFields(cleaned,' },
+  { property: 'unavailable-video-is-skipped', from: '{ PlayQueued: () => playNext(cleaned) },', to: '{ PlayQueued: () => cleaned },' },
   { property: 'repeat-one-restarts-the-ended-song', from: 'if (hasSong && continuation.repeat === \'One\') {', to: 'if (false) {' },
-  { property: 'repeat-all-loops-the-queue', from: "onSome: ({ song }) => enqueue(setlist, song),", to: "onSome: () => setlist," },
+  { property: 'repeat-all-loops-the-queue', from: 'onSome: left => enqueue(setlist, left),', to: 'onSome: () => setlist,' },
   { property: 'repeat-all-loops-the-queue', from: "if (hasSong && continuation.repeat === 'All') {", to: 'if (false) {' },
   { property: 'reload-restores-queue-and-history', from: 'queue: () => state.queue,', to: 'queue: queue => queue,' },
   { property: 'reload-restores-queue-and-history', from: 'history: () => state.history,', to: 'history: history => history,' },

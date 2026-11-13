@@ -36,13 +36,13 @@ Each sequence has up to 150 actions, 52 to 80 consecutive plays to reach the his
 | `queue-is-fifo-and-lossless` | Queue order is first-in, first-out, except that Previous returns the song it leaves to the front and a move reorders only the queue, by index, and leaves what is playing, history, and play count alone. Next and video end play the head. |
 | `history-is-bounded-and-newest-first` | History never passes 50, and a song replaced by a click or a video end becomes its newest entry. |
 | `new-play-gets-a-new-player` | Each play and Previous gets a new `playId`, even for the same song, and toggling keeps it. |
-| `end-of-video-continues-within-the-video` | With autoplay on and an empty queue, a video end plays the next song of the same video, with no random pick. |
-| `end-of-video-picks-another-video-or-pauses` | With no song left in the video, a video end offers the first song of every other live video, and pauses the same song when there is none. |
+| `end-of-video-picks-another-video-or-pauses` | With autoplay on and an empty queue, a video end offers the first song of every other live video, and pauses the same song when there is none. YouTube ends a video only at its end, so no later song of that video is left. |
 | `random-pick-lands-on-another-live-video-first-song` | A random pick, from a video end or a failed video, lands on the first song of a video that is not the current one and not gone, among all such videos. |
 | `autoplay-off-never-starts-an-archive-song` | With autoplay off and nothing queued, a video end or a failed video never asks for a random video, and keeps the same song, paused. A failure says why. |
 | `queue-plays-whatever-autoplay-says` | A video end or a failed video plays the queue head, with autoplay on or off. |
-| `archive-advance-skips-gone-videos` | An archive advance, within a video or by random pick, never lands on a video known to be gone. |
+| `archive-advance-skips-gone-videos` | The random pick after a video end or failure never lands on a video known to be gone. |
 | `unavailable-video-is-skipped` | A video that fails leaves no song of it in the queue or history. Playback moves to the queue head or, with autoplay on, the first song of a random other live video, without recording the failed song in history. It pauses with the reason if there is none. |
+| `failed-song-is-never-recorded` | A song whose video failed and that stayed on the bar does not enter the queue or history when a click, Next, Previous or a video end leaves it. |
 | `reload-restores-queue-and-history` | Saving and restoring keeps the queue and history, and nothing plays. |
 
 "Playing with no current song" is no longer a property, because the `NowPlaying` type cannot represent it.
