@@ -923,6 +923,138 @@ const journeys = {
       await timeNear(secondsOf(last.timestamp));
     }, page);
   },
+  async coverEnd(page) {
+    const { body: videos } = await pageVideos();
+    const live = displayOrder(videos).filter((v) => !v.is_gone);
+    const covers = live.filter((v, i) => i > 0 && v.kind === 'cover' && v.karaoke_song.length === 1);
+    const [cover, otherCover] = [...covers.filter((v) => v.video_url === 'g26JmYMkml4'), ...covers.filter((v) => v.video_url !== 'g26JmYMkml4')];
+    if (!otherCover) throw new Error('the data has fewer than two live single-song covers after the first video');
+    const songOfVideo = (video) => ({ ...video.karaoke_song[0], video_url: video.video_url });
+    const bar = page.locator('[data-player-bar]');
+    const repeatButton = (mode) => bar.getByRole('button', { name: `Repeat: ${mode}`, exact: true });
+    const setRepeat = async (mode) => {
+      for (let i = 0; i < 3 && !(await repeatButton(mode).isVisible()); i++) {
+        await bar.getByRole('button', { name: /^Repeat: / }).click();
+        await page.waitForTimeout(300);
+      }
+      await repeatButton(mode).waitFor({ timeout: 5000 });
+    };
+    const playCover = async (video) => {
+      await (await songRowOf(page, videos, songOfVideo(video))).click();
+      await bar.getByRole('heading', { name: video.karaoke_song[0].song_title }).waitFor();
+      await playerReady(page);
+      await playVideo(page);
+      await videoLoads(page, [video.video_url], { isPlaying: true });
+    };
+    const seekBeforeEnd = (seconds) =>
+      page.waitForFunction(
+        (before) => {
+          const p = window.YT.get(document.querySelector('iframe[src*="youtube"]').id);
+          const duration = p.getDuration();
+          if (!(duration > 0)) return false;
+          p.seekTo(duration - before, true);
+          return true;
+        },
+        seconds,
+        { polling: 250, timeout: 20000 },
+      );
+    const playerNow = () =>
+      page.evaluate(() => {
+        const p = window.YT.get(document.querySelector('iframe[src*="youtube"]').id);
+        return { videoId: p.getVideoData()?.video_id, seconds: p.getCurrentTime(), state: p.getPlayerState() };
+      });
+    const keepsPlaying = async (videoId) => {
+      await videoLoads(page, [videoId], { isPlaying: true });
+      await page.waitForTimeout(5000);
+      const now = await playerNow();
+      if (now.videoId !== videoId || now.state !== 1) throw new Error(`wanted ${videoId} still playing, saw ${JSON.stringify(now)}`);
+    };
+    // NOTE: an embedded Short at its end either reports ENDED or wraps to its start without reporting it. Which one varies between runs and often holds for a whole session, so a run that saw only ENDED proves nothing about the wrap and must be rerun.
+    const ends = [];
+    const reachEnd = async () => {
+      const from = await page.evaluate(() => {
+        if (!window.__states) {
+          window.__states = [];
+          window.YT.get(document.querySelector('iframe[src*="youtube"]').id).addEventListener('onStateChange', (e) => window.__states.push(e.data));
+        }
+        return window.__states.length;
+      });
+      await page.waitForTimeout(3000);
+      await seekBeforeEnd(2);
+      return async () => ends.push((await page.evaluate((i) => window.__states.slice(i), from)).includes(0) ? 'reported' : 'wrapped');
+    };
+    const setlistShows = (video) =>
+      page
+        .waitForFunction(([sel, title]) => document.querySelector(sel)?.getAttribute('aria-label') === `Setlist of ${title}`, [SETLIST, video.video_title], { timeout: 10000 })
+        .catch(async () => {
+          throw new Error(`wanted the setlist of ${video.video_url}, saw ${await page.locator(SETLIST).getAttribute('aria-label')}`);
+        });
+
+    await page.goto(BASE + '/');
+    await videoRows(page).first().waitFor();
+
+    await step('coverEnd', 'playing a cover from its video row shows its setlist without choosing it', async () => {
+      await playCover(cover);
+      await setlistShows(cover);
+      const url = await page.url();
+      if (new URL(url).searchParams.has('v')) throw new Error(`the play chose the video: ${url}`);
+    }, page);
+    await page.screenshot({ path: join(out, 'cover-end-setlist.png') });
+
+    await step('coverEnd', 'with autoplay on, a cover that reaches its end moves on to another video that keeps playing', async () => {
+      const ended = await reachEnd();
+      await videoLoads(page, live.filter((v) => v.video_url !== cover.video_url).map((v) => v.video_url), { timeout: 10000 });
+      await ended();
+      const landed = await loadedVideoId(page);
+      await keepsPlaying(landed);
+      await setlistShows(videos.find((v) => v.video_url === landed));
+    }, page);
+    await page.screenshot({ path: join(out, 'cover-end-moved-on.png') });
+    check('coverEnd', 'with autoplay on, a cover wrapped to its start without reporting its end, so the step covered that path', ends.includes('wrapped'), ends.join(' '));
+
+    await step('coverEnd', 'clicking another cover in the last second of one plays the clicked cover', async () => {
+      await playCover(cover);
+      await seekBeforeEnd(0.8);
+      await (await songRowOf(page, videos, songOfVideo(otherCover))).click();
+      await videoLoads(page, [otherCover.video_url], { isPlaying: true, timeout: 15000 });
+      await keepsPlaying(otherCover.video_url);
+    }, page);
+
+    await step('coverEnd', 'with repeat One, a cover replays from its start once per end', async () => {
+      await playCover(cover);
+      await setRepeat('One');
+      for (let end = 0; end < 2; end++) {
+        const ended = await reachEnd();
+        await page.waitForFunction(
+          (id) => {
+            const p = window.YT.get(document.querySelector('iframe[src*="youtube"]').id);
+            return p.getVideoData()?.video_id === id && p.getPlayerState() === 1 && p.getCurrentTime() < 5;
+          },
+          cover.video_url,
+          { timeout: 10000 },
+        );
+        await ended();
+      }
+      await keepsPlaying(cover.video_url);
+      await setRepeat('Off');
+    }, page);
+
+    await step('coverEnd', 'with autoplay off, a cover that reaches its end stops on it', async () => {
+      await autoplaySwitch(page).click();
+      await switchBecomes(page, false, 'the switch did not turn off');
+      await playCover(cover);
+      const ended = await reachEnd();
+      await bar.locator('button:not([role="switch"]) i.fa-play').waitFor({ timeout: 10000 });
+      await ended();
+      const stopped = await playerNow();
+      await page.waitForTimeout(3000);
+      const later = await playerNow();
+      if (later.videoId !== cover.video_url || later.state === 1 || Math.abs(later.seconds - stopped.seconds) > 0.5) {
+        throw new Error(`wanted ${cover.video_url} stopped, saw ${JSON.stringify(stopped)} then ${JSON.stringify(later)}`);
+      }
+    }, page);
+    await page.screenshot({ path: join(out, 'cover-end-stopped.png') });  },
+
   async queueReorder(page) {
     await queueReorderJourney(page, 'queueReorder', { touch: false });
   },
