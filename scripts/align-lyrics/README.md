@@ -8,8 +8,15 @@ For each song whose `/api/get-lyrics` answer is `Synced`, the batch:
 2. Isolates the vocals with demucs.
 3. Aligns the raw LRCLIB lines to the vocals with stable-ts and the Whisper `small` model.
 4. Keeps the lines she sang, by the rules in `keep.py`, or records the song as `Rejected`.
+5. Romanizes the kept lines with `romaji.py`, so the song list shows only Latin script.
 
-The text always comes from LRCLIB. Only the times change.
+The text always comes from LRCLIB. Only the times change, and the script it is written in: kana and kanji go through cutlet (Hepburn), hangul through korean-romanizer, and any other script through Unidecode. Latin lines pass through untouched.
+
+To romanize a file an older run wrote, without aligning anything again:
+
+```sh
+~/.cache/fiona-lyrics-align/venv/bin/python scripts/align-lyrics/romaji.py server/lyrics-aligned.json
+```
 
 ## Set up
 

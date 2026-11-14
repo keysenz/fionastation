@@ -10,6 +10,7 @@ from importlib.metadata import version
 from pathlib import Path
 
 from keep import Kept, Segment, aligned_lines, keep, parse_lrc, sung_lines
+from romaji import romanized
 
 REPO = Path(__file__).resolve().parents[2]
 OUTPUT = REPO / "server" / "lyrics-aligned.json"
@@ -128,7 +129,7 @@ def entry_for(model, song: dict, lrclib_id: int, cache: Path) -> dict:
         print(f"  {language}, {len(texts)} lines, rejected: {verdict.reason}", flush=True)
         return {**base, "status": "Rejected", "reason": verdict.reason}
     print(f"  {language}, {len(texts)} lines, kept {verdict.indices[0] + 1} to {verdict.indices[-1] + 1}", flush=True)
-    return {**base, "status": "Aligned", "lines": aligned_lines(lines, segments, verdict)}
+    return {**base, "status": "Aligned", "lines": romanized(aligned_lines(lines, segments, verdict))}
 
 
 def main() -> None:
