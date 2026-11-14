@@ -5,8 +5,8 @@ import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
 
-import type { SongForStats } from './db.ts'
 import { MOODS as PAGE_MOODS } from '../src/page/karaoke/moodPrompt.ts'
+import type { SongForStats } from './db.ts'
 import {
   MOODS,
   type StatEvent,
@@ -184,7 +184,10 @@ describe('parseStatEvent', () => {
       'a repeated mood',
       { songId: 'a1', kind: 'Mood', moods: ['ceria', 'ceria'] },
     ],
-    ['moods that are not a list', { songId: 'a1', kind: 'Mood', moods: 'hype' }],
+    [
+      'moods that are not a list',
+      { songId: 'a1', kind: 'Mood', moods: 'hype' },
+    ],
     ['a missing song', { kind: 'Mood', moods: ['hype'] }],
     [
       'an origin',
@@ -304,8 +307,8 @@ describe('write api', () => {
     expect(api({ ip: '2.2.2.2', body: vote }).status).toBe(204)
     expect(store.moodsSince('2026-11-14')).toEqual(
       expect.arrayContaining([
-        { songId: 'a1', mood: 'ceria', count: 2 },
-        { songId: 'a1', mood: 'hype', count: 2 },
+        { day: '2026-11-14', songId: 'a1', mood: 'ceria', count: 2 },
+        { day: '2026-11-14', songId: 'a1', mood: 'hype', count: 2 },
       ]),
     )
     expect(store.moodsSince('2026-11-14')).toHaveLength(2)
@@ -390,7 +393,43 @@ describe('report', () => {
       romantis: 0,
       sendu: 2,
     })
+    expect(moods[0]?.total).toBe(3)
     expect(moods[1]?.title).toBe(SONGS[0]?.title)
+    expect(moods[1]?.videoUrl).toBe(SONGS[0]?.videoUrl)
+  })
+
+  test('lists every UTC day of the window with its mood votes, and the names of the moods', () => {
+    const store = openStatStore({ path: dbPath, now })
+    record(store, { kind: 'Mood', songId: 'a1', moods: ['ceria', 'hype'] })
+    clock = new Date('2026-11-16T10:00:00Z')
+    record(store, { kind: 'Mood', songId: 'b1', moods: ['sendu'] })
+    const answer = createStatReport({ store, findSongs, now })('4')
+    const body = answer.body as {
+      moodNames: string[]
+      moodDaily: Array<{ day: string; votes: number }>
+      moods: Array<Record<string, any>>
+    }
+    expect(body.moodNames).toEqual([...MOODS])
+    expect(body.moodDaily).toEqual([
+      { day: '2026-11-13', votes: 0 },
+      { day: '2026-11-14', votes: 2 },
+      { day: '2026-11-15', votes: 0 },
+      { day: '2026-11-16', votes: 1 },
+    ])
+    expect(body.moods.map(song => song.total)).toEqual([2, 1])
+  })
+
+  test('mood votes from before the window are left out of the songs and the days', () => {
+    const store = openStatStore({ path: dbPath, now })
+    record(store, { kind: 'Mood', songId: 'a1', moods: ['ceria'] })
+    clock = new Date('2026-11-16T10:00:00Z')
+    record(store, { kind: 'Mood', songId: 'b1', moods: ['sendu'] })
+    const body = createStatReport({ store, findSongs, now })('2').body as {
+      moodDaily: Array<{ votes: number }>
+      moods: Array<Record<string, any>>
+    }
+    expect(body.moods.map(song => song.songId)).toEqual(['b1'])
+    expect(body.moodDaily.map(day => day.votes)).toEqual([0, 1])
   })
 
   test('a window that excludes the day leaves the moods out', () => {

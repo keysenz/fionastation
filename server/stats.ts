@@ -82,7 +82,12 @@ export type DayTotal = Readonly<{
   count: number
 }>
 
-export type MoodCount = Readonly<{ songId: string; mood: Mood; count: number }>
+export type MoodCount = Readonly<{
+  day: string
+  songId: string
+  mood: Mood
+  count: number
+}>
 
 export type ExportCursor = Readonly<{ sessionId: string; seq: number }>
 
@@ -158,10 +163,9 @@ export const openStatStore = ({
     ON CONFLICT (day, song_id, mood) DO UPDATE SET count = count + 1
   `)
   const moods = db.prepare(`
-    SELECT song_id AS songId, mood, SUM(count) AS count
+    SELECT day, song_id AS songId, mood, count
     FROM mood_votes
     WHERE day >= ?
-    GROUP BY song_id, mood
   `)
   const bump = db.prepare(`
     INSERT INTO song_stats (day, song_id, kind, origin, count)
@@ -284,7 +288,9 @@ const isOneOf = <T extends string>(
   value: unknown,
 ): value is T => options.some(option => option === value)
 
-const parseMoodVote = (fields: Record<string, unknown>): MoodVote | undefined => {
+const parseMoodVote = (
+  fields: Record<string, unknown>,
+): MoodVote | undefined => {
   const { kind, songId, moods, ...rest } = fields
   if (
     Object.keys(rest).length > 0 ||
@@ -460,8 +466,13 @@ export type SongMoods = Readonly<{
   songId: string
   title: string | null
   artist: string | null
+  videoId: string | null
+  videoUrl: string | null
   votes: Readonly<Record<Mood, number>>
+  total: number
 }>
+
+export type MoodDay = Readonly<{ day: string; votes: number }>
 
 const total = (votes: Readonly<Record<Mood, number>>) =>
   MOODS.reduce((sum, mood) => sum + votes[mood], 0)
@@ -477,21 +488,47 @@ export const buildMoodReport = (
       const votes = Object.fromEntries(
         MOODS.map(mood => [
           mood,
-          counts.find(row => row.mood === mood)?.count ?? 0,
+          counts
+            .filter(row => row.mood === mood)
+            .reduce((sum, row) => sum + row.count, 0),
         ]),
       ) as Record<Mood, number>
+      const song = known.get(songId)
       return {
         songId,
-        title: known.get(songId)?.title ?? null,
-        artist: known.get(songId)?.artist ?? null,
+        title: song?.title ?? null,
+        artist: song?.artist ?? null,
+        videoId: song?.videoId ?? null,
+        videoUrl: song?.videoUrl ?? null,
         votes,
+        total: total(votes),
       }
     })
     .sort(
       (left, right) =>
-        total(right.votes) - total(left.votes) ||
-        left.songId.localeCompare(right.songId),
+        right.total - left.total || left.songId.localeCompare(right.songId),
     )
+}
+
+export const buildMoodDays = (
+  rows: readonly MoodCount[],
+  firstDay: string,
+  lastDay: string,
+): MoodDay[] => {
+  const byDay = Map.groupBy(rows, ({ day }) => day)
+  const series: MoodDay[] = []
+  for (
+    let time = Date.parse(firstDay);
+    time <= Date.parse(lastDay);
+    time += DAY_MS
+  ) {
+    const day = dayOf(new Date(time))
+    series.push({
+      day,
+      votes: (byDay.get(day) ?? []).reduce((sum, row) => sum + row.count, 0),
+    })
+  }
+  return series
 }
 
 export type DayReport = Tally & Readonly<{ day: string }>
@@ -692,7 +729,9 @@ export const createStatReport = ({
           ),
           transitions: buildTransitions(transitions, known),
           transitionMinPlays: MIN_TRANSITION_PLAYS,
+          moodNames: MOODS,
           moods: buildMoodReport(moods, known),
+          moodDaily: buildMoodDays(moods, since, today),
         },
       }
     } catch (error) {
