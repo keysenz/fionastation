@@ -1,12 +1,13 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
 
-import { isDiscordId } from './playlists.ts'
+import { isDiscordId, windowLimiter } from './playlists.ts'
 import type { Account, SessionStore, Viewer } from './playlists.ts'
 
 export const SESSION_COOKIE = 'fs_session'
 export const STATE_COOKIE = 'fs_oauth_state'
 const SESSION_SECONDS = 30 * 24 * 60 * 60
 const STATE_SECONDS = 10 * 60
+const LOGIN_WINDOW_MS = 10 * 60 * 1000
 const DISCORD_TIMEOUT_MS = 10_000
 const MAX_NAME_LENGTH = 64
 
@@ -27,6 +28,7 @@ export type AuthRoute = keyof typeof AUTH_ROUTES
 export type AuthRequest = Readonly<{
   method: string
   route: AuthRoute
+  ip: string
   query: URLSearchParams
   cookie: string | undefined
   origin: string | undefined
@@ -39,7 +41,11 @@ export type AuthReply =
       body: unknown
       cookies: readonly string[]
     }>
-  | Readonly<{ kind: 'Redirect'; location: string; cookies: readonly string[] }>
+  | Readonly<{
+      kind: 'Redirect'
+      location: string
+      cookies: readonly string[]
+    }>
 
 const json = (
   status: number,
@@ -47,6 +53,8 @@ const json = (
   cookies: readonly string[] = [],
 ): AuthReply => ({ kind: 'Json', status, body, cookies })
 const failure = (status: number, error: string) => json(status, { error })
+
+const tooManyLogins = failure(429, 'Too many login attempts. Try later.')
 
 const sha256 = (value: string) => createHash('sha256').update(value)
 
@@ -79,6 +87,7 @@ export const createDiscordAuth = ({
   fetch = globalThis.fetch,
   now = () => new Date(),
   newSecret = () => randomBytes(32).toString('base64url'),
+  loginsPerIp = 30,
 }: Readonly<{
   discord: DiscordApp | undefined
   siteOrigin: string
@@ -86,7 +95,9 @@ export const createDiscordAuth = ({
   fetch?: typeof globalThis.fetch
   now?: () => Date
   newSecret?: () => string
+  loginsPerIp?: number
 }>) => {
+  const allowLogin = windowLimiter(loginsPerIp, LOGIN_WINDOW_MS, now)
   const redirectUri = `${siteOrigin}/api/auth/discord/callback`
   const secure = siteOrigin.startsWith('https:') ? '; Secure' : ''
   const cookie = (name: string, value: string, path: string, seconds: number) =>
@@ -180,6 +191,7 @@ export const createDiscordAuth = ({
     app: DiscordApp,
     { query, cookie: cookieHeader }: AuthRequest,
   ): Promise<AuthReply> => {
+    const forgetState = stateCookie('', 0)
     const sent = readCookie(cookieHeader, STATE_COOKIE)
     const returned = query.get('state')
     if (
@@ -187,9 +199,10 @@ export const createDiscordAuth = ({
       returned === null ||
       !timingSafeEqual(sha256(sent).digest(), sha256(returned).digest())
     ) {
-      return failure(400, 'This login did not start in this browser')
+      return json(400, { error: 'This login did not start in this browser' }, [
+        forgetState,
+      ])
     }
-    const forgetState = stateCookie('', 0)
     const code = query.get('code')
     if (!code) {
       return { kind: 'Redirect', location: '/', cookies: [forgetState] }
@@ -233,9 +246,11 @@ export const createDiscordAuth = ({
     }
     switch (request.route) {
       case 'discord/start':
-        return start(discord)
+        return allowLogin(request.ip) ? start(discord) : tooManyLogins
       case 'discord/callback':
-        return callback(discord, request)
+        return allowLogin(request.ip)
+          ? callback(discord, request)
+          : tooManyLogins
       case 'me': {
         const member = account(request.cookie)
         return member ? json(200, member) : failure(401, 'Not connected')

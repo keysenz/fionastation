@@ -46,6 +46,7 @@ const harness = (
     user?: () => Response
     discord?: typeof APP | undefined
     siteOrigin?: string
+    loginsPerIp?: number
   }> = {},
 ) => {
   const calls: Call[] = []
@@ -56,7 +57,11 @@ const harness = (
     siteOrigin: options.siteOrigin ?? SITE,
     sessions: store.sessions,
     now: () => clock,
-    newSecret: () => secrets.shift() ?? 'spare',
+    newSecret: () =>
+      secrets.shift() ?? `spare-${secrets.length}-${calls.length}`,
+    ...(options.loginsPerIp === undefined
+      ? {}
+      : { loginsPerIp: options.loginsPerIp }),
     fetch: async (url, init = {}) => {
       calls.push({ url: String(url), init })
       return String(url).endsWith('/oauth2/token')
@@ -71,11 +76,13 @@ const harness = (
       query?: string
       cookie?: string
       origin?: string
+      ip?: string
     }> = {},
   ) =>
     auth.handle({
       method: request.method ?? 'GET',
       route,
+      ip: request.ip ?? '9.9.9.9',
       query: new URLSearchParams(request.query ?? ''),
       cookie: request.cookie,
       origin: request.origin,
@@ -251,6 +258,42 @@ describe('login', () => {
     )
   })
 
+  test('the callback and start are limited per address before any call to Discord', async () => {
+    const { send, calls } = harness({ loginsPerIp: 3 })
+    const hit = (ip: string) =>
+      send('discord/callback', {
+        query: 'code=x&state=chosen',
+        cookie: 'fs_oauth_state=chosen',
+        ip,
+      })
+    const answers = []
+    for (let i = 0; i < 6; i++) answers.push(statusOf(await hit('1.1.1.1')))
+    expect(answers).toEqual([302, 302, 302, 429, 429, 429])
+    expect(
+      calls.filter(call => call.url.endsWith('/oauth2/token')),
+    ).toHaveLength(3)
+    expect(statusOf(await send('discord/start', { ip: '1.1.1.1' }))).toBe(429)
+    expect(statusOf(await hit('2.2.2.2'))).not.toBe(429)
+  })
+
+  test('every callback answer clears the state cookie, so the same state cannot be replayed', async () => {
+    const { send, calls } = harness()
+    const cleared = 'fs_oauth_state=; Path=/api/auth; Max-Age=0'
+    const attempts = [
+      { query: 'code=c&state=wrong', cookie: 'fs_oauth_state=state-1' },
+      { query: 'state=state-1', cookie: 'fs_oauth_state=state-1' },
+      { query: 'code=c&state=state-1', cookie: 'fs_oauth_state=state-1' },
+    ]
+    for (const attempt of attempts) {
+      const reply = await send('discord/callback', attempt)
+      expect(reply.cookies.some(c => c.startsWith(cleared))).toBe(true)
+    }
+    expect(calls.map(call => call.url.split('/').pop())).toEqual([
+      'token',
+      '@me',
+    ])
+  })
+
   test('cookies drop Secure only when the site itself is plain http', async () => {
     const { send } = harness({ siteOrigin: 'http://127.0.0.1:3456' })
     const reply = await send('discord/start')
@@ -277,7 +320,11 @@ describe('session', () => {
     const { login, send, sessionRows } = harness()
     const { cookie } = await login()
 
-    const reply = await send('logout', { method: 'POST', cookie, origin: SITE })
+    const reply = await send('logout', {
+      method: 'POST',
+      cookie,
+      origin: SITE,
+    })
 
     expect(reply).toMatchObject({
       status: 200,

@@ -360,6 +360,7 @@ const handle = async (req: IncomingMessage, res: ServerResponse) => {
     const answer = await discordAuth.handle({
       method: req.method ?? 'GET',
       route: authRoute,
+      ip: visitorIp(req),
       query: new URL(req.url ?? '/', 'http://localhost').searchParams,
       cookie: req.headers.cookie,
       origin: req.headers.origin,
@@ -490,6 +491,9 @@ const startAdminListener = (secret: string) => {
     findSongs: findSongsForPlaylist,
   })
   const answer = async (req: IncomingMessage) => {
+    if (!adminApi.holdsSecret(req.headers.authorization)) {
+      return { status: 403, body: { error: 'Forbidden' } }
+    }
     const acting = req.headers['x-acting-discord-id']
     const body = await readBody(req)
     return body === undefined

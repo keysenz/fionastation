@@ -227,6 +227,22 @@ describe('store', () => {
     ).toEqual({ name: 'sessions' })
   })
 
+  test('an account keeps only its 10 newest sessions', () => {
+    const store = openPlaylistStore({ path: dbPath, now })
+    const alice = { discordId: ALICE, name: 'Alice' }
+    const bob = { discordId: BOB, name: 'Bob' }
+    const later = new Date('2026-12-14T10:00:00Z')
+    store.sessions.start('bob', bob, later)
+    for (let i = 1; i <= 15; i++) {
+      clock = new Date(clock.getTime() + 1000)
+      store.sessions.start(`a${i}`, alice, later)
+    }
+    const alive = (n: number) => store.sessions.find(`a${n}`) !== undefined
+    expect([1, 5].some(alive)).toBe(false)
+    expect([6, 10, 15].every(alive)).toBe(true)
+    expect(store.sessions.find('bob')).toEqual(bob)
+  })
+
   test('a session is found until it expires or ends', () => {
     const store = openPlaylistStore({ path: dbPath, now })
     const alice = { discordId: ALICE, name: 'Alice' }
@@ -266,7 +282,11 @@ type Body = {
 const bodyOf = (reply: PlaylistReply) => reply.body as Body
 
 const harness = (
-  overrides: { createsPerIpPerHour?: number; editsPerHour?: number } = {},
+  overrides: {
+    createsPerIpPerHour?: number
+    editsPerHour?: number
+    claimsPerHour?: number
+  } = {},
 ) => {
   const store = openPlaylistStore({ path: dbPath, now })
   const known = new Set(['s1', 's2', 's3', 's4'])
@@ -666,6 +686,18 @@ describe('ownership', () => {
     expect(idsOf(as(member(BOB)).send('GET', 'mine'))).toEqual([])
   })
 
+  test('a claim is limited per member and holds at most 100 tokens', () => {
+    const { as } = harness({ claimsPerHour: 2 })
+    const alice = as(member(ALICE))
+    const claim = (editTokens: string[]) =>
+      alice.send('POST', 'claim', { editTokens }).status
+    expect(claim(Array(101).fill('t'))).toBe(400)
+    expect([claim(['t']), claim(['t']), claim(['t'])]).toEqual([200, 200, 429])
+    expect(
+      as(member(BOB)).send('POST', 'claim', { editTokens: [] }).status,
+    ).toBe(200)
+  })
+
   test('claim and mine need a session, and a cross-site claim is refused', () => {
     const { post, as } = harness()
     const { editToken } = bodyOf(post({ name: 'one', songIds: ['s1'] }))
@@ -792,6 +824,14 @@ describe('admin api', () => {
       updatedAt: '2026-11-14T10:00:00.000Z',
       deleted: false,
     })
+  })
+
+  test('the secret can be checked without reading a body', () => {
+    const { store, findSongs } = harness()
+    const admin = createAdminApi({ store, secret: SECRET, findSongs, now })
+    expect(admin.holdsSecret(`Bearer ${SECRET}`)).toBe(true)
+    expect(admin.holdsSecret('Bearer wrong')).toBe(false)
+    expect(admin.holdsSecret(undefined)).toBe(false)
   })
 
   test('GET of an unknown or malformed id is 404', () => {

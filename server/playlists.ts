@@ -6,6 +6,7 @@ import { cleanPlaylistName } from '../src/playlistName.ts'
 
 export const MAX_BODY_BYTES = 8 * 1024
 const MAX_ENTRIES = 100
+const MAX_SESSIONS_PER_ACCOUNT = 10
 const MAX_SONG_ID_LENGTH = 64
 const ID_LENGTH = 8
 const BASE62 = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
@@ -236,6 +237,11 @@ export const openPlaylistStore = ({
     'SELECT discord_id, discord_name FROM sessions WHERE id_hash = ? AND expires_at > ?',
   )
   const deleteSession = db.prepare('DELETE FROM sessions WHERE id_hash = ?')
+  const trimSessions = db.prepare(
+    `DELETE FROM sessions WHERE discord_id = ? AND id_hash NOT IN (
+       SELECT id_hash FROM sessions WHERE discord_id = ?
+       ORDER BY created_at DESC, rowid DESC LIMIT ${MAX_SESSIONS_PER_ACCOUNT})`,
+  )
   const deleteExpiredSessions = db.prepare(
     'DELETE FROM sessions WHERE expires_at <= ?',
   )
@@ -352,6 +358,7 @@ export const openPlaylistStore = ({
         const at = now().toISOString()
         deleteExpiredSessions.run(at)
         insertSession.run(idHash, discordId, name, at, expiresAt.toISOString())
+        trimSessions.run(discordId, discordId)
       },
       find: idHash => {
         const row = selectSession.get(
@@ -367,7 +374,11 @@ export const openPlaylistStore = ({
   }
 }
 
-const windowLimiter = (max: number, windowMs: number, now: () => Date) => {
+export const windowLimiter = (
+  max: number,
+  windowMs: number,
+  now: () => Date,
+) => {
   const hits = new Map<string, number[]>()
   return (key: string) => {
     const at = now().getTime()
@@ -522,15 +533,18 @@ export const createPlaylistApi = ({
   now = () => new Date(),
   createsPerIpPerHour = 10,
   editsPerHour = 30,
+  claimsPerHour = 20,
 }: Readonly<{
   store: PlaylistStore
   findSongs: FindSongs
   now?: () => Date
   createsPerIpPerHour?: number
   editsPerHour?: number
+  claimsPerHour?: number
 }>) => {
   const allowCreate = windowLimiter(createsPerIpPerHour, HOUR_MS, now)
   const allowEdit = windowLimiter(editsPerHour, HOUR_MS, now)
+  const allowClaim = windowLimiter(claimsPerHour, HOUR_MS, now)
 
   const create = ({ ip, viewer, body }: PlaylistRequest) => {
     if (viewer.kind === 'CrossSite') return crossSiteReply
@@ -628,6 +642,12 @@ export const createPlaylistApi = ({
       !editTokens.every(token => typeof token === 'string')
     ) {
       return failure(400, 'editTokens must be a list of edit tokens')
+    }
+    if (editTokens.length > MAX_ENTRIES) {
+      return failure(400, `Claim at most ${MAX_ENTRIES} edit tokens at a time`)
+    }
+    if (!allowClaim(viewer.discordId)) {
+      return failure(429, 'Too many claims from this member. Try later.')
     }
     return reply(200, { claimed: store.claim(editTokens, viewer.discordId) })
   }
@@ -858,7 +878,7 @@ export const createAdminApi = ({
     return methodReply
   }
 
-  return answerSafely('Admin playlist error', (request: AdminRequest) => {
+  const api = answerSafely('Admin playlist error', (request: AdminRequest) => {
     if (!holdsSecret(request.authorization)) return failure(403, 'Forbidden')
     if (Buffer.byteLength(request.body) > MAX_BODY_BYTES) {
       return failure(413, 'The request is too large')
@@ -868,4 +888,5 @@ export const createAdminApi = ({
     const owner = OWNER_ROUTE.exec(request.pathname)
     return owner ? own(request, owner.slice(1)) : failure(404, 'Not Found')
   })
+  return Object.assign(api, { holdsSecret })
 }
