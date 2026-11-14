@@ -123,9 +123,7 @@ export const play = (setlist: Setlist, song: PlayableSong): Setlist =>
     song,
   )
 
-/** A queue edit by the visitor, as opposed to playing through it, so the queue no longer
- *  holds what an opened playlist put there. */
-const editQueue = (
+const editQueueAndForgetPlaylist = (
   setlist: Setlist,
   change: (queue: Setlist['queue']) => Setlist['queue'],
 ): Setlist =>
@@ -138,7 +136,7 @@ const withoutQueued = (queue: Setlist['queue'], index: number) =>
   queue.filter((_, position) => position !== index)
 
 export const enqueue = (setlist: Setlist, song: PlayableSong): Setlist =>
-  editQueue(setlist, queue => [...queue, song])
+  editQueueAndForgetPlaylist(setlist, queue => [...queue, song])
 
 /** Appends songs to the queue in the order given. */
 export const enqueueAll = (
@@ -146,7 +144,7 @@ export const enqueueAll = (
   songs: ReadonlyArray<PlayableSong>,
 ): Setlist =>
   Array.isReadonlyArrayNonEmpty(songs)
-    ? editQueue(setlist, queue => [...queue, ...songs])
+    ? editQueueAndForgetPlaylist(setlist, queue => [...queue, ...songs])
     : setlist
 
 export type PlaylistLoadMode = 'Replace' | 'Append'
@@ -243,7 +241,7 @@ export const moveInQueue = (
 
 export const removeFromQueue = (setlist: Setlist, index: number): Setlist =>
   Number.isInteger(index) && index >= 0 && index < setlist.queue.length
-    ? editQueue(setlist, queue => withoutQueued(queue, index))
+    ? editQueueAndForgetPlaylist(setlist, queue => withoutQueued(queue, index))
     : setlist
 
 export const playFromQueue = (setlist: Setlist, index: number): Setlist => {
