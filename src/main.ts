@@ -6,6 +6,7 @@ import { UrlRequest, load, pushUrl } from 'foldkit/navigation'
 import { modifyFields } from 'foldkit/struct'
 import { Url, toString as urlToString } from 'foldkit/url'
 
+import * as Hire from './page/commission/hire'
 import * as Karaoke from './page/karaoke/karaoke'
 import { editTokenOfHash } from './page/karaoke/playlists'
 import { view as karaokeView } from './page/karaoke/view'
@@ -20,6 +21,7 @@ export const Model = Schema.Struct({
   route: AppRoute,
   karaoke: Karaoke.Model,
   songs: Songs.Model,
+  hire: Hire.Model,
 })
 export type Model = typeof Model.Type
 
@@ -32,6 +34,7 @@ export const Message = defineMessageUnion({
   ChangedUrl: { url: Url },
   GotKaraokeMessage: { message: Karaoke.Message },
   GotSongsMessage: { message: Songs.Message },
+  GotHireMessage: { message: Hire.Message },
 })
 export type Message = typeof Message.Type
 
@@ -94,6 +97,16 @@ const foldSongsEntered = Update.foldChildStep({
   ...songsChild,
 })
 
+const hireChild = {
+  read: (model: Model) => Option.some(model.hire),
+  write: (model: Model, nextHire: Hire.Model) =>
+    modifyFields(model, { hire: () => nextHire }),
+  toParentMessage: (message: Hire.Message): Message =>
+    Message.GotHireMessage({ message }),
+}
+
+const foldHire = Update.foldChild({ update: Hire.update, ...hireChild })
+
 export const subscriptions = Subscription.lift(Karaoke.subscriptions)<
   Model,
   Message
@@ -122,6 +135,7 @@ const enterRoute =
           foldKaraokeEntered,
         ]),
       Songs: () => foldSongsEntered(model),
+      Hire: () => ({ model }),
     })
 
 const pickUpEditToken =
@@ -138,6 +152,7 @@ const pickUpEditToken =
         }),
       Radio: () => ({ model }),
       Songs: () => ({ model }),
+      Hire: () => ({ model }),
       NotFound: () => ({ model }),
     })
 
@@ -183,6 +198,7 @@ export const update = (model: Model, message: Message) =>
 
     GotKaraokeMessage: ({ message }) => foldKaraoke(model, message),
     GotSongsMessage: ({ message }) => foldSongs(model, message),
+    GotHireMessage: ({ message }) => foldHire(model, message),
   })
 
 // INIT
@@ -192,6 +208,7 @@ export const init: Runtime.RoutingApplicationInit<Model, Message> = url => {
     route: urlToAppRoute(url),
     karaoke: Karaoke.init(),
     songs: Songs.init(),
+    hire: Hire.init(),
   }
   return isRadioRoute(start.route)
     ? Update.combine(start, [
@@ -227,11 +244,20 @@ const routeView = (
         toParentMessage: message => Message.GotSongsMessage({ message }),
       }),
     ],
+    Hire: () => [
+      h.submodel({
+        slotId: 'hire',
+        model: model.hire,
+        view: Hire.view,
+        toParentMessage: message => Message.GotHireMessage({ message }),
+      }),
+    ],
   })
 
 const titleOf = (model: Model): string =>
   AppRoute.match<string>(model.route, {
     Songs: () => 'Songs | Fio Radio',
+    Hire: () => "Hire Fio's voice | Fio Radio",
     Playlist: () =>
       Option.match(Karaoke.openedPlaylistNameOf(model.karaoke), {
         onNone: () => 'Fio Radio',
