@@ -32,6 +32,25 @@ ssh -fN -M -S /tmp/fio-tunnel -L 13100:127.0.0.1:3100 devbox
 export BASE_URL=http://localhost:13100
 ```
 
+## Discord login
+
+Login never talks to the real Discord in a proof. `fake-discord.mjs` stands in for it. It approves every login at once as its current user, and `GET /fake/as?id=<17 to 20 digits>&name=<name>` changes that user for the next login. `GET /fake/refuse?on=1` makes the code exchange fail, until `on=0`. The `playlistDiscord*` journeys start their own fake and server, so they need none of the setup below.
+
+Start the fake, then launch the server with the same throwaway client values. `SITE_ORIGIN` is the origin the browser or `curl` uses, so set it to the proxy harness when you drive through the harness.
+
+```sh
+export DISCORD_CLIENT_ID=fake-client DISCORD_CLIENT_SECRET=fake-secret
+FAKE_DISCORD_PORT=4457 node .claude/skills/verify/fake-discord.mjs &
+DISCORD_API_BASE=http://127.0.0.1:4457 SITE_ORIGIN=http://127.0.0.1:3456 \
+  VERIFY_PORT=3456 .claude/skills/verify/launch.sh
+curl -sL -c jar -b jar http://127.0.0.1:3456/api/auth/discord/start -o /dev/null
+curl -s -b jar http://127.0.0.1:3456/api/auth/me
+```
+
+A write that uses the session cookie needs `-H "Origin: $SITE_ORIGIN"`. The session cookie carries `Secure` only when `SITE_ORIGIN` is https, so a local `curl` jar sends it back over http.
+
+To drive the Vercel proxy, start `proxy-harness.mjs` with `HARNESS_PORT`, `API_ORIGIN` set to the server and the same `PROXY_SECRET` as the server, and set `SITE_ORIGIN` to the harness origin. The owner routes for the bot live on the admin listener. Set `ADMIN_SECRET` and `ADMIN_PORT`, then call `/admin/owner/playlists` with `Authorization: Bearer $ADMIN_SECRET` and `X-Acting-Discord-Id`.
+
 ## Doctor
 
 Run this first whenever something looks wrong. It only reads.
@@ -49,7 +68,7 @@ Require `server: ours`, the expected Foldkit version, and a non-zero count of so
 (cd .claude/skills/verify && node drive.mjs karaoke info)   # chosen journeys
 ```
 
-The journeys are `site`, `radio`, `karaoke`, `songs`, `player`, `segmentSkip`, `coverEnd`, `strictAutoplay`, `queueReorder`, `queueReorderTouch`, `unavailable`, `loadRetry`, `lyricsRetry`, `fetchFailure`, `storage`, `navigation`, `paths`, `info`, `volume`, `mobilePlayer`, `mobile`, and `api`. `features/README.md` maps each one to what it proves. The exit code is non-zero if any check fails. A failed `step` that passes its page saves `<journey>-step-<n>-failure.png`.
+The journeys are `playlistOpen`, `playlistChoice`, `playlistNavigation`, `playlistSlowFetch`, `playlistFocus`, `playlistGone`, `playlistUnavailable`, `playlistFallback`, `playlistMobile`, `playlistTiming`, `playlistSave`, `playlistShare`, `playlistEdit`, `playlistCopy`, `playlistNoStorage`, `playlistLimit`, `playlistSaveMobile`, `playlistSaveTiming`, `playlistDiscord`, `playlistDiscordEdge`, `playlistDiscordFailure`, `playlistDiscordUnavailable`, `playlistDiscordTiming`, `site`, `radio`, `karaoke`, `songs`, `player`, `segmentSkip`, `coverEnd`, `strictAutoplay`, `queueReorder`, `queueReorderTouch`, `unavailable`, `loadRetry`, `lyricsRetry`, `fetchFailure`, `storage`, `navigation`, `paths`, `info`, `volume`, `mobilePlayer`, `mobile`, and `api`. `features/README.md` maps each one to what it proves. `playlistFallback` edits the server's own playlists database, which `drive.mjs` finds in `.run/playlists.path` (written by `launch.sh`). Against a server you started yourself, pass the same `PLAYLISTS_DB_PATH` to `drive.mjs`. The exit code is non-zero if any check fails. A failed `step` that passes its page saves `<journey>-step-<n>-failure.png`.
 
 Five journeys use `agent-browser` in a different way than a plain page. `player` holds YouTube's `iframe_api` script with `network route --body` and releases it by running the real script. `loadRetry` makes that script fail with `network route --abort` and later removes the route. `fetchFailure` makes `/api/get-karaoke` fail the same way. `lyricsRetry` answers every `/api/get-lyrics` request with a body that is not lyrics, through `network route --body`, and later removes the route. The blocked-storage checks in `player` and `storage` and the `strictAutoplay` and `queueReorderTouch` journeys each start a second session, because launch flags (`--init-script`, `--args`) apply only to a session's first command.
 

@@ -16,6 +16,10 @@
       "destination": "/index.html"
     },
     {
+      "source": "/p/:id",
+      "destination": "/index.html"
+    },
+    {
       "source": "/api/:path*",
       "destination": "/api/proxy?path=:path*"
     }

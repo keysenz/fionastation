@@ -1,6 +1,7 @@
 import { DatabaseSync } from 'node:sqlite'
 
 import type { KaraokeSong, KaraokeVideoJson, VideoKind } from '../src/domain.ts'
+import type { PlaylistEntry } from '../src/playlist.ts'
 import type { SongForLyrics } from './lyricsMatch.ts'
 
 interface VideoRow {
@@ -102,4 +103,16 @@ export function findSongForLyrics(id: string): SongForLyrics | undefined {
     kind: row.kind,
     ...(Number.isFinite(nextStart) ? { spanSeconds: nextStart - start } : {}),
   }
+}
+
+export function findSongsForPlaylist(ids: readonly string[]): PlaylistEntry[] {
+  if (ids.length === 0) return []
+  return db()
+    .prepare(
+      `SELECT s.id AS songId, v.video_url AS videoUrl, s.timestamp, s.song_title AS title
+       FROM karaoke_song s
+       JOIN karaoke_video v ON v.id = s.video_id
+       WHERE s.id IN (${ids.map(() => '?').join(', ')})`,
+    )
+    .all(...ids) as unknown as PlaylistEntry[]
 }

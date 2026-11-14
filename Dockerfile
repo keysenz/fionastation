@@ -11,6 +11,7 @@ ENV NODE_ENV=production PORT=3000 HOSTNAME=0.0.0.0
 COPY --from=build /app/package.json ./
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/server ./server
+COPY --from=build /app/src/playlistName.ts ./src/playlistName.ts
 # uid 1000 matches the bot's user, which owns the database's -shm and -wal files.
 USER node
 CMD ["node", "--disable-warning=ExperimentalWarning", "server/main.ts"]

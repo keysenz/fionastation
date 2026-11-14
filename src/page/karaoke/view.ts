@@ -11,14 +11,18 @@ import {
 } from '../../domain.ts'
 import { songsRouter } from '../../route'
 import { type LoadFailure, thumbnailUrl } from '../../youtube'
+import type { LoginFailure } from './account.ts'
 import { infoButtonView, infoPanelView } from './info.ts'
 import {
+  CANCEL_CHOICE,
   Message,
   type Model,
   MountPlayer,
+  PLAYLIST_PROMPT_ID,
+  REPLACE_CHOICE,
   SETLIST_PANE_ID,
   SONG_LIST_ID,
-  type SkipToast,
+  Toast,
   allSongs,
   nowSingingOf,
   queueHandleId,
@@ -29,11 +33,19 @@ import {
   lyricsColumnView,
   lyricsWindowView,
 } from './lyricsView.ts'
+import { PlaylistOpen } from './playlistOpen.ts'
+import {
+  myPlaylistsButtonView,
+  openPlaylistBarView,
+  playlistDialogView,
+  savePlaylistButtonView,
+} from './playlistsView.ts'
 import {
   type NowPlaying,
   Phase,
   type PlaybackIntent,
   type Repeat,
+  type Setlist,
   type Volume,
   intentOf,
   isSilent,
@@ -737,29 +749,47 @@ const headerView = (model: Model, h: HtmlBuilder<Message>): Html =>
         [h.Class('flex items-center justify-between mb-2')],
         [
           h.div(
-            [h.Class('flex items-center space-x-3')],
+            [h.Class('flex min-w-0 items-center space-x-3')],
             [
               infoButtonView(model.isInfoOpen, h),
               h.h1(
                 [
                   h.Class(
-                    'text-xl font-bold tracking-tight text-[#446e92] uppercase drop-shadow-md',
+                    'text-lg sm:text-xl font-bold tracking-tight text-[#446e92] uppercase drop-shadow-md whitespace-nowrap',
                   ),
                 ],
                 ['Fio Radio'],
               ),
             ],
           ),
-          h.a(
+          h.div(
+            [h.Class('flex shrink-0 items-center gap-1.5 sm:gap-2')],
             [
-              h.Href(songsRouter()),
-              h.Class(
-                'flex items-center gap-2 min-h-10 px-4 rounded-full border border-white/15 bg-black/40 text-sm font-semibold text-gray-100 hover:bg-white/10 drop-shadow-md transition',
+              myPlaylistsButtonView(h),
+              savePlaylistButtonView(h),
+              h.a(
+                [
+                  h.Href(songsRouter()),
+                  h.Class(
+                    'flex shrink-0 items-center gap-2 min-h-10 px-3 sm:px-4 whitespace-nowrap rounded-full border border-white/15 bg-black/40 text-sm font-semibold text-gray-100 hover:bg-black/70 hover:border-white/30 drop-shadow-md transition',
+                  ),
+                ],
+                [
+                  h.span(
+                    [h.Class('hidden sm:inline')],
+                    [h.i([h.Class('fas fa-music'), h.AriaHidden(true)])],
+                  ),
+                  'Song list',
+                ],
               ),
             ],
-            [h.i([h.Class('fas fa-music'), h.AriaHidden(true)]), 'Song list'],
           ),
         ],
+      ),
+      PlaylistOpen.matchOrElse(
+        model.playlistOpen,
+        { Opened: ({ opened }) => openPlaylistBarView(model, opened, h) },
+        () => h.empty,
       ),
       h.div(
         [h.Class('mb-2 relative')],
@@ -1819,19 +1849,43 @@ const playerView = (
   )
 }
 
-const skipToastMessage = ({
-  firstSkippedTitle,
-  skippedCount,
-}: SkipToast): string =>
-  skippedCount === 1
-    ? `"${firstSkippedTitle}" was skipped because its stream is gone.`
-    : `"${firstSkippedTitle}" and ${skippedCount - 1} more were skipped because their streams are gone.`
+const loginFailureText: Record<LoginFailure, string> = {
+  state:
+    'That Discord login did not start in this browser. Press Connect Discord to try again.',
+  limit: 'Too many login attempts. Wait a few minutes, then try again.',
+  refused:
+    'Discord did not complete the login. Press Connect Discord to try again.',
+}
 
-const skipToastView = (toast: SkipToast, h: HtmlBuilder<Message>): Html =>
+const toastMessage = (toast: Toast): string =>
+  Toast.match<string>(toast, {
+    SkippedSongs: ({ firstSkippedTitle, skippedCount }) =>
+      skippedCount === 1
+        ? `"${firstSkippedTitle}" was skipped because its stream is gone.`
+        : `"${firstSkippedTitle}" and ${skippedCount - 1} more were skipped because their streams are gone.`,
+    PlaylistDeleted: () => 'This playlist was deleted.',
+    PlaylistNotFound: () => 'That playlist link does not lead anywhere.',
+    PlaylistUnreachable: () =>
+      'Could not load the playlist. Reload to try again.',
+    PlaylistConflict: () =>
+      'Someone else changed this playlist first. It was reloaded, so look it over and try again.',
+    PlaylistUpdated: () => 'Playlist saved.',
+    LoginFailed: ({ reason }) => loginFailureText[reason],
+    DisconnectFailed: () =>
+      'Could not disconnect Discord. Check your connection and try again.',
+    PlaylistSongsUnavailable: ({ count }) =>
+      `${songCountText(count)} from the playlist ${count === 1 ? 'is' : 'are'} not available and ${count === 1 ? 'was' : 'were'} skipped.`,
+  })
+
+const toastView = (toast: Toast, h: HtmlBuilder<Message>): Html =>
   h.div(
     [
       h.Role('status'),
       h.AriaLive('polite'),
+      h.DataAttribute('toast', toast._tag),
+      ...(toast._tag === 'LoginFailed'
+        ? [h.DataAttribute('toast-reason', toast.reason)]
+        : []),
       h.Class(
         'fixed bottom-24 left-1/2 -translate-x-1/2 z-[60] w-[calc(100vw-2rem)] max-w-md flex items-start gap-3 bg-black/80 backdrop-blur-xl border border-white/10 text-white rounded-xl shadow-2xl p-3',
       ),
@@ -1843,7 +1897,7 @@ const skipToastView = (toast: SkipToast, h: HtmlBuilder<Message>): Html =>
       ]),
       h.p(
         [h.Class('flex-1 min-w-0 text-sm break-words')],
-        [skipToastMessage(toast)],
+        [toastMessage(toast)],
       ),
       h.button(
         [
@@ -1856,6 +1910,133 @@ const skipToastView = (toast: SkipToast, h: HtmlBuilder<Message>): Html =>
       ),
     ],
   )
+
+const promptButtonClass =
+  'flex items-center justify-center gap-2 min-h-11 px-4 rounded-full border border-white/15 text-sm font-semibold transition'
+
+const playlistContextOf = (setlist: Setlist) => {
+  const isPlaying = Option.isSome(setlist.maybeNowPlaying)
+  const isQueued = setlist.queue.length > 0
+  return isPlaying && isQueued
+    ? {
+        tag: 'PlayingAndQueued',
+        text: 'A song is playing and your queue has songs in it.',
+      }
+    : isPlaying
+      ? { tag: 'Playing', text: 'A song is already playing.' }
+      : { tag: 'Queued', text: 'Your queue already has songs in it.' }
+}
+
+const playlistPromptView = (
+  asking: Extract<PlaylistOpen, { _tag: 'Asking' }>,
+  setlist: Setlist,
+  h: HtmlBuilder<Message>,
+): Html => {
+  const context = playlistContextOf(setlist)
+  const wrapFocus = (focusSelector: string) =>
+    Option.some({
+      focusSelector,
+      message: Message.CompletedFocusPlaylistPrompt(),
+    })
+  return h.div(
+    [
+      h.Class('fixed inset-0 z-[70] flex items-center justify-center p-4'),
+      h.OnKeyDownPreventDefault(key =>
+        key === 'Escape'
+          ? Option.some(Message.ClickedCancelPlaylist())
+          : Option.none(),
+      ),
+    ],
+    [
+      h.div([
+        h.Class('absolute inset-0 bg-black/60'),
+        h.AriaHidden(true),
+        h.OnClick(Message.ClickedCancelPlaylist()),
+      ]),
+      h.div(
+        [
+          h.Id(PLAYLIST_PROMPT_ID),
+          h.Role('dialog'),
+          h.AriaModal(true),
+          h.AriaLabelledBy(`${PLAYLIST_PROMPT_ID}-title`),
+          h.Class(
+            'relative w-full max-w-md rounded-xl border border-white/10 bg-black/80 backdrop-blur-xl text-white shadow-2xl outline-none p-5 space-y-4',
+          ),
+        ],
+        [
+          h.h1(
+            [
+              h.Id(`${PLAYLIST_PROMPT_ID}-title`),
+              h.Class('text-lg font-bold break-words'),
+            ],
+            [asking.opened.name],
+          ),
+          h.p(
+            [
+              h.Class('text-sm text-gray-300'),
+              h.DataAttribute('playlist-context', context.tag),
+            ],
+            [`${songCountText(asking.songs.length)} to play. ${context.text}`],
+          ),
+          h.div(
+            [h.Class('flex flex-col gap-2')],
+            [
+              h.button(
+                [
+                  h.Type('button'),
+                  h.DataAttribute('playlist-choice', 'Replace'),
+                  h.OnKeyDownFocus((key, { shiftKey }) =>
+                    key === 'Tab' && shiftKey
+                      ? wrapFocus(CANCEL_CHOICE)
+                      : Option.none(),
+                  ),
+                  h.OnClick(Message.ClickedReplaceQueueWithPlaylist()),
+                  h.Class(
+                    twMerge(
+                      promptButtonClass,
+                      'bg-[#446e92] hover:bg-[#54809f]',
+                    ),
+                  ),
+                ],
+                ['Replace queue'],
+              ),
+              h.button(
+                [
+                  h.Type('button'),
+                  h.DataAttribute('playlist-choice', 'Append'),
+                  h.OnClick(Message.ClickedAddPlaylistToQueue()),
+                  h.Class(
+                    twMerge(promptButtonClass, 'bg-white/10 hover:bg-white/20'),
+                  ),
+                ],
+                ['Add to queue'],
+              ),
+              h.button(
+                [
+                  h.Type('button'),
+                  h.DataAttribute('playlist-choice', 'Cancel'),
+                  h.OnKeyDownFocus((key, { shiftKey }) =>
+                    key === 'Tab' && !shiftKey
+                      ? wrapFocus(REPLACE_CHOICE)
+                      : Option.none(),
+                  ),
+                  h.OnClick(Message.ClickedCancelPlaylist()),
+                  h.Class(
+                    twMerge(
+                      promptButtonClass,
+                      'text-gray-300 hover:bg-white/10',
+                    ),
+                  ),
+                ],
+                ['Cancel'],
+              ),
+            ],
+          ),
+        ],
+      ),
+    ],
+  )
+}
 
 export const view = Submodel.defineView<Model, Message>((model, h): Html =>
   h.div(
@@ -1899,8 +2080,14 @@ export const view = Submodel.defineView<Model, Message>((model, h): Html =>
       }),
       Option.match(model.maybeSkipToast, {
         onNone: () => h.empty,
-        onSome: toast => skipToastView(toast, h),
+        onSome: toast => toastView(toast, h),
       }),
+      PlaylistOpen.matchOrElse(
+        model.playlistOpen,
+        { Asking: asking => playlistPromptView(asking, model.setlist, h) },
+        () => h.empty,
+      ),
+      playlistDialogView(model, h),
       model.isInfoOpen ? infoPanelView(h) : h.empty,
     ],
   ),

@@ -47,6 +47,7 @@ Each sequence has up to 150 actions, 52 to 80 consecutive plays to reach the his
 | `retry-reloads-the-same-song-and-counts-up` | A retry of a failed load is a new play of the same song with the queue and history unchanged, and `attempt` goes up by one, whoever asked. A retry the visitor asked for plays. A retry of a play whose load did not fail changes nothing. Any other new play starts at attempt 1. |
 | `automatic-retries-double-then-stop` | `loadRetryDelaySeconds` is 2, 4 and 8 for attempts 1 to 3, and nothing after. |
 | `reload-restores-queue-and-history` | Saving and restoring keeps the queue and history, and nothing plays. |
+| `playlist-ids-follow-the-session` | A saved playlist holds each source's songs in play order. Up next is the queue, Played is the history oldest first, and Whole session is played, then playing, then queued. A repeated song stays once at its first place, and a gone video or a gone stream is left out. |
 
 "Playing with no current song" is no longer a property, because the `NowPlaying` type cannot represent it.
 

@@ -7,11 +7,12 @@ import { modifyFields } from 'foldkit/struct'
 import { Url, toString as urlToString } from 'foldkit/url'
 
 import * as Karaoke from './page/karaoke/karaoke'
+import { editTokenOfHash } from './page/karaoke/playlists'
 import { view as karaokeView } from './page/karaoke/view'
 import * as Songs from './page/songs/songs'
 import { view as songsView } from './page/songs/view'
 import { notFoundView } from './page/static'
-import { AppRoute, urlToAppRoute } from './route'
+import { AppRoute, isRadioRoute, urlToAppRoute } from './route'
 
 // MODEL
 
@@ -99,15 +100,46 @@ export const subscriptions = Subscription.lift(Karaoke.subscriptions)<
 >({
   read: karaokeChild.read,
   toParentMessage: karaokeChild.toParentMessage,
-  when: model => model.route._tag === 'Radio',
+  when: model => isRadioRoute(model.route),
 })
 
-const enterRoute = (model: Model): UpdateReturn =>
-  AppRoute.match<UpdateReturn>(model.route, {
-    NotFound: () => ({ model }),
-    Radio: () => foldKaraokeEntered(model),
-    Songs: () => foldSongsEntered(model),
-  })
+const isSameRoute = (previous: AppRoute, next: AppRoute): boolean =>
+  previous._tag === next._tag &&
+  (previous._tag !== 'Playlist' ||
+    (next._tag === 'Playlist' && previous.id === next.id))
+
+const enterRoute =
+  (url: Url) =>
+  (model: Model): UpdateReturn =>
+    AppRoute.match<UpdateReturn>(model.route, {
+      NotFound: () => ({ model }),
+      Radio: () => foldKaraokeEntered(model),
+      Playlist: ({ id }) =>
+        Update.combine(model, [
+          foldKaraokeStep(karaoke =>
+            Karaoke.openedPlaylist(karaoke, id, editTokenOfHash(url.hash)),
+          ),
+          foldKaraokeEntered,
+        ]),
+      Songs: () => foldSongsEntered(model),
+    })
+
+const pickUpEditToken =
+  (url: Url) =>
+  (model: Model): UpdateReturn =>
+    AppRoute.match<UpdateReturn>(model.route, {
+      Playlist: ({ id }) =>
+        Option.match(editTokenOfHash(url.hash), {
+          onNone: () => ({ model }),
+          onSome: editToken =>
+            foldKaraokeStep(karaoke =>
+              Karaoke.pickedUpEditToken(karaoke, id, editToken),
+            )(model),
+        }),
+      Radio: () => ({ model }),
+      Songs: () => ({ model }),
+      NotFound: () => ({ model }),
+    })
 
 export const update = (model: Model, message: Message) =>
   Message.match<UpdateReturn>(message, {
@@ -132,16 +164,21 @@ export const update = (model: Model, message: Message) =>
       const layers = foldKaraokeStep(model =>
         Karaoke.changedLayers(model, searchOf(url)),
       )
-      return nextRoute._tag === 'Radio'
-        ? Update.combine(nextModel, [
-            nextRoute._tag === model.route._tag
-              ? (next: Model) => ({ model: next })
-              : enterRoute,
-            layers,
-          ])
-        : nextRoute._tag === model.route._tag
-          ? { model: nextModel }
-          : enterRoute(nextModel)
+      const isStaying = isSameRoute(model.route, nextRoute)
+      const leftPlaylist =
+        model.route._tag === 'Playlist' && nextRoute._tag !== 'Playlist'
+          ? foldKaraokeStep(Karaoke.leftPlaylist)
+          : (next: Model) => ({ model: next })
+      const enter = (next: Model): UpdateReturn =>
+        isRadioRoute(nextRoute)
+          ? Update.combine(next, [
+              isStaying ? pickUpEditToken(url) : enterRoute(url),
+              layers,
+            ])
+          : isStaying
+            ? { model: next }
+            : enterRoute(url)(next)
+      return Update.combine(nextModel, [leftPlaylist, enter])
     },
 
     GotKaraokeMessage: ({ message }) => foldKaraoke(model, message),
@@ -156,15 +193,23 @@ export const init: Runtime.RoutingApplicationInit<Model, Message> = url => {
     karaoke: Karaoke.init(),
     songs: Songs.init(),
   }
-  return start.route._tag === 'Radio'
+  return isRadioRoute(start.route)
     ? Update.combine(start, [
-        enterRoute,
+        enterRoute(url),
         foldKaraokeStep(model => Karaoke.openedFromUrl(model, searchOf(url))),
       ])
-    : enterRoute(start)
+    : enterRoute(url)(start)
 }
 
 // VIEW
+
+const radioView = (model: Model, h: HtmlBuilder<Message>): Html =>
+  h.submodel({
+    slotId: 'karaoke',
+    model: model.karaoke,
+    view: karaokeView,
+    toParentMessage: message => Message.GotKaraokeMessage({ message }),
+  })
 
 const routeView = (
   model: Model,
@@ -172,14 +217,8 @@ const routeView = (
 ): ReadonlyArray<Html> =>
   AppRoute.match<ReadonlyArray<Html>>(model.route, {
     NotFound: () => [notFoundView(h)],
-    Radio: () => [
-      h.submodel({
-        slotId: 'karaoke',
-        model: model.karaoke,
-        view: karaokeView,
-        toParentMessage: message => Message.GotKaraokeMessage({ message }),
-      }),
-    ],
+    Radio: () => [radioView(model, h)],
+    Playlist: () => [radioView(model, h)],
     Songs: () => [
       h.submodel({
         slotId: 'songs',
@@ -190,8 +229,20 @@ const routeView = (
     ],
   })
 
+const titleOf = (model: Model): string =>
+  AppRoute.match<string>(model.route, {
+    Songs: () => 'Songs | Fio Radio',
+    Playlist: () =>
+      Option.match(Karaoke.openedPlaylistNameOf(model.karaoke), {
+        onNone: () => 'Fio Radio',
+        onSome: name => `${name} | Fio Radio`,
+      }),
+    Radio: () => 'Fio Radio',
+    NotFound: () => 'Fio Radio',
+  })
+
 export const view = (model: Model, h: HtmlBuilder<Message>): Document => ({
-  title: model.route._tag === 'Songs' ? 'Songs | Fio Radio' : 'Fio Radio',
+  title: titleOf(model),
   body: h.div(
     [h.Class('relative flex min-h-screen flex-col overflow-x-hidden')],
     [

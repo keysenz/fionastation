@@ -10,6 +10,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const realModule = join(here, '../../../src/page/karaoke/setlist.ts');
 const domainUrl = pathToFileURL(join(here, '../../../src/domain.ts')).href;
 const youtubeUrl = pathToFileURL(join(here, '../../../src/youtube.ts')).href;
+const playlistUrl = pathToFileURL(join(here, '../../../src/playlist.ts')).href;
 const modulePath = process.env.KARAOKE_SETLIST ?? realModule;
 const RUNS = Number(process.env.RUNS ?? 1000);
 
@@ -354,6 +355,20 @@ const properties = {
     if (Option.isSome(after.maybeNowPlaying)) fail('reload resumed playback');
   },
 
+  'playlist-ids-follow-the-session': (scene) => {
+    const end = walk(scene, () => {});
+    const { isGone } = continuationOf(scene);
+    const played = [...end.history].reverse();
+    const playing = current(end) && !S.isStreamGone(current(end).phase) ? [current(end).song] : [];
+    const ids = (songs) => [...new Set(songs.filter((s) => !isGone(s)).map((s) => s.id))];
+    const sources = { Queue: end.queue, History: played, Session: [...played, ...playing, ...end.queue] };
+    for (const [source, songs] of Object.entries(sources)) {
+      const { songIds, omittedCount } = S.playlistSongIds(end, source, isGone);
+      if (!same(songIds, ids(songs))) fail(`${source} saved ${songIds} in place of ${ids(songs)}`);
+      if (omittedCount !== 0) fail(`${source} omitted songs under the cap`);
+    }
+  },
+
   // Repeat One restarts the ended song with a new player and leaves the queue and history alone, whatever autoplay says.
   'repeat-one-restarts-the-ended-song': (scene) => {
     if (scene.repeat !== 'One') return;
@@ -436,6 +451,9 @@ const MUTANTS = [
   { property: 'repeat-one-restarts-the-ended-song', from: 'if (hasSong && continuation.repeat === \'One\') {', to: 'if (false) {' },
   { property: 'repeat-all-loops-the-queue', from: 'onSome: left => enqueue(setlist, left),', to: 'onSome: () => setlist,' },
   { property: 'repeat-all-loops-the-queue', from: "if (hasSong && continuation.repeat === 'All') {", to: 'if (false) {' },
+  { property: 'playlist-ids-follow-the-session', from: 'const played = Array.reverse(setlist.history)', to: 'const played = setlist.history' },
+  { property: 'playlist-ids-follow-the-session', from: ': [...played, ...playing, ...setlist.queue]', to: ': [...played, ...setlist.queue, ...playing]' },
+  { property: 'playlist-ids-follow-the-session', from: '({ song, phase }) => (isStreamGone(phase) ? [] : [song]),', to: '({ song }) => [song],' },
   { property: 'reload-restores-queue-and-history', from: 'queue: () => state.queue,', to: 'queue: queue => queue,' },
   { property: 'reload-restores-queue-and-history', from: 'history: () => state.history,', to: 'history: history => history,' },
 ];
@@ -444,7 +462,7 @@ function runMutants() {
   const dir = join(here, '.mutants');
   rmSync(dir, { recursive: true, force: true });
   mkdirSync(dir, { recursive: true });
-  const source = readFileSync(realModule, 'utf8').replace("'../../domain.ts'", `'${domainUrl}'`).replace("'../../youtube.ts'", `'${youtubeUrl}'`);
+  const source = readFileSync(realModule, 'utf8').replace("'../../domain.ts'", `'${domainUrl}'`).replace("'../../youtube.ts'", `'${youtubeUrl}'`).replace("'../../playlist.ts'", `'${playlistUrl}'`);
   let wrong = 0;
   MUTANTS.forEach((m, i) => {
     if (source.split(m.from).length !== 2) {

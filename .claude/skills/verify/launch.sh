@@ -16,12 +16,17 @@ fi
 
 npm run build >"$RUN/build.log" 2>&1 || { echo "build failed, see $RUN/build.log" >&2; exit 1; }
 
-DATABASE_PATH="$PWD/$RUN/karaoke.db" PORT="$PORT" HOSTNAME=127.0.0.1 \
+PLAYLISTS_DB_PATH="${PLAYLISTS_DB_PATH:-$(mktemp -d /tmp/fio-playlists-XXXXXX)/playlists.db}"
+export PLAYLISTS_DB_PATH
+echo "$PLAYLISTS_DB_PATH" >"$RUN/playlists.path"
+echo "playlists db $PLAYLISTS_DB_PATH"
+
+PLAYLISTS_IP_LIMIT_PER_HOUR="${PLAYLISTS_IP_LIMIT_PER_HOUR:-1000}" DATABASE_PATH="$PWD/$RUN/karaoke.db" PORT="$PORT" HOSTNAME=127.0.0.1 \
   setsid node --disable-warning=ExperimentalWarning server/main.ts >"$RUN/dev.log" 2>&1 &
 echo $! >"$RUN/pid"
 
 for _ in $(seq 1 90); do
-  if curl -sf --max-time 30 "http://localhost:$PORT/api/get-karaoke" | grep -q song_title; then
+  if curl -sf --max-time 30 -H "x-proxy-secret: ${PROXY_SECRET:-}" "http://localhost:$PORT/api/get-karaoke" | grep -q song_title; then
     echo "ready on http://localhost:$PORT (pid $(cat "$RUN/pid"))"
     exit 0
   fi

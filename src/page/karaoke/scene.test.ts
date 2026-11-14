@@ -1,4 +1,4 @@
-import { DateTime } from 'effect'
+import { DateTime, Option, Schema } from 'effect'
 import {
   Command,
   Mount,
@@ -13,7 +13,9 @@ import {
 import { test } from 'vitest'
 
 import type { PlayableSong } from '../../domain.ts'
+import { Playlist } from '../../playlist.ts'
 import { PlayerEvent } from '../../youtube'
+import { Account } from './account.ts'
 import {
   Message,
   type Model,
@@ -213,5 +215,139 @@ test('lyrics whose automatic retries ran out show that the radio gave up, and st
     expect(retryGaveUp).toExist(),
     expect(retryWaiting).toBeAbsent(),
     inside(retryGaveUp, expect(button('Try again')).toBeEnabled()),
+  )
+})
+
+const entryOf = (song: PlayableSong) => ({
+  songId: song.id,
+  videoUrl: song.video_url,
+  timestamp: song.timestamp,
+  title: song.song_title,
+})
+
+const playlistAB = Schema.decodeSync(Playlist)({
+  id: 'Ab3dE5gH',
+  name: 'Road trip',
+  entries: [entryOf(a), entryOf(b)],
+  version: 1,
+  createdAt: 'x',
+  updatedAt: 'x',
+})
+
+const askedAfter = (...setup: ReadonlyArray<Message>): Model =>
+  after(
+    fetched(a, b),
+    ...setup,
+    Message.OpenedPlaylist({
+      id: playlistAB.id,
+      maybeEditToken: Option.none(),
+    }),
+    Message.CompletedLoadSavedSetlist({ maybeJson: Option.none() }),
+    Message.SucceededFetchPlaylist({ playlist: playlistAB }),
+  )
+
+const contextIs = (context: string) =>
+  expect(selector(`[data-playlist-context="${context}"]`)).toExist()
+
+test('the question says a song is playing when the queue is empty', () => {
+  scene(
+    { update, view },
+    given(askedAfter(Message.ClickedSong({ song: a }))),
+    playerMounted,
+    contextIs('Playing'),
+  )
+})
+
+test('the question says the queue has songs when nothing is playing', () => {
+  scene(
+    { update, view },
+    given(askedAfter(Message.ClickedAddToQueue({ song: a }))),
+    contextIs('Queued'),
+  )
+})
+
+test('the question says both when a song plays over a queue', () => {
+  scene(
+    { update, view },
+    given(
+      askedAfter(
+        Message.ClickedSong({ song: a }),
+        Message.ClickedAddToQueue({ song: b }),
+      ),
+    ),
+    playerMounted,
+    contextIs('PlayingAndQueued'),
+  )
+})
+
+const nothingToSave = selector('[data-playlist-problem="NothingToSave"]')
+
+test('the save dialog tells a visitor with no songs to play or queue one first', () => {
+  scene(
+    { update, view },
+    given(after(fetched(a, b), Message.ClickedSavePlaylist())),
+    expect(nothingToSave).toExist(),
+  )
+})
+
+test('the save dialog has no such hint once a song is queued', () => {
+  scene(
+    { update, view },
+    given(
+      after(
+        fetched(a, b),
+        Message.ClickedAddToQueue({ song: a }),
+        Message.ClickedSavePlaylist(),
+      ),
+    ),
+    expect(nothingToSave).toBeAbsent(),
+  )
+})
+
+const accountSection = (tag: string) => selector(`[data-account="${tag}"]`)
+const connectButton = selector('[data-playlist-action="Connect"]')
+const listing = (account: Model['account']): Model => ({
+  ...after(Message.ClickedOpenMyPlaylists()),
+  account,
+})
+
+test('a signed-out visitor is offered Connect Discord in the playlists dialog', () => {
+  scene(
+    { update, view },
+    given(listing(Account.SignedOut())),
+    expect(connectButton).toExist(),
+    expect(accountSection('Connected')).toBeAbsent(),
+  )
+})
+
+test.each([Account.Loading(), Account.Unavailable()])(
+  'Connect Discord is not offered while the account is %s',
+  account => {
+    scene(
+      { update, view },
+      given(listing(account)),
+      expect(connectButton).toBeAbsent(),
+      expect(selector('[data-my-playlists]')).toExist(),
+    )
+  },
+)
+
+test('a display name with markup is shown as text and never becomes an element', () => {
+  scene(
+    { update, view },
+    given(
+      listing(
+        Account.Connected({
+          name: '<img src=x onerror=alert(1)>',
+          playlists: [],
+        }),
+      ),
+    ),
+    expect(accountSection('Connected')).toExist(),
+    expect(selector('[data-account-name]')).toHaveText(
+      '<img src=x onerror=alert(1)>',
+    ),
+    expect(selector('img[src="x"]')).toBeAbsent(),
+    expect(connectButton).toBeAbsent(),
   )
 })
