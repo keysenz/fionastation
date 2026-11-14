@@ -33,7 +33,6 @@ export const InquiryPayload = Schema.Struct({
 })
 export type InquiryPayload = typeof InquiryPayload.Type
 
-/** Body of a success reply once the route exists. The Sent screen does not read it yet. */
 export const InquiryReply = Schema.Struct({
   id: Schema.String,
   trackingUrl: Schema.String,

@@ -53,14 +53,11 @@ export type FormSpec = Readonly<{
 
 export const NonEmpty = Schema.Trim.pipe(Schema.check(Schema.isNonEmpty()))
 
-export const OptionalLink = Schema.Union([
-  Schema.Literal(''),
-  Schema.String.check(Schema.isPattern(/^https?:\/\/\S+\.\S+$/)),
-])
-
 export const Link = Schema.String.check(
   Schema.isPattern(/^https?:\/\/\S+\.\S+$/),
 )
+
+export const OptionalLink = Schema.Union([Schema.Literal(''), Link])
 
 export const Agreed = Schema.Literal('yes')
 
