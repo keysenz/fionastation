@@ -1647,7 +1647,7 @@ const threeLines: Lyrics = {
     { atMs: 20000, text: 'three' },
   ],
   offsetMs: 0,
-  credit: { lrclibId: 1, track: 'T', artist: 'A' },
+  credit: { source: 'LRCLIB', lrclibId: 1, track: 'T', artist: 'A' },
 }
 
 test('a position report from another play changes nothing', () => {

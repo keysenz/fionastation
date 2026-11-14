@@ -10,7 +10,10 @@ export const LyricLine = Schema.Struct({
 export type LyricLine = typeof LyricLine.Type
 
 export const LyricsCredit = Schema.Struct({
-  lrclibId: Schema.Int,
+  /** Where the lines came from, shown under the lyrics. `LRCLIB`, or the
+   *  place a local file cites. */
+  source: Schema.String,
+  lrclibId: Schema.optional(Schema.Int),
   track: Schema.String,
   artist: Schema.String,
 })

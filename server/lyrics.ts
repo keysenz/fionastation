@@ -3,6 +3,11 @@ import { existsSync, readFileSync } from 'node:fs'
 import type { Lyrics } from '../src/lyrics.ts'
 import { LrclibUnavailable, getTrack, searchTracks } from './lrclib.ts'
 import {
+  type LocalLyrics,
+  localLyricsFor,
+  loadLocalLyrics,
+} from './localLyrics.ts'
+import {
   type Alignments,
   type LookupPlan,
   type LrclibTrack,
@@ -63,6 +68,8 @@ export function warnAboutUnknownSongs(
     }
   }
 }
+
+export { loadLocalLyrics }
 
 type Cached = Readonly<{
   tracks: ReadonlyArray<LrclibTrack>
@@ -158,6 +165,7 @@ export async function lookupLyrics(
   song: SongForLyrics,
   overrides: Overrides,
   alignments: Alignments,
+  local: LocalLyrics,
 ): Promise<LyricsLookup> {
   const { plan, offsetMs, ignoredSongFix } = planLookup(song, overrides)
   if (ignoredSongFix) {
@@ -167,6 +175,15 @@ export async function lookupLyrics(
   }
   if (plan.kind === 'Hide') {
     return { kind: 'Answered', lyrics: { _tag: 'Missing', reason: 'Hidden' } }
+  }
+  const localLyrics = localLyricsFor(
+    song,
+    local.get(song.id),
+    alignments.get(song.id),
+    offsetMs,
+  )
+  if (localLyrics !== undefined) {
+    return { kind: 'Answered', lyrics: localLyrics }
   }
   try {
     const tracks = await tracksFor(plan)

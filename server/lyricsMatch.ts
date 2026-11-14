@@ -308,6 +308,9 @@ export function judgeCandidates(
 export type AlignedSong = Readonly<{
   songTitle: string
   lrclibId: number
+  /** `Local` entries were timed from the text in lyrics-local.json, so they
+   *  time no LRCLIB track and must never replace one. */
+  source: 'LRCLIB' | 'Local'
   lines: SyncedLines
 }>
 
@@ -323,6 +326,7 @@ export function withAlignment(
   if (
     verdict.kind !== 'Picked' ||
     aligned === undefined ||
+    aligned.source === 'Local' ||
     aligned.lrclibId !== verdict.track.id ||
     normalizeTitle(aligned.songTitle) !== normalizeTitle(song.title)
   ) {
@@ -340,6 +344,7 @@ export function toLyrics(verdict: Verdict, offsetMs: number): Lyrics {
     lines: verdict.lines,
     offsetMs,
     credit: {
+      source: 'LRCLIB',
       lrclibId: verdict.track.id,
       track: verdict.track.trackName,
       artist: verdict.track.artistName,
@@ -468,17 +473,21 @@ export function parseAlignments(json: unknown): Alignments {
   for (const [id, entry] of Object.entries(json)) {
     const path = `$[${JSON.stringify(id)}]`
     if (!isRecord(entry)) throw new Error(`${path}: expected an object`)
-    const { status, songTitle, lrclibId, lines } = entry
+    const { status, songTitle, lrclibId, lines, source } = entry
     if (typeof songTitle !== 'string') {
       throw new Error(`${path}.songTitle: expected a string`)
     }
     if (typeof lrclibId !== 'number' || !Number.isSafeInteger(lrclibId)) {
       throw new Error(`${path}.lrclibId: expected an integer`)
     }
+    if (source !== undefined && source !== 'Local' && source !== 'LRCLIB') {
+      throw new Error(`${path}.source: expected LRCLIB, Local or nothing`)
+    }
     if (status === 'Aligned') {
       alignments.set(id, {
         songTitle,
         lrclibId,
+        source: source === 'Local' ? 'Local' : 'LRCLIB',
         lines: parseAlignedLines(lines, `${path}.lines`),
       })
     } else if (status !== 'Rejected') {

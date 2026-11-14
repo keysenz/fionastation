@@ -15,6 +15,7 @@ import { AUTH_ROUTES, createDiscordAuth } from './discordAuth.ts'
 import type { AuthRoute } from './discordAuth.ts'
 import {
   loadAlignments,
+  loadLocalLyrics,
   loadOverrides,
   lookupLyrics,
   warnAboutUnknownSongs,
@@ -161,6 +162,9 @@ const lyricsOverrides = loadOverrides(
 const lyricsAlignments = loadAlignments(
   join(import.meta.dirname, 'lyrics-aligned.json'),
 )
+const lyricsLocal = loadLocalLyrics(
+  join(import.meta.dirname, 'lyrics-local.json'),
+)
 
 const lyricsRoute = async (songId: string | null): Promise<ApiReply> => {
   if (!songId) {
@@ -178,7 +182,12 @@ const lyricsRoute = async (songId: string | null): Promise<ApiReply> => {
       cacheControl: NO_CACHE,
     }
   }
-  const lookup = await lookupLyrics(song, lyricsOverrides, lyricsAlignments)
+  const lookup = await lookupLyrics(
+    song,
+    lyricsOverrides,
+    lyricsAlignments,
+    lyricsLocal,
+  )
   return lookup.kind === 'Answered'
     ? { status: 200, body: lookup.lyrics, cacheControl: LYRICS_CACHE }
     : {

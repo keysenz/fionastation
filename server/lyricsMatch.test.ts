@@ -339,6 +339,7 @@ const pretenderLrclib = verdictForChosenTrack(
 const pretenderAligned = {
   songTitle: 'Pretender',
   lrclibId: 3821917,
+  source: 'LRCLIB',
   lines: [
     { atMs: 4380, text: '君とのラブストーリー' },
     { atMs: 7160, text: 'それは予想通り' },
@@ -388,6 +389,28 @@ test('an alignment is ignored unless it was made for this track and this title',
   }
 })
 
+test('an alignment timed from local text never replaces an LRCLIB pick', () => {
+  const local = { ...pretenderAligned, source: 'Local', lrclibId: 0 } as const
+  expect(
+    servedTimes(toLyrics(withAlignment(pretenderLrclib, song('Pretender'), local), 0)),
+  ).toEqual(lrclibTiming)
+})
+
+test('an alignment defaults to LRCLIB when it names no source', () => {
+  const aligned = parseAlignments({
+    a: {
+      songTitle: 'Pretender',
+      lrclibId: 3821917,
+      status: 'Aligned',
+      lines: pretenderAligned.lines,
+    },
+  }).get('a')
+  expect(aligned?.source).toBe('LRCLIB')
+  expect(
+    servedTimes(toLyrics(withAlignment(pretenderLrclib, song('Pretender'), aligned), 0)),
+  ).toEqual([4380, 7160])
+})
+
 test('an alignment never turns missing lyrics into lyrics', () => {
   expect(
     toLyrics(
@@ -411,9 +434,18 @@ test('parseAlignments keeps aligned songs and skips rejected ones', () => {
       reason: 'weak',
       aligner: 'x',
     },
+    c: {
+      songTitle: 'Gentari Hariku',
+      lrclibId: 0,
+      source: 'Local',
+      status: 'Aligned',
+      lines: [{ atMs: 1000, text: 'Waktu berlalu' }],
+    },
   })
-  expect([...alignments.keys()]).toEqual(['a'])
+  expect([...alignments.keys()]).toEqual(['a', 'c'])
   expect(alignments.get('a')?.lines).toEqual(pretenderAligned.lines)
+  expect(alignments.get('a')?.source).toBe('LRCLIB')
+  expect(alignments.get('c')?.source).toBe('Local')
 })
 
 test('the real alignments file parses', () => {
@@ -444,4 +476,9 @@ test('parseAlignments rejects bad files with a path', () => {
   expect(() =>
     parseAlignments({ a: { songTitle: 'S', lrclibId: 1, status: 'Maybe' } }),
   ).toThrow(/status/)
+  expect(() =>
+    parseAlignments({
+      a: { songTitle: 'S', lrclibId: 1, status: 'Aligned', source: 'Video', lines: [{ atMs: 1, text: 'a' }] },
+    }),
+  ).toThrow(/source/)
 })

@@ -223,7 +223,7 @@ const nudgeControlsView = (
       ),
       h.p(
         [h.Class('text-xs text-gray-500 text-center truncate max-w-full')],
-        [`Lyrics: LRCLIB · ${credit.track}, ${credit.artist}`],
+        [`Lyrics: ${credit.source} · ${credit.track}, ${credit.artist}`],
       ),
     ],
   )
