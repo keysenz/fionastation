@@ -19,6 +19,7 @@ import {
 } from './lyrics.ts'
 import {
   MAX_BODY_BYTES,
+  createAdminApi,
   createPlaylistApi,
   openPlaylistStore,
 } from './playlists.ts'
@@ -77,25 +78,31 @@ const readBody = (req: IncomingMessage) =>
 const createsPerIpPerHour =
   Number(process.env.PLAYLISTS_IP_LIMIT_PER_HOUR) || 10
 
-const playlistApi = (() => {
+const playlistStore = (() => {
   const path = process.env.PLAYLISTS_DB_PATH
   if (!path) {
     console.warn('PLAYLISTS_DB_PATH is not set, so playlists are unavailable')
     return undefined
   }
   try {
-    return createPlaylistApi({
-      store: openPlaylistStore({ path }),
-      findSongs: findSongsForPlaylist,
-      createsPerIpPerHour,
-    })
+    return openPlaylistStore({ path })
   } catch (error) {
     console.error('Could not open the playlists database:', error)
     return undefined
   }
 })()
 
+const playlistApi =
+  playlistStore &&
+  createPlaylistApi({
+    store: playlistStore,
+    findSongs: findSongsForPlaylist,
+    createsPerIpPerHour,
+  })
+
 const PLAYLIST_ROUTE = /^\/api\/playlists(?:\/([^/]+))?$/
+const ADMIN_ROUTE = /^\/admin\/playlists\/([^/]+)$/
+const ADMIN_PATH = /^\/(?:api\/)?admin(?:\/|$)/
 
 // NOTE: keep in step with src/route.ts. Any other path gets the 404 status with the app's own 404 page.
 const PAGE_PATHS = new Set(['/', '/songs'])
@@ -304,6 +311,10 @@ const handle = async (req: IncomingMessage, res: ServerResponse) => {
     return
   }
 
+  if (ADMIN_PATH.test(pathname)) {
+    return replyJson(404, { error: 'Not Found' }, 'no-store')
+  }
+
   const playlistRoute = PLAYLIST_ROUTE.exec(pathname)
   if (playlistRoute) {
     if (!hasProxySecret(req)) {
@@ -394,6 +405,42 @@ const server = createServer((req, res) => {
 server.listen(PORT, process.env.HOSTNAME ?? '0.0.0.0', () => {
   console.log(`listening on ${PORT}`)
 })
+
+const ADMIN_SECRET = process.env.ADMIN_SECRET
+const ADMIN_PORT = Number(process.env.ADMIN_PORT ?? 3001)
+
+const startAdminListener = (secret: string) => {
+  if (!playlistStore) {
+    console.warn('The playlists database is unavailable, so no admin listener')
+    return
+  }
+  const adminApi = createAdminApi({ store: playlistStore, secret })
+  const adminServer = createServer((req, res) => {
+    const route = ADMIN_ROUTE.exec(parsePath(req.url ?? '/')?.pathname ?? '')
+    const { status, body } = route
+      ? adminApi({
+          method: req.method ?? 'GET',
+          id: route[1],
+          authorization: req.headers.authorization,
+        })
+      : { status: 404, body: { error: 'Not Found' } }
+    res.writeHead(status, {
+      'Content-Type': JSON_TYPE,
+      'Cache-Control': 'no-store',
+    })
+    res.end(JSON.stringify(body))
+  })
+  adminServer.on('error', error => {
+    console.error('The admin listener failed:', error)
+  })
+  adminServer.listen(ADMIN_PORT, process.env.HOSTNAME ?? '0.0.0.0', () => {
+    console.log(`admin listening on ${ADMIN_PORT}`)
+  })
+}
+
+if (ADMIN_SECRET) {
+  startAdminListener(ADMIN_SECRET)
+}
 
 startRefreshing(() => listKaraokeVideos().map(video => video.video_url))
 

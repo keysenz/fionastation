@@ -10,6 +10,7 @@ import {
   MAX_BODY_BYTES,
   type PlaylistReply,
   type PlaylistStore,
+  createAdminApi,
   createPlaylistApi,
   openPlaylistStore,
 } from './playlists.ts'
@@ -531,5 +532,109 @@ describe('api', () => {
     expect(call('DELETE', undefined)).toBe(405)
     expect(call('POST', id)).toBe(405)
     expect(call('PATCH', id)).toBe(405)
+  })
+})
+
+describe('admin api', () => {
+  const SECRET = 'a-throwaway-admin-secret'
+  const adminHarness = () => {
+    const { post, send, store } = harness()
+    const admin = createAdminApi({ store, secret: SECRET })
+    const call = (
+      method: string,
+      id: string | undefined,
+      secret: string | null = SECRET,
+    ) =>
+      admin({
+        method,
+        id,
+        authorization: secret === null ? undefined : `Bearer ${secret}`,
+      })
+    const make = (name = 'Rainy day Fio', songIds = ['s1', 's2']) =>
+      bodyOf(post({ name, songIds }))
+    return { call, make, send }
+  }
+
+  test('GET summarises a live playlist without its entries or token', () => {
+    const { call, make } = adminHarness()
+    const { id } = make('Rainy day Fio', ['s1', 's2', 's3'])
+    const reply = call('GET', id)
+    expect(reply.status).toBe(200)
+    expect(reply.body).toEqual({
+      id,
+      name: 'Rainy day Fio',
+      entryCount: 3,
+      createdAt: '2026-11-14T10:00:00.000Z',
+      updatedAt: '2026-11-14T10:00:00.000Z',
+      deleted: false,
+    })
+  })
+
+  test('GET of an unknown or malformed id is 404', () => {
+    const { call } = adminHarness()
+    expect(call('GET', 'zzzzzzzz').status).toBe(404)
+    expect(call('GET', 'short').status).toBe(404)
+  })
+
+  test('a wrong, missing or malformed secret is 403 and changes nothing', () => {
+    const { call, make, send } = adminHarness()
+    const { id } = make()
+    expect(call('GET', id, 'wrong').status).toBe(403)
+    expect(call('GET', id, SECRET + 'x').status).toBe(403)
+    expect(call('DELETE', id, 'wrong').status).toBe(403)
+    expect(call('DELETE', id, null).status).toBe(403)
+    expect(
+      createAdminApi({ store: harness().store, secret: SECRET })({
+        method: 'GET',
+        id,
+        authorization: SECRET,
+      }).status,
+    ).toBe(403)
+    expect(send('GET', id, undefined).status).toBe(200)
+  })
+
+  test('DELETE leaves the row reporting deleted and the public read at 410', () => {
+    const { call, make, send } = adminHarness()
+    const { id } = make()
+    expect(call('DELETE', id).status).toBe(200)
+    expect(call('GET', id).body).toMatchObject({
+      id,
+      entryCount: 0,
+      deleted: true,
+    })
+    expect(send('GET', id, undefined).status).toBe(410)
+  })
+
+  test('DELETE twice answers 200 both times and the second changes nothing', () => {
+    const { call, make } = adminHarness()
+    const { id } = make()
+    expect(call('DELETE', id).status).toBe(200)
+    const before = call('GET', id).body
+    clock = new Date('2026-11-14T12:00:00Z')
+    expect(call('DELETE', id).status).toBe(200)
+    expect(call('GET', id).body).toEqual(before)
+  })
+
+  test('DELETE of an unknown id is 404', () => {
+    const { call } = adminHarness()
+    expect(call('DELETE', 'zzzzzzzz').status).toBe(404)
+  })
+
+  test('the owner can no longer edit a playlist the admin deleted', () => {
+    const { call, make, send } = adminHarness()
+    const { id, editToken } = make()
+    call('DELETE', id)
+    expect(
+      send('PUT', id, editToken, { name: 'n', songIds: ['s1'], version: 1 })
+        .status,
+    ).toBe(410)
+  })
+
+  test('methods outside GET and DELETE, and a missing id, are 405', () => {
+    const { call, make } = adminHarness()
+    const { id } = make()
+    expect(call('PUT', id).status).toBe(405)
+    expect(call('POST', id).status).toBe(405)
+    expect(call('GET', undefined).status).toBe(405)
   })
 })
