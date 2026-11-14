@@ -10,7 +10,7 @@ const DROPPED_HEADERS = [
   'transfer-encoding',
 ]
 
-const UNCACHED_PATH = /^(playlists|auth|stats-page)(\/|$)/
+const UNCACHED_PATH = /^(playlists|auth|stats-page|commission)(\/|$)/
 
 const visitorIp = (request: Request) =>
   request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || undefined

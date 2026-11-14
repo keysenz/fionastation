@@ -139,6 +139,33 @@ test('the quote follows the draft and is not stored in the model', () => {
   )
 })
 
+test('a reply with a tracking link is kept on the Sent screen, and Send another drops it', () => {
+  const trackingUrl =
+    '/commission/6f0e5d0a-5a43-4c52-9a56-2a8f0f6c0001?t=abc_-1'
+  story(
+    update,
+    given(init()),
+    ...toReview,
+    message(Message.ClickedSend()),
+    Command.resolve(
+      CreateInquiryId,
+      Message.CompletedCreateInquiryId({ id: 'id-1' }),
+    ),
+    Command.resolve(
+      SubmitInquiry,
+      Message.SucceededSubmitInquiry({ trackingUrl: Option.some(trackingUrl) }),
+    ),
+    model(current =>
+      expect(current.submission).toEqual({
+        _tag: 'Sent',
+        trackingUrl: Option.some(trackingUrl),
+      }),
+    ),
+    message(Message.ClickedStartOver()),
+    model(current => expect(current.submission._tag).toBe('Editing')),
+  )
+})
+
 test('the review step sends the answers and the quote text', () => {
   story(
     update,
@@ -150,7 +177,10 @@ test('the review step sends the answers and the quote text', () => {
       CreateInquiryId,
       Message.CompletedCreateInquiryId({ id: 'id-1' }),
     ),
-    Command.resolve(SubmitInquiry, Message.SucceededSubmitInquiry()),
+    Command.resolve(
+      SubmitInquiry,
+      Message.SucceededSubmitInquiry({ trackingUrl: Option.none() }),
+    ),
     model(current => {
       expect(current.submission._tag).toBe('Sent')
       expect(current.draft['name']).toBe('')
@@ -232,7 +262,10 @@ test('a failed send keeps the draft, shows the error, and can be retried', () =>
       expect(stepIndex(spec, current.step)).toBe(4)
     }),
     message(Message.ClickedSend()),
-    Command.resolve(SubmitInquiry, Message.SucceededSubmitInquiry()),
+    Command.resolve(
+      SubmitInquiry,
+      Message.SucceededSubmitInquiry({ trackingUrl: Option.none() }),
+    ),
     model(current => expect(current.submission._tag).toBe('Sent')),
   )
 })

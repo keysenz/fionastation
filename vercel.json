@@ -20,6 +20,10 @@
       "destination": "/index.html"
     },
     {
+      "source": "/commission/:id",
+      "destination": "/index.html"
+    },
+    {
       "source": "/p/:id",
       "destination": "/index.html"
     },

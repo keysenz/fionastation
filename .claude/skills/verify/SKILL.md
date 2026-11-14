@@ -72,6 +72,17 @@ The journeys are `playlistOpen`, `playlistChoice`, `playlistNavigation`, `playli
 
 Five journeys use `agent-browser` in a different way than a plain page. `player` holds YouTube's `iframe_api` script with `network route --body` and releases it by running the real script. `loadRetry` makes that script fail with `network route --abort` and later removes the route. `fetchFailure` makes `/api/get-karaoke` fail the same way. `lyricsRetry` answers every `/api/get-lyrics` request with a body that is not lyrics, through `network route --body`, and later removes the route. The blocked-storage checks in `player` and `storage` and the `strictAutoplay` and `queueReorderTouch` journeys each start a second session, because launch flags (`--init-script`, `--args`) apply only to a session's first command.
 
+## Commissions
+
+`commission.mjs` drives `/hire`, `/studio` and `/endorse` with Playwright against the real server and its commission store. `launch.sh` sets `COMMISSIONS_DB_PATH` (a temp file, recorded in `.run/commissions.path`), `COMMISSIONS_SECRET` and a high `COMMISSIONS_IP_LIMIT_PER_HOUR`. The journey submits each form for real, follows the tracking link from the Sent screen, then calls the admin listener (`ADMIN_URL`, default `http://127.0.0.1:3911`, with `ADMIN_SECRET`) to list unposted commissions, mark one posted, and move it through `quoted`, `deposit_paid` and `in_progress`, reloading the tracking page after each move. It also tries a forbidden move, a wrong token, an unknown id, a retry with the same id, and a different payload under that id. Only the first hire post is answered 500 from the browser, to prove the retry keeps its id.
+
+```sh
+.claude/skills/verify/launch.sh
+(cd .claude/skills/verify && CHROME_PATH=/path/to/chrome node commission.mjs)
+```
+
+Playwright is not installed in this directory. Link a `node_modules` that has `playwright`, or run `npm i playwright` here. Set `CHROME_PATH` when Playwright's own browser is missing. Screenshots land in `evidence/commission/`.
+
 ## Evidence
 
 Each run writes `results.json` and screenshots to `.claude/skills/verify/evidence/<timestamp>/`. The folder is gitignored and cleanup keeps it.

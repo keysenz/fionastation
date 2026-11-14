@@ -8,6 +8,9 @@ services:
       DATABASE_PATH: /data/karaoke.db
       # Set in .env next to this file. Vercel sends the same value with every /api request.
       PROXY_SECRET: ${PROXY_SECRET:?set PROXY_SECRET in .env}
+      COMMISSIONS_DB_PATH: ${COMMISSIONS_DB_PATH:-}
+      COMMISSIONS_SECRET: ${COMMISSIONS_SECRET:-}
+      COMMISSIONS_IP_LIMIT_PER_HOUR: ${COMMISSIONS_IP_LIMIT_PER_HOUR:-5}
     ports:
       - "127.0.0.1:3100:3000"
     volumes:

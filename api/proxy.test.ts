@@ -225,6 +225,34 @@ describe('stats page', () => {
   })
 })
 
+describe('commissions', () => {
+  const ID = '6f0e5d0a-5a43-4c52-9a56-2a8f0f6c0001'
+
+  it('never gives a tracking read the CDN cache header and passes the token up', async () => {
+    const sent = stubUpstream(ok)
+    const response = await GET(
+      new Request(`https://site.test/api/proxy?path=commission/${ID}&t=abc_-9`),
+    )
+    expect(response.headers.has(CDN)).toBe(false)
+    expect(sent[0]?.url).toBe(
+      `http://upstream.test/api/commission/${ID}?t=abc_-9`,
+    )
+  })
+
+  it('forwards an inquiry post with its body', async () => {
+    const sent = stubUpstream(() => Response.json({ id: ID }, { status: 201 }))
+    const response = await POST(
+      new Request('https://site.test/api/proxy?path=inquiry', {
+        method: 'POST',
+        body: '{"id":"x"}',
+      }),
+    )
+    expect(response.status).toBe(201)
+    expect(sent[0]?.url).toBe('http://upstream.test/api/inquiry')
+    expect(sent[0]?.init.method).toBe('POST')
+  })
+})
+
 describe('guards', () => {
   it('answers 500 when the proxy is not configured', async () => {
     vi.stubEnv('PROXY_SECRET', '')

@@ -1,6 +1,6 @@
 import { Array, Option, Schema } from 'effect'
 
-import { type Quote } from './pricing'
+import type { Quote } from './pricing.ts'
 
 export const INQUIRY_ROUTE = '/api/inquiry'
 
@@ -33,9 +33,13 @@ export const InquiryPayload = Schema.Struct({
 })
 export type InquiryPayload = typeof InquiryPayload.Type
 
+export const SameSiteTrackingPath = Schema.String.check(
+  Schema.isPattern(/^\/commission\/[0-9a-f-]{36}\?t=[A-Za-z0-9_-]+$/),
+)
+
 export const InquiryReply = Schema.Struct({
   id: Schema.String,
-  trackingUrl: Schema.String,
+  trackingUrl: SameSiteTrackingPath,
 })
 
 export const snapshotOf = (quote: Quote): QuoteSnapshot =>

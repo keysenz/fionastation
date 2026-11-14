@@ -8,6 +8,12 @@ import { pipeline } from 'node:stream/promises'
 import { gzipSync } from 'node:zlib'
 
 import {
+  createCommissionAdminApi,
+  createCommissionApi,
+  isUuid,
+  openCommissionStore,
+} from './commissions.ts'
+import {
   findSongForLyrics,
   findSongsForPlaylist,
   findSongsForStats,
@@ -121,6 +127,38 @@ const playlistApi =
     createsPerIpPerHour,
   })
 
+const commissionStore = (() => {
+  const path = process.env.COMMISSIONS_DB_PATH
+  if (!path) {
+    console.warn(
+      'COMMISSIONS_DB_PATH is not set, so commissions are unavailable',
+    )
+    return undefined
+  }
+  try {
+    return openCommissionStore({ path })
+  } catch (error) {
+    console.error('Could not open the commissions database:', error)
+    return undefined
+  }
+})()
+
+const COMMISSIONS_SECRET = process.env.COMMISSIONS_SECRET
+if (commissionStore && !COMMISSIONS_SECRET) {
+  console.warn(
+    'COMMISSIONS_SECRET is not set, so the public commission routes are unavailable',
+  )
+}
+
+const commissionApi =
+  commissionStore &&
+  COMMISSIONS_SECRET &&
+  createCommissionApi({
+    store: commissionStore,
+    secret: COMMISSIONS_SECRET,
+    createsPerIpPerHour: Number(process.env.COMMISSIONS_IP_LIMIT_PER_HOUR) || 5,
+  })
+
 const DAY_MS = 24 * 60 * 60 * 1000
 
 const statStore = (() => {
@@ -221,15 +259,19 @@ const gatedExport = createGatedExport({
 
 const STATS_ROUTE = '/api/stats'
 const PLAYLIST_ROUTE = /^\/api\/playlists(?:\/([^/]+))?$/
+const INQUIRY_PATH = '/api/inquiry'
+const COMMISSION_ROUTE = /^\/api\/commission\/([^/]+)$/
 const AUTH_ROUTE = /^\/api\/auth\/(.+)$/
 const isAuthRoute = (route: string | undefined): route is AuthRoute =>
   route !== undefined && Object.hasOwn(AUTH_ROUTES, route)
 const ADMIN_PATH = /^\/(?:api\/)?admin(?:\/|$)/
+const COMMISSION_ADMIN_PATH = /^\/admin\/commissions(?:\/|$)/
 
 // NOTE: keep in step with src/route.ts. Any other path gets the 404 status with the app's own 404 page.
 const PAGE_PATHS = new Set(['/', '/songs', '/hire', '/studio', '/endorse'])
 const STATS_PAGE_PATH = '/stats'
 const PLAYLIST_PAGE_PATH = /^\/p\/[0-9A-Za-z]{8}$/
+const COMMISSION_PAGE_PATH = /^\/commission\/([^/]+)$/
 
 const MOVED_PAGE_PATHS = new Set([
   '/radio',
@@ -594,6 +636,35 @@ const handle = async (req: IncomingMessage, res: ServerResponse) => {
     return replyJson(status, payload, 'no-store')
   }
 
+  const commissionRoute = COMMISSION_ROUTE.exec(pathname)
+  if (pathname === INQUIRY_PATH || commissionRoute) {
+    if (!hasProxySecret(req)) {
+      return replyJson(403, { error: 'Forbidden' })
+    }
+    if (!commissionApi) {
+      return replyJson(
+        503,
+        { error: 'Commissions are unavailable right now' },
+        'no-store',
+      )
+    }
+    const body = await readCapped()
+    if (body === undefined) {
+      return tooLarge()
+    }
+    const method = req.method ?? 'GET'
+    const { status, body: payload } = commissionRoute
+      ? commissionApi.track({
+          method,
+          id: commissionRoute[1] ?? '',
+          token:
+            new URL(req.url ?? '/', 'http://localhost').searchParams.get('t') ??
+            undefined,
+        })
+      : commissionApi.submit({ method, ip: visitorIp(req), body })
+    return replyJson(status, payload, 'no-store')
+  }
+
   const apiRoute = API_ROUTES[pathname]
   if (apiRoute) {
     if (!hasProxySecret(req)) {
@@ -621,7 +692,11 @@ const handle = async (req: IncomingMessage, res: ServerResponse) => {
     return reply(200, HTML, await readFile(join(ROOT, 'stats.html')))
   }
 
-  if (PAGE_PATHS.has(pathname) || PLAYLIST_PAGE_PATH.test(pathname)) {
+  if (
+    PAGE_PATHS.has(pathname) ||
+    PLAYLIST_PAGE_PATH.test(pathname) ||
+    isUuid(COMMISSION_PAGE_PATH.exec(pathname)?.[1] ?? '')
+  ) {
     return replyShell(200)
   }
 
@@ -664,20 +739,23 @@ const ADMIN_SECRET = process.env.ADMIN_SECRET
 const ADMIN_PORT = Number(process.env.ADMIN_PORT ?? 3001)
 
 const startAdminListener = (secret: string) => {
-  if (!playlistStore && !statStore) {
+  if (!playlistStore && !statStore && !commissionStore) {
     console.warn(
-      'Neither the playlists nor the statistics database is available, so no admin listener',
+      'No playlists, statistics or commissions database is available, so no admin listener',
     )
     return
   }
   const holdsSecret = bearerHolder(secret)
-  const adminApi =
+  const playlistAdminApi =
     playlistStore &&
     createAdminApi({
       store: playlistStore,
       secret,
       findSongs: findSongsForPlaylist,
     })
+  const commissionAdminApi =
+    commissionStore &&
+    createCommissionAdminApi({ store: commissionStore, secret })
   const answer = async (req: IncomingMessage) => {
     if (!holdsSecret(req.headers.authorization)) {
       return { status: 403, body: { error: 'Forbidden' } }
@@ -691,6 +769,10 @@ const startAdminListener = (secret: string) => {
         ? statReport(url.searchParams.get('days'))
         : { status: 503, body: { error: 'Statistics are unavailable' } }
     }
+    const pathname = parsePath(req.url ?? '/')?.pathname ?? ''
+    const adminApi = COMMISSION_ADMIN_PATH.test(pathname)
+      ? commissionAdminApi
+      : playlistAdminApi
     if (!adminApi) {
       return { status: 404, body: { error: 'Not Found' } }
     }
@@ -700,7 +782,7 @@ const startAdminListener = (secret: string) => {
       ? { status: 413, body: { error: 'The request is too large' } }
       : adminApi({
           method: req.method ?? 'GET',
-          pathname: parsePath(req.url ?? '/')?.pathname ?? '',
+          pathname,
           authorization: req.headers.authorization,
           actingDiscordId: typeof acting === 'string' ? acting : undefined,
           body,

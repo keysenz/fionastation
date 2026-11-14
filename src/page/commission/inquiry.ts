@@ -8,6 +8,7 @@ import {
   INQUIRY_ROUTE,
   type InquiryKind,
   InquiryPayload,
+  InquiryReply,
   snapshotOf,
 } from './inquiryPayload'
 import { type Quote } from './pricing'
@@ -92,7 +93,7 @@ export const Submission = defineTaggedUnion({
   Editing: {},
   Invalid: { fields: Schema.Array(Schema.String) },
   Sending: {},
-  Sent: {},
+  Sent: { trackingUrl: Schema.Option(Schema.String) },
   Failed: { error: Schema.String },
 })
 export type Submission = typeof Submission.Type
@@ -121,7 +122,7 @@ export const Message = defineMessageUnion({
   ClickedBack: {},
   ClickedSend: {},
   ClickedStartOver: {},
-  SucceededSubmitInquiry: {},
+  SucceededSubmitInquiry: { trackingUrl: Schema.Option(Schema.String) },
   CompletedCreateInquiryId: { id: Schema.String },
   FailedSubmitInquiry: { error: Schema.String },
 })
@@ -138,6 +139,16 @@ export const CreateInquiryId = Command.define('CreateInquiryId', {
   ),
 })
 
+export const trackingUrlOf = (body: unknown): Option.Option<string> =>
+  Option.map(
+    Schema.decodeUnknownOption(InquiryReply)(body),
+    ({ trackingUrl }) => trackingUrl,
+  )
+
+type SubmitReply =
+  | ReturnType<typeof Message.SucceededSubmitInquiry>
+  | ReturnType<typeof Message.FailedSubmitInquiry>
+
 export const SubmitInquiry = Command.define('SubmitInquiry', {
   args: { payload: InquiryPayload },
   messages: [Message.SucceededSubmitInquiry, Message.FailedSubmitInquiry],
@@ -152,10 +163,16 @@ export const SubmitInquiry = Command.define('SubmitInquiry', {
         body: JSON.stringify(payload),
       }),
     ).pipe(
-      Effect.map(response =>
+      Effect.flatMap((response): Effect.Effect<SubmitReply> =>
         response.ok
-          ? Message.SucceededSubmitInquiry()
-          : Message.FailedSubmitInquiry({ error: SEND_FAILED }),
+          ? Effect.tryPromise(() => response.json()).pipe(
+              Effect.map(trackingUrlOf),
+              Effect.catch(() => Effect.succeed(Option.none<string>())),
+              Effect.map(trackingUrl =>
+                Message.SucceededSubmitInquiry({ trackingUrl }),
+              ),
+            )
+          : Effect.succeed(Message.FailedSubmitInquiry({ error: SEND_FAILED })),
       ),
       Effect.catch(() =>
         Effect.succeed(Message.FailedSubmitInquiry({ error: SEND_FAILED })),
@@ -271,9 +288,9 @@ export const makeUpdate =
         ],
       }),
       ClickedStartOver: () => ({ model: init(spec) }),
-      SucceededSubmitInquiry: () => ({
+      SucceededSubmitInquiry: ({ trackingUrl }) => ({
         model: modifyFields(init(spec), {
-          submission: () => Submission.Sent(),
+          submission: () => Submission.Sent({ trackingUrl }),
         }),
       }),
       FailedSubmitInquiry: ({ error }) => ({
