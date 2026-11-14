@@ -9,11 +9,13 @@ import urllib.request
 from importlib.metadata import version
 from pathlib import Path
 
-from keep import Kept, Segment, aligned_lines, keep, parse_lrc, sung_lines
+from keep import Kept, LrcLine, Segment, aligned_lines, keep, parse_lrc, plain_lines, sung_lines
 from romaji import romanized
 
 REPO = Path(__file__).resolve().parents[2]
 OUTPUT = REPO / "server" / "lyrics-aligned.json"
+LOCAL = REPO / "server" / "lyrics-local.json"
+LOCAL_ID = 0
 DEFAULT_BASE = "https://fionastation.vercel.app"
 DEFAULT_CACHE = Path.home() / ".cache" / "fiona-lyrics-align" / "work"
 LRCLIB = "https://lrclib.net/api/get"
@@ -57,6 +59,11 @@ def songs_from(videos: list[dict]) -> list[dict]:
 
 def load_output() -> dict:
     return json.loads(OUTPUT.read_text()) if OUTPUT.exists() else {}
+
+
+def load_local() -> dict:
+    """Lyrics LRCLIB does not have, kept by hand in the repo."""
+    return json.loads(LOCAL.read_text()) if LOCAL.exists() else {}
 
 
 def save_output(entries: dict) -> None:
@@ -113,11 +120,11 @@ def align(model, vocals: Path, texts: list[str]) -> tuple[list[Segment], str]:
     return segments, language
 
 
-def entry_for(model, song: dict, lrclib_id: int, cache: Path) -> dict:
-    track = fetch_json(f"{LRCLIB}/{lrclib_id}")
-    lines = parse_lrc(track.get("syncedLyrics") or "")
+def entry_for(model, song: dict, lrclib_id: int, lines: list[LrcLine], cache: Path) -> dict:
     texts = [line.text for line in sung_lines(lines)]
     base = {"songTitle": song["title"], "lrclibId": lrclib_id, "aligner": ALIGNER}
+    if lrclib_id == LOCAL_ID:
+        base["source"] = "Local"
     if not texts:
         return {**base, "status": "Rejected", "reason": "LRCLIB has no synced lines"}
     vocals = isolate_vocals(song, cache / song["id"])
@@ -147,15 +154,23 @@ def main() -> None:
     if args.only:
         songs = [song for song in songs if song["id"] in set(args.only)]
     entries = load_output()
+    local = load_local()
     model = None
     aligned = 0
     for song in songs:
         if args.limit is not None and aligned >= args.limit:
             break
         lyrics = fetch_json(f"{args.base}/api/get-lyrics?song={song['id']}")
-        if lyrics.get("_tag") != "Synced":
+        kept_locally = local.get(song["id"])
+        if kept_locally is not None:
+            lrclib_id = LOCAL_ID
+            lines = plain_lines(kept_locally["lines"])
+        elif lyrics.get("_tag") == "Synced":
+            lrclib_id = lyrics["credit"]["lrclibId"]
+            track = fetch_json(f"{LRCLIB}/{lrclib_id}")
+            lines = parse_lrc(track.get("syncedLyrics") or "")
+        else:
             continue
-        lrclib_id = lyrics["credit"]["lrclibId"]
         done = entries.get(song["id"])
         if done and done["lrclibId"] == lrclib_id and done["songTitle"] == song["title"]:
             continue
@@ -164,7 +179,7 @@ def main() -> None:
             import stable_whisper
             model = stable_whisper.load_model(MODEL, device="cpu")
         try:
-            entries[song["id"]] = entry_for(model, song, lrclib_id, args.cache)
+            entries[song["id"]] = entry_for(model, song, lrclib_id, lines, args.cache)
         except (subprocess.CalledProcessError, OSError) as error:
             print(f"  skipped: {error}", flush=True)
             continue

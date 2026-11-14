@@ -2,7 +2,7 @@ import json
 import unittest
 from pathlib import Path
 
-from keep import Kept, LrcLine, Rejected, Segment, aligned_lines, keep, parse_lrc, sung_lines
+from keep import LrcLine, Kept, Rejected, Segment, aligned_lines, keep, parse_lrc, plain_lines, sung_lines
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -102,6 +102,12 @@ class Lrc(unittest.TestCase):
         self.assertEqual(
             parse_lrc("[00:30.00][01:30.50]chorus\n[01:00.00]verse\nnot a line"),
             [LrcLine(30_000, "chorus"), LrcLine(60_000, "verse"), LrcLine(90_500, "chorus")],
+        )
+
+    def test_plain_text_becomes_untimed_lines_without_blanks(self):
+        self.assertEqual(
+            plain_lines(["Waktu berlalu", "  ", " Hingga tibalah hari ini "]),
+            [LrcLine(0, "Waktu berlalu"), LrcLine(0, "Hingga tibalah hari ini")],
         )
 
 

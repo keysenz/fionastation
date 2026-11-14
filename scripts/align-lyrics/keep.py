@@ -56,6 +56,15 @@ def sung_lines(lines: list[LrcLine]) -> list[LrcLine]:
     return [line for line in lines if line.text.strip()]
 
 
+def plain_lines(texts: list[str]) -> list[LrcLine]:
+    """Lines from lyrics that carry no times, which the batch times itself.
+
+    Only lyrics-local.json uses this: LRCLIB lines arrive with their own
+    stamps, and the aligner replaces those anyway.
+    """
+    return [LrcLine(0, text.strip()) for text in texts if text.strip()]
+
+
 def keep(segments: list[Segment]) -> Kept | Rejected:
     """Indices of the segments Fiona sang, or why the song is rejected.
 
