@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "romantis",
+  "chill"
+ ],
+ "energy": 0.5,
+ "positivity": 0.7,
+ "reason": "A warm, slightly dreamy night-out love song with a hazy R&B groove, where the narrator remembers longing for someone and wants them close.",
+ "usage": {
+  "model": "claude-haiku-5-5",
+  "inputTokens": 2179,
+  "outputTokens": 692,
+  "usd": 0.00060015,
+  "seconds": 7.41
+ }
+}

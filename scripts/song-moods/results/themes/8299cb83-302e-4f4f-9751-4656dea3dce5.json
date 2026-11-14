@@ -1,0 +1,14 @@
+{
+ "themes": [
+  "seasonal",
+  "regular-karaoke"
+ ],
+ "reason": "Title is an Indonesian Independence Day (17 Aug) celebration, and the patriotic setlist fits; it's a karaoke stream published at 17:04 UTC+7, so not late-night.",
+ "usage": {
+  "model": "claude-haiku-5-5",
+  "inputTokens": 2234,
+  "outputTokens": 396,
+  "usd": 0.00049507,
+  "seconds": 6.24
+ }
+}

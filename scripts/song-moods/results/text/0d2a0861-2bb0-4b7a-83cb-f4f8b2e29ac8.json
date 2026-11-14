@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "galau",
+  "sendu"
+ ],
+ "energy": 0.3,
+ "positivity": 0.15,
+ "reason": "A slow, subdued ballad where the narrator, left without explanation, keeps asking what went wrong and whether the other person still loves them, which is classic relationship overthinking.",
+ "usage": {
+  "model": "claude-haiku-5-5",
+  "inputTokens": 2535,
+  "outputTokens": 522,
+  "usd": 0.00058635,
+  "seconds": 6.03
+ }
+}

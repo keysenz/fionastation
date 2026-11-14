@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "galau",
+  "sendu"
+ ],
+ "energy": 0.35,
+ "positivity": 0.15,
+ "reason": "Heartache over someone who keeps lingering after three years, a broken promise-to-forget cycle, and a guilt-tinged wish for their partner to get hurt; the mid-tempo arrangement stays subdued and rain-and-tears imagery adds a quiet sadness.",
+ "usage": {
+  "model": "claude-haiku-5-5",
+  "inputTokens": 2497,
+  "outputTokens": 604,
+  "usd": 0.0006197500000000001,
+  "seconds": 6.65
+ }
+}

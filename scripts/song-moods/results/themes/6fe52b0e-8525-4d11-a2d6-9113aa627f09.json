@@ -1,0 +1,14 @@
+{
+ "themes": [
+  "late-night",
+  "regular-karaoke"
+ ],
+ "reason": "Published 16:25 UTC (23:25 UTC+7), inside the late-night window; a plain karaoke stream of sad Bernadya songs, with one birthday song that doesn't set the theme.",
+ "usage": {
+  "model": "claude-haiku-5-5",
+  "inputTokens": 2131,
+  "outputTokens": 624,
+  "usd": 0.00058847,
+  "seconds": 7.73
+ }
+}

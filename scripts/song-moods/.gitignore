@@ -1,0 +1,4 @@
+results/lyrics/
+results/karaoke.json
+results/*.log
+__pycache__/

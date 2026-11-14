@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "galau",
+  "romantis"
+ ],
+ "energy": 0.3,
+ "positivity": 0.35,
+ "reason": "A soft, slow-paced ballad about secretly longing for someone from afar and knowing the closeness is only a daydream (\"halu\"), so it reads as unrequited, overthinking love with a tender undertone.",
+ "usage": {
+  "model": "claude-haiku-5-5",
+  "inputTokens": 2453,
+  "outputTokens": 616,
+  "usd": 0.00061695,
+  "seconds": 6.94
+ }
+}

@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "romantis",
+  "ceria"
+ ],
+ "energy": 0.4,
+ "positivity": 0.8,
+ "reason": "A soft, mid-tempo K-pop R&B track where the narrator playfully melts in a lover's embrace and admits growing to resemble each other, so the feeling is tender and sweet with a light, bubbly warmth.",
+ "usage": {
+  "model": "claude-haiku-5-5",
+  "inputTokens": 2877,
+  "outputTokens": 491,
+  "usd": 0.0006392500000000001,
+  "seconds": 6.26
+ }
+}

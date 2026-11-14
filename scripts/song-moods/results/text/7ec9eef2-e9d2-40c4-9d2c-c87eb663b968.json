@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "romantis",
+  "galau"
+ ],
+ "energy": 0.5,
+ "positivity": 0.55,
+ "reason": "No lyrics available; tagged from the title \"Janji\" (promise), which suggests a love-promise theme, with a guessed mid-tempo feel and no confident knowledge of the track.",
+ "usage": {
+  "model": "claude-haiku-5-5",
+  "inputTokens": 1975,
+  "outputTokens": 535,
+  "usd": 0.00048085,
+  "seconds": 5.74
+ }
+}

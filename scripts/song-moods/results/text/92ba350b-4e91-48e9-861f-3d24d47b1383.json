@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "galau",
+  "sendu"
+ ],
+ "energy": 0.35,
+ "positivity": 0.15,
+ "reason": "A heartache song about realizing someone you thought was home was only a temporary rental, with a slow, subdued arrangement and repeated \"kau bukan rumah\" lines.",
+ "usage": {
+  "model": "claude-haiku-5-5",
+  "inputTokens": 2277,
+  "outputTokens": 465,
+  "usd": 0.00050625,
+  "seconds": 7.1
+ }
+}

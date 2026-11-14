@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "galau",
+  "romantis"
+ ],
+ "energy": 0.25,
+ "positivity": 0.4,
+ "reason": "A slow, soft ballad where the singer frets over whether a love will last and end happily, hoping for happiness while still uncertain and wishing to stay part of the other person's life.",
+ "usage": {
+  "model": "claude-haiku-5-5",
+  "inputTokens": 2485,
+  "outputTokens": 658,
+  "usd": 0.00064435,
+  "seconds": 6.5
+ }
+}

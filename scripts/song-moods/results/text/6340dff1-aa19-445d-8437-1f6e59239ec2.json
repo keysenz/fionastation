@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "romantis",
+  "chill"
+ ],
+ "energy": 0.35,
+ "positivity": 0.8,
+ "reason": "A tender love song about someone who feels like home, with soft, mid-tempo pop instrumentation and hopeful, affectionate lyrics.",
+ "usage": {
+  "model": "claude-haiku-5-5",
+  "inputTokens": 2538,
+  "outputTokens": 478,
+  "usd": 0.00056495,
+  "seconds": 6.44
+ }
+}

@@ -1,0 +1,14 @@
+{
+ "themes": [
+  "cover-release",
+  "regular-karaoke"
+ ],
+ "reason": "Kind is \"cover\" and the title carries #cover, marking a produced song cover upload; published 19:50 UTC+7 so not late-night, and it's a short with no birthday, anniversary, debut, or collab cues.",
+ "usage": {
+  "model": "claude-haiku-5-5",
+  "inputTokens": 1856,
+  "outputTokens": 491,
+  "usd": 0.00046697000000000004,
+  "seconds": 6.5
+ }
+}

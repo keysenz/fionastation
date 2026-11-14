@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "ceria",
+  "hype"
+ ],
+ "energy": 0.65,
+ "positivity": 0.9,
+ "reason": "No lyrics available; tagged from the title and artist. Rumah Kewinci is a kids' music group, and \"Gentari Hariku\" (my brightness/sunshine) is likely an upbeat, cheerful children's song.",
+ "usage": {
+  "model": "claude-haiku-5-5",
+  "inputTokens": 1978,
+  "outputTokens": 720,
+  "usd": 0.00057395,
+  "seconds": 7.56
+ }
+}

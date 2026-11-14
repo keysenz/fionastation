@@ -1,0 +1,1620 @@
+{
+ "run": {
+  "songs": 39,
+  "audioSeconds": 515.2,
+  "songText": {
+   "calls": 39,
+   "seconds": 265.5,
+   "inputTokens": 95875,
+   "outputTokens": 22550,
+   "usd": 0.02307
+  },
+  "streamTheme": {
+   "calls": 19,
+   "seconds": 139.9,
+   "inputTokens": 38278,
+   "outputTokens": 11063,
+   "usd": 0.01049
+  }
+ },
+ "rows": [
+  {
+   "id": "416972eb-f867-5615-b865-774d022474ab",
+   "title": "Unwavering Startorch",
+   "artist": "Wuthering Waves",
+   "version": "short",
+   "video": "bUoOOVO-PHs",
+   "videoId": "d412f3c4-c088-5cb1-9898-5576858b6edf",
+   "videoTitle": "Unwavering Startorch - Wuthering Waves cover by Fiona Clearesta #vtuber #wutheringwaves  #cover",
+   "kind": "cover",
+   "start": 0,
+   "end": null,
+   "lyricsSource": "Synced",
+   "audio": {
+    "seconds": 53.6,
+    "tempoBpm": 86.1,
+    "loudnessDb": -12.22,
+    "brightnessHz": 2444.0,
+    "onsetsPerS": 2.63,
+    "percussiveShare": 0.167,
+    "measureSeconds": 10.2
+   },
+   "audioEnergy": 0.637,
+   "text": {
+    "moods": [
+     "hype",
+     "ceria"
+    ],
+    "energy": 0.75,
+    "positivity": 0.85,
+    "reason": "Anthemic, rising orchestral-style track about courage, shining like the sun and rising above the storm, with a hopeful, determined \"now or never\" feel.",
+    "usage": {
+     "model": "claude-haiku-5-5",
+     "inputTokens": 2352,
+     "outputTokens": 532,
+     "usd": 0.00055475,
+     "seconds": 6.36
+    }
+   },
+   "disagreement": 0.113,
+   "flagged": false
+  },
+  {
+   "id": "48aa230a-c977-5fcf-9ca1-fe0e7b46ecab",
+   "title": "Only Love",
+   "artist": "Trademark",
+   "version": "short",
+   "video": "g26JmYMkml4",
+   "videoId": "db687228-a45b-595f-b2b1-de9b8aa1d2df",
+   "videoTitle": "Trademark - Only Love short cover by Fio  #vtuber #cover #singing #coversong",
+   "kind": "cover",
+   "start": 0,
+   "end": null,
+   "lyricsSource": "Synced",
+   "audio": {
+    "seconds": 60.0,
+    "tempoBpm": 123.0,
+    "loudnessDb": -19.69,
+    "brightnessHz": 1577.0,
+    "onsetsPerS": 3.1,
+    "percussiveShare": 0.063,
+    "measureSeconds": 4.2
+   },
+   "audioEnergy": 0.547,
+   "text": {
+    "moods": [
+     "galau",
+     "romantis"
+    ],
+    "energy": 0.35,
+    "positivity": 0.4,
+    "reason": "A relationship at a crossroads, with confusion, distance, and pleading for a change of heart, wrapped in hopeful lines about love and a sunrise; the ballad-like tempo keeps it mid-low energy.",
+    "usage": {
+     "model": "claude-haiku-5-5",
+     "inputTokens": 2354,
+     "outputTokens": 628,
+     "usd": 0.00060315,
+     "seconds": 7.83
+    }
+   },
+   "disagreement": -0.197,
+   "flagged": false
+  },
+  {
+   "id": "2d644680-dfd8-5590-9ef1-80a23e7973c1",
+   "title": "1000X",
+   "artist": "Ghea Indrawari",
+   "version": "short",
+   "video": "auyWQOKHOl4",
+   "videoId": "9000f055-19b6-5dad-b387-3240a51a66bf",
+   "videoTitle": "1000X - Ghea Indrawari (by fioyoyow) #vtuber #vtuberid #shorts #shorts  #vtuberindonesia #singing",
+   "kind": "cover",
+   "start": 0,
+   "end": null,
+   "lyricsSource": "Synced",
+   "audio": {
+    "seconds": 38.0,
+    "tempoBpm": 103.4,
+    "loudnessDb": -13.0,
+    "brightnessHz": 1604.0,
+    "onsetsPerS": 3.95,
+    "percussiveShare": 0.1,
+    "measureSeconds": 2.9
+   },
+   "audioEnergy": 0.684,
+   "text": {
+    "moods": [
+     "romantis",
+     "chill"
+    ],
+    "energy": 0.3,
+    "positivity": 0.8,
+    "reason": "A tender, devoted love ballad vowing to find each other in 1000 lifetimes, sung at a slow, gentle tempo with warm, hopeful feeling.",
+    "usage": {
+     "model": "claude-haiku-5-5",
+     "inputTokens": 2773,
+     "outputTokens": 483,
+     "usd": 0.00061445,
+     "seconds": 5.8
+    }
+   },
+   "disagreement": -0.384,
+   "flagged": false
+  },
+  {
+   "id": "7c8f50e4-eb3c-5882-8a8f-1c8f89e72f9f",
+   "title": "You (=I)",
+   "artist": "BOL4",
+   "version": "short",
+   "video": "A54s0w3NjuE",
+   "videoId": "0a254a44-6f79-5cf7-8906-e02a3a7afd0a",
+   "videoTitle": "You(=I) - BOL4 #vtuber #vtuberid #vtuberindonesia #shorts #cover #singing",
+   "kind": "cover",
+   "start": 0,
+   "end": null,
+   "lyricsSource": "Synced",
+   "audio": {
+    "seconds": 56.6,
+    "tempoBpm": 103.4,
+    "loudnessDb": -11.19,
+    "brightnessHz": 1489.0,
+    "onsetsPerS": 3.75,
+    "percussiveShare": 0.158,
+    "measureSeconds": 4.8
+   },
+   "audioEnergy": 0.705,
+   "text": {
+    "moods": [
+     "romantis",
+     "ceria"
+    ],
+    "energy": 0.4,
+    "positivity": 0.8,
+    "reason": "A soft, mid-tempo K-pop R&B track where the narrator playfully melts in a lover's embrace and admits growing to resemble each other, so the feeling is tender and sweet with a light, bubbly warmth.",
+    "usage": {
+     "model": "claude-haiku-5-5",
+     "inputTokens": 2877,
+     "outputTokens": 491,
+     "usd": 0.0006392500000000001,
+     "seconds": 6.26
+    }
+   },
+   "disagreement": -0.305,
+   "flagged": false
+  },
+  {
+   "id": "cb3b8e05-9818-5059-89fd-8fe87d14977d",
+   "title": "Blue Jeans",
+   "artist": "HANA",
+   "version": "short",
+   "video": "EhHikMA-EHs",
+   "videoId": "b00cace5-6053-5892-88ee-03a7892d8c56",
+   "videoTitle": "Hana - Blue Jeans #vtuber #vtuberid #shorts #vtuberindonesia",
+   "kind": "cover",
+   "start": 0,
+   "end": null,
+   "lyricsSource": "Synced",
+   "audio": {
+    "seconds": 47.0,
+    "tempoBpm": 112.3,
+    "loudnessDb": -21.83,
+    "brightnessHz": 1421.0,
+    "onsetsPerS": 2.83,
+    "percussiveShare": 0.133,
+    "measureSeconds": 3.4
+   },
+   "audioEnergy": 0.505,
+   "text": {
+    "moods": [
+     "romantis",
+     "chill"
+    ],
+    "energy": 0.5,
+    "positivity": 0.7,
+    "reason": "A warm, slightly dreamy night-out love song with a hazy R&B groove, where the narrator remembers longing for someone and wants them close.",
+    "usage": {
+     "model": "claude-haiku-5-5",
+     "inputTokens": 2179,
+     "outputTokens": 692,
+     "usd": 0.00060015,
+     "seconds": 7.41
+    }
+   },
+   "disagreement": -0.005,
+   "flagged": false
+  },
+  {
+   "id": "9800e03e-f8a7-530f-8ea1-2b3c39244da1",
+   "title": "Gentari Hariku",
+   "artist": "Rumah Kewinci",
+   "version": "Fio's side",
+   "video": "rBop0GfMhEo",
+   "videoId": "5f157a05-7938-5c2c-a84b-a8e113bd2d26",
+   "videoTitle": "Gentari Hariku - Rumah Kewinci 【Fio's side ver.】",
+   "kind": "original",
+   "start": 0,
+   "end": null,
+   "lyricsSource": "None",
+   "audio": {
+    "seconds": 236.0,
+    "tempoBpm": 161.5,
+    "loudnessDb": -13.06,
+    "brightnessHz": 1819.0,
+    "onsetsPerS": 3.47,
+    "percussiveShare": 0.058,
+    "measureSeconds": 17.0
+   },
+   "audioEnergy": 0.705,
+   "text": {
+    "moods": [
+     "ceria",
+     "hype"
+    ],
+    "energy": 0.65,
+    "positivity": 0.9,
+    "reason": "No lyrics available; tagged from the title and artist. Rumah Kewinci is a kids' music group, and \"Gentari Hariku\" (my brightness/sunshine) is likely an upbeat, cheerful children's song.",
+    "usage": {
+     "model": "claude-haiku-5-5",
+     "inputTokens": 1978,
+     "outputTokens": 720,
+     "usd": 0.00057395,
+     "seconds": 7.56
+    }
+   },
+   "disagreement": -0.055,
+   "flagged": false
+  },
+  {
+   "id": "0d2a0861-2bb0-4b7a-83cb-f4f8b2e29ac8",
+   "title": "Apa Mungkin",
+   "artist": "Bernadya",
+   "version": "",
+   "video": "rQ1JC4YC1Qs",
+   "videoId": "6fe52b0e-8525-4d11-a2d6-9113aa627f09",
+   "videoTitle": "wiii sudah bulan sadtember!! 🐰",
+   "kind": "karaoke",
+   "start": 3581,
+   "end": 3869,
+   "lyricsSource": "Synced",
+   "audio": {
+    "seconds": 227.0,
+    "tempoBpm": 89.1,
+    "loudnessDb": -23.14,
+    "brightnessHz": 1226.0,
+    "onsetsPerS": 4.03,
+    "percussiveShare": 0.031,
+    "measureSeconds": 17.2
+   },
+   "audioEnergy": 0.363,
+   "text": {
+    "moods": [
+     "galau",
+     "sendu"
+    ],
+    "energy": 0.3,
+    "positivity": 0.15,
+    "reason": "A slow, subdued ballad where the narrator, left without explanation, keeps asking what went wrong and whether the other person still loves them, which is classic relationship overthinking.",
+    "usage": {
+     "model": "claude-haiku-5-5",
+     "inputTokens": 2535,
+     "outputTokens": 522,
+     "usd": 0.00058635,
+     "seconds": 6.03
+    }
+   },
+   "disagreement": -0.063,
+   "flagged": false
+  },
+  {
+   "id": "25933e53-e297-4a31-baca-2333017b57bf",
+   "title": "Terlintas",
+   "artist": "Bernadya",
+   "version": "",
+   "video": "rQ1JC4YC1Qs",
+   "videoId": "6fe52b0e-8525-4d11-a2d6-9113aa627f09",
+   "videoTitle": "wiii sudah bulan sadtember!! 🐰",
+   "kind": "karaoke",
+   "start": 5198,
+   "end": 5737,
+   "lyricsSource": "Synced",
+   "audio": {
+    "seconds": 234.4,
+    "tempoBpm": 123.0,
+    "loudnessDb": -24.42,
+    "brightnessHz": 1064.0,
+    "onsetsPerS": 2.21,
+    "percussiveShare": 0.021,
+    "measureSeconds": 17.0
+   },
+   "audioEnergy": 0.216,
+   "text": {
+    "moods": [
+     "galau",
+     "romantis"
+    ],
+    "energy": 0.25,
+    "positivity": 0.4,
+    "reason": "A slow, soft ballad where the singer frets over whether a love will last and end happily, hoping for happiness while still uncertain and wishing to stay part of the other person's life.",
+    "usage": {
+     "model": "claude-haiku-5-5",
+     "inputTokens": 2485,
+     "outputTokens": 658,
+     "usd": 0.00064435,
+     "seconds": 6.5
+    }
+   },
+   "disagreement": 0.034,
+   "flagged": false
+  },
+  {
+   "id": "1d87e5a9-a8df-46a1-a4d6-109077fcd22b",
+   "title": "Untungnya, Hidup Harus Tetap Berjalan",
+   "artist": "Bernadya",
+   "version": "",
+   "video": "rQ1JC4YC1Qs",
+   "videoId": "6fe52b0e-8525-4d11-a2d6-9113aa627f09",
+   "videoTitle": "wiii sudah bulan sadtember!! 🐰",
+   "kind": "karaoke",
+   "start": 5737,
+   "end": 5964,
+   "lyricsSource": "Synced",
+   "audio": {
+    "seconds": 179.5,
+    "tempoBpm": 112.3,
+    "loudnessDb": -23.31,
+    "brightnessHz": 1253.0,
+    "onsetsPerS": 3.98,
+    "percussiveShare": 0.075,
+    "measureSeconds": 12.1
+   },
+   "audioEnergy": 0.484,
+   "text": {
+    "moods": [
+     "chill",
+     "ceria"
+    ],
+    "energy": 0.4,
+    "positivity": 0.7,
+    "reason": "A reflective, mid-tempo ballad that looks back on past hardship with grateful, hopeful relief (\"untungnya\" = luckily), so it feels calm and gently uplifting rather than sad or hype.",
+    "usage": {
+     "model": "claude-haiku-5-5",
+     "inputTokens": 2368,
+     "outputTokens": 664,
+     "usd": 0.00062395,
+     "seconds": 7.48
+    }
+   },
+   "disagreement": -0.084,
+   "flagged": false
+  },
+  {
+   "id": "6bce7ec0-e5d6-4f48-92ae-59ef63e5e9df",
+   "title": "Gala Bunga Matahari",
+   "artist": "Sal Priadi",
+   "version": "",
+   "video": "rQ1JC4YC1Qs",
+   "videoId": "6fe52b0e-8525-4d11-a2d6-9113aa627f09",
+   "videoTitle": "wiii sudah bulan sadtember!! 🐰",
+   "kind": "karaoke",
+   "start": 6717,
+   "end": 7341,
+   "lyricsSource": "Synced",
+   "audio": {
+    "seconds": 210.2,
+    "tempoBpm": 99.4,
+    "loudnessDb": -24.3,
+    "brightnessHz": 1046.0,
+    "onsetsPerS": 2.8,
+    "percussiveShare": 0.035,
+    "measureSeconds": 14.8
+   },
+   "audioEnergy": 0.216,
+   "text": {
+    "moods": [
+     "sendu",
+     "chill"
+    ],
+    "energy": 0.25,
+    "positivity": 0.35,
+    "reason": "A gentle, slow ballad about missing someone who has passed away, imagining their new life while the narrator grieves but tries to carry on with a bit of warmth.",
+    "usage": {
+     "model": "claude-haiku-5-5",
+     "inputTokens": 2571,
+     "outputTokens": 617,
+     "usd": 0.00064105,
+     "seconds": 6.69
+    }
+   },
+   "disagreement": 0.034,
+   "flagged": false
+  },
+  {
+   "id": "c2871206-9575-450e-8be5-4467ff3ba310",
+   "title": "Nikmati Perjalanannya",
+   "artist": "Chintya Gabriella",
+   "version": "",
+   "video": "xLUUwhCqAi0",
+   "videoId": "8e7025a1-3e22-4796-92d7-2d36014fa480",
+   "videoTitle": "nyanyi lagi eheheh 🐰",
+   "kind": "karaoke",
+   "start": 1792,
+   "end": 2706,
+   "lyricsSource": "Synced",
+   "audio": {
+    "seconds": 207.9,
+    "tempoBpm": 80.7,
+    "loudnessDb": -27.78,
+    "brightnessHz": 1440.0,
+    "onsetsPerS": 4.12,
+    "percussiveShare": 0.328,
+    "measureSeconds": 11.8
+   },
+   "audioEnergy": 0.537,
+   "text": {
+    "moods": [
+     "sendu",
+     "chill"
+    ],
+    "energy": 0.3,
+    "positivity": 0.5,
+    "reason": "A gentle, reflective song about repeatedly falling and getting up through hardship, with hurt and tears but a hopeful message to enjoy the journey; not about romance, so sendu fits best, with a calm, laid-back feel.",
+    "usage": {
+     "model": "claude-haiku-5-5",
+     "inputTokens": 2365,
+     "outputTokens": 712,
+     "usd": 0.00064735,
+     "seconds": 6.46
+    }
+   },
+   "disagreement": -0.237,
+   "flagged": false
+  },
+  {
+   "id": "e2a9ddff-a9ad-48ba-81f5-bdf884589418",
+   "title": "Dari Planet Lain",
+   "artist": "Sal Priadi",
+   "version": "",
+   "video": "xLUUwhCqAi0",
+   "videoId": "8e7025a1-3e22-4796-92d7-2d36014fa480",
+   "videoTitle": "nyanyi lagi eheheh 🐰",
+   "kind": "karaoke",
+   "start": 3110,
+   "end": 3610,
+   "lyricsSource": "Synced",
+   "audio": {
+    "seconds": 158.8,
+    "tempoBpm": 117.5,
+    "loudnessDb": -30.08,
+    "brightnessHz": 1738.0,
+    "onsetsPerS": 2.75,
+    "percussiveShare": 0.129,
+    "measureSeconds": 8.0
+   },
+   "audioEnergy": 0.463,
+   "text": {
+    "moods": [
+     "romantis",
+     "chill"
+    ],
+    "energy": 0.25,
+    "positivity": 0.8,
+    "reason": "A tender, slow-paced love song about finding someone who walks beside you without rushing and makes sense of past fear, with a hopeful, warm tone.",
+    "usage": {
+     "model": "claude-haiku-5-5",
+     "inputTokens": 2349,
+     "outputTokens": 491,
+     "usd": 0.00053365,
+     "seconds": 6.96
+    }
+   },
+   "disagreement": -0.213,
+   "flagged": false
+  },
+  {
+   "id": "40a75aa0-9bb2-4fa5-906b-d88fd20e468b",
+   "title": "ALiCE&u",
+   "artist": "Ayunda Risu",
+   "version": "",
+   "video": "xLUUwhCqAi0",
+   "videoId": "8e7025a1-3e22-4796-92d7-2d36014fa480",
+   "videoTitle": "nyanyi lagi eheheh 🐰",
+   "kind": "karaoke",
+   "start": 5450,
+   "end": 6678,
+   "lyricsSource": "Synced",
+   "audio": {
+    "seconds": 269.6,
+    "tempoBpm": 112.3,
+    "loudnessDb": -21.46,
+    "brightnessHz": 2057.0,
+    "onsetsPerS": 2.71,
+    "percussiveShare": 0.143,
+    "measureSeconds": 14.5
+   },
+   "audioEnergy": 0.584,
+   "text": {
+    "moods": [
+     "sendu",
+     "hype"
+    ],
+    "energy": 0.6,
+    "positivity": 0.45,
+    "reason": "Lyrics dwell on a fading soul, worry, and an \"incomplete melody\" with a sad symphony, but the chorus-like chants and the closing \"I believe, everything will be fine / time to shine\" push it toward an anthemic, hopeful lift.",
+    "usage": {
+     "model": "claude-haiku-5-5",
+     "inputTokens": 2632,
+     "outputTokens": 854,
+     "usd": 0.0007717500000000001,
+     "seconds": 8.09
+    }
+   },
+   "disagreement": 0.016,
+   "flagged": false
+  },
+  {
+   "id": "ebdbc379-d28a-4374-b35c-c27ec073788a",
+   "title": "Tampar",
+   "artist": "Juicy Luicy",
+   "version": "",
+   "video": "xLUUwhCqAi0",
+   "videoId": "8e7025a1-3e22-4796-92d7-2d36014fa480",
+   "videoTitle": "nyanyi lagi eheheh 🐰",
+   "kind": "karaoke",
+   "start": 9242,
+   "end": null,
+   "lyricsSource": "Synced",
+   "audio": {
+    "seconds": 160.6,
+    "tempoBpm": 80.7,
+    "loudnessDb": -28.6,
+    "brightnessHz": 1448.0,
+    "onsetsPerS": 3.2,
+    "percussiveShare": 0.352,
+    "measureSeconds": 8.4
+   },
+   "audioEnergy": 0.447,
+   "text": {
+    "moods": [
+     "galau",
+     "sendu"
+    ],
+    "energy": 0.35,
+    "positivity": 0.15,
+    "reason": "Heartache over someone who keeps lingering after three years, a broken promise-to-forget cycle, and a guilt-tinged wish for their partner to get hurt; the mid-tempo arrangement stays subdued and rain-and-tears imagery adds a quiet sadness.",
+    "usage": {
+     "model": "claude-haiku-5-5",
+     "inputTokens": 2497,
+     "outputTokens": 604,
+     "usd": 0.0006197500000000001,
+     "seconds": 6.65
+    }
+   },
+   "disagreement": -0.097,
+   "flagged": false
+  },
+  {
+   "id": "031b639c-9f5f-5d81-b706-004ab04327bc",
+   "title": "Rayuan Perempuan Gila",
+   "artist": "Nadin Amizah",
+   "version": "",
+   "video": "_T-o96i5gaw",
+   "videoId": "8e287de2-2386-539c-b699-5ee9d98b3e7b",
+   "videoTitle": "Rayuan Perempuan Gila - Nadin Amizah Cover by Fiona Clearesta",
+   "kind": "cover",
+   "start": 0,
+   "end": null,
+   "lyricsSource": "Synced",
+   "audio": {
+    "seconds": 297.3,
+    "tempoBpm": 103.4,
+    "loudnessDb": -11.48,
+    "brightnessHz": 2049.0,
+    "onsetsPerS": 3.63,
+    "percussiveShare": 0.106,
+    "measureSeconds": 15.7
+   },
+   "audioEnergy": 0.721,
+   "text": {
+    "moods": [
+     "galau",
+     "sendu"
+    ],
+    "energy": 0.25,
+    "positivity": 0.2,
+    "reason": "Slow, hushed ballad where the singer frets over whether a lover still loves her, fears being left, and calls herself a \"crazy woman,\" a sad, self-doubting mood.",
+    "usage": {
+     "model": "claude-haiku-5-5",
+     "inputTokens": 2536,
+     "outputTokens": 514,
+     "usd": 0.00058255,
+     "seconds": 6.25
+    }
+   },
+   "disagreement": -0.471,
+   "flagged": true
+  },
+  {
+   "id": "5733b061-cd0f-4c70-b48d-1238e93de730",
+   "title": "Perayaan Mati Rasa",
+   "artist": "Umay Shahab feat. Natania Karin",
+   "version": "",
+   "video": "Qb8-ZdUXre0",
+   "videoId": "0bad5469-e674-4cae-a1df-8e7e3929c5dc",
+   "videoTitle": "malam ini kita",
+   "kind": "karaoke",
+   "start": 11479,
+   "end": 12594,
+   "lyricsSource": "Synced",
+   "audio": {
+    "seconds": 288.1,
+    "tempoBpm": 143.6,
+    "loudnessDb": -21.36,
+    "brightnessHz": 1127.0,
+    "onsetsPerS": 1.16,
+    "percussiveShare": 0.039,
+    "measureSeconds": 15.6
+   },
+   "audioEnergy": 0.311,
+   "text": {
+    "moods": [
+     "galau",
+     "sendu"
+    ],
+    "energy": 0.25,
+    "positivity": 0.15,
+    "reason": "A slow, somber ballad about letting a lover go and crying through the numbness of heartbreak, so it reads as romantic heartache with a melancholic undertone.",
+    "usage": {
+     "model": "claude-haiku-5-5",
+     "inputTokens": 2468,
+     "outputTokens": 517,
+     "usd": 0.00057045,
+     "seconds": 5.58
+    }
+   },
+   "disagreement": -0.061,
+   "flagged": false
+  },
+  {
+   "id": "2dde7993-38e3-4b23-af02-c735bc89d2e8",
+   "title": "Di Akhir Perang",
+   "artist": "Nadin Amizah",
+   "version": "",
+   "video": "Qb8-ZdUXre0",
+   "videoId": "0bad5469-e674-4cae-a1df-8e7e3929c5dc",
+   "videoTitle": "malam ini kita",
+   "kind": "karaoke",
+   "start": 12594,
+   "end": null,
+   "lyricsSource": "Synced",
+   "audio": {
+    "seconds": 235.9,
+    "tempoBpm": 152.0,
+    "loudnessDb": -25.16,
+    "brightnessHz": 1493.0,
+    "onsetsPerS": 3.16,
+    "percussiveShare": 0.155,
+    "measureSeconds": 13.2
+   },
+   "audioEnergy": 0.626,
+   "text": {
+    "moods": [
+     "romantis",
+     "chill"
+    ],
+    "energy": 0.3,
+    "positivity": 0.65,
+    "reason": "Soft, slow-building ballad about two people gently teaching each other to accept their flaws and finding relief and happiness after an inner war, with a tender, intimate tone.",
+    "usage": {
+     "model": "claude-haiku-5-5",
+     "inputTokens": 2390,
+     "outputTokens": 626,
+     "usd": 0.00060935,
+     "seconds": 7.82
+    }
+   },
+   "disagreement": -0.326,
+   "flagged": false
+  },
+  {
+   "id": "a560cef1-89e1-4b07-8440-ccc5e6c3beb1",
+   "title": "Semua Aku Dirayakan",
+   "artist": "Nadin Amizah",
+   "version": "",
+   "video": "nHnPb4xYTlg",
+   "videoId": "58162b18-85e0-4afb-bd3e-3a1ad5466d7b",
+   "videoTitle": "Happy 2nd Anniversary!! 🎉✨ - 1st Endurance Stream #2",
+   "kind": "karaoke",
+   "start": 14982,
+   "end": 15364,
+   "lyricsSource": "Synced",
+   "audio": {
+    "seconds": 301.3,
+    "tempoBpm": 80.7,
+    "loudnessDb": -28.3,
+    "brightnessHz": 1107.0,
+    "onsetsPerS": 3.95,
+    "percussiveShare": 0.041,
+    "measureSeconds": 15.7
+   },
+   "audioEnergy": 0.242,
+   "text": {
+    "moods": [
+     "sendu",
+     "romantis"
+    ],
+    "energy": 0.2,
+    "positivity": 0.4,
+    "reason": "A slow, gentle ballad about being comforted while crying (\"Jangan menangis\") and feeling fully accepted, with a hopeful note that the storm will pass, so it reads as tender but quietly sad.",
+    "usage": {
+     "model": "claude-haiku-5-5",
+     "inputTokens": 2456,
+     "outputTokens": 697,
+     "usd": 0.0006580500000000001,
+     "seconds": 8.37
+    }
+   },
+   "disagreement": -0.042,
+   "flagged": false
+  },
+  {
+   "id": "1d648497-15be-4187-88f2-0be363bb650b",
+   "title": "Halu",
+   "artist": "Feby Putri",
+   "version": "",
+   "video": "nHnPb4xYTlg",
+   "videoId": "58162b18-85e0-4afb-bd3e-3a1ad5466d7b",
+   "videoTitle": "Happy 2nd Anniversary!! 🎉✨ - 1st Endurance Stream #2",
+   "kind": "karaoke",
+   "start": 15914,
+   "end": 16289,
+   "lyricsSource": "Synced",
+   "audio": {
+    "seconds": 265.8,
+    "tempoBpm": 172.3,
+    "loudnessDb": -27.35,
+    "brightnessHz": 857.0,
+    "onsetsPerS": 2.76,
+    "percussiveShare": 0.049,
+    "measureSeconds": 14.0
+   },
+   "audioEnergy": 0.305,
+   "text": {
+    "moods": [
+     "galau",
+     "romantis"
+    ],
+    "energy": 0.3,
+    "positivity": 0.35,
+    "reason": "A soft, slow-paced ballad about secretly longing for someone from afar and knowing the closeness is only a daydream (\"halu\"), so it reads as unrequited, overthinking love with a tender undertone.",
+    "usage": {
+     "model": "claude-haiku-5-5",
+     "inputTokens": 2453,
+     "outputTokens": 616,
+     "usd": 0.00061695,
+     "seconds": 6.94
+    }
+   },
+   "disagreement": -0.005,
+   "flagged": false
+  },
+  {
+   "id": "3697b335-5112-4c28-a740-58aece0b8c9c",
+   "title": "Love wins all",
+   "artist": "IU",
+   "version": "",
+   "video": "nHnPb4xYTlg",
+   "videoId": "58162b18-85e0-4afb-bd3e-3a1ad5466d7b",
+   "videoTitle": "Happy 2nd Anniversary!! 🎉✨ - 1st Endurance Stream #2",
+   "kind": "karaoke",
+   "start": 16810,
+   "end": 17184,
+   "lyricsSource": "Synced",
+   "audio": {
+    "seconds": 255.5,
+    "tempoBpm": 152.0,
+    "loudnessDb": -25.69,
+    "brightnessHz": 1227.0,
+    "onsetsPerS": 2.04,
+    "percussiveShare": 0.078,
+    "measureSeconds": 13.5
+   },
+   "audioEnergy": 0.358,
+   "text": {
+    "moods": [
+     "romantis",
+     "galau"
+    ],
+    "energy": 0.4,
+    "positivity": 0.55,
+    "reason": "A slow-building, orchestral ballad about escaping the world with a lover and wanting to be lost and even sad together; the love is tender and devoted, but the lyrics carry doubt about a bad ending and lost-ness.",
+    "usage": {
+     "model": "claude-haiku-5-5",
+     "inputTokens": 2507,
+     "outputTokens": 644,
+     "usd": 0.00064175,
+     "seconds": 7.39
+    }
+   },
+   "disagreement": 0.042,
+   "flagged": false
+  },
+  {
+   "id": "5f92a126-3e23-4caf-a64e-aade63980e1f",
+   "title": "Tampar",
+   "artist": "Juicy Luicy",
+   "version": "",
+   "video": "nHnPb4xYTlg",
+   "videoId": "58162b18-85e0-4afb-bd3e-3a1ad5466d7b",
+   "videoTitle": "Happy 2nd Anniversary!! 🎉✨ - 1st Endurance Stream #2",
+   "kind": "karaoke",
+   "start": 19560,
+   "end": 19874,
+   "lyricsSource": "Synced",
+   "audio": {
+    "seconds": 204.0,
+    "tempoBpm": 172.3,
+    "loudnessDb": -25.16,
+    "brightnessHz": 1225.0,
+    "onsetsPerS": 2.97,
+    "percussiveShare": 0.043,
+    "measureSeconds": 10.5
+   },
+   "audioEnergy": 0.411,
+   "text": {
+    "moods": [
+     "galau",
+     "sendu"
+    ],
+    "energy": 0.35,
+    "positivity": 0.2,
+    "reason": "A heartbroken song about someone who keeps breaking promises and stays on the singer's mind, with tears and quiet disappointment over three years, sung in a slow, subdued arrangement.",
+    "usage": {
+     "model": "claude-haiku-5-5",
+     "inputTokens": 2497,
+     "outputTokens": 519,
+     "usd": 0.00028465,
+     "seconds": 5.98
+    }
+   },
+   "disagreement": -0.061,
+   "flagged": false
+  },
+  {
+   "id": "406a63fe-5a08-4a6d-868e-96aa915d8070",
+   "title": "Lantas",
+   "artist": "Juicy Luicy",
+   "version": "",
+   "video": "nHnPb4xYTlg",
+   "videoId": "58162b18-85e0-4afb-bd3e-3a1ad5466d7b",
+   "videoTitle": "Happy 2nd Anniversary!! 🎉✨ - 1st Endurance Stream #2",
+   "kind": "karaoke",
+   "start": 19874,
+   "end": 20178,
+   "lyricsSource": "Synced",
+   "audio": {
+    "seconds": 228.4,
+    "tempoBpm": 78.3,
+    "loudnessDb": -26.8,
+    "brightnessHz": 1171.0,
+    "onsetsPerS": 2.64,
+    "percussiveShare": 0.062,
+    "measureSeconds": 12.1
+   },
+   "audioEnergy": 0.179,
+   "text": {
+    "moods": [
+     "galau"
+    ],
+    "energy": 0.45,
+    "positivity": 0.15,
+    "reason": "Longing for someone in a secret affair who is already committed, with self-doubt and an unwilling-to-let-go conflict, all carried by a mid-tempo pop arrangement.",
+    "usage": {
+     "model": "claude-haiku-5-5",
+     "inputTokens": 2685,
+     "outputTokens": 644,
+     "usd": 0.00067735,
+     "seconds": 8.19
+    }
+   },
+   "disagreement": 0.271,
+   "flagged": false
+  },
+  {
+   "id": "53642c29-7aa6-4841-8b2d-a8a777932003",
+   "title": "Monokrom",
+   "artist": "Tulus",
+   "version": "",
+   "video": "x5wzO1pTt8c",
+   "videoId": "76ddc54e-6f5d-49ff-8e42-0401ccfa3bf4",
+   "videoTitle": "Let's chill and sing🎤 /bentar aja 'w'",
+   "kind": "karaoke",
+   "start": 5186,
+   "end": 5480,
+   "lyricsSource": "Synced",
+   "audio": {
+    "seconds": 206.0,
+    "tempoBpm": 172.3,
+    "loudnessDb": -17.74,
+    "brightnessHz": 1368.0,
+    "onsetsPerS": 3.94,
+    "percussiveShare": 0.116,
+    "measureSeconds": 10.9
+   },
+   "audioEnergy": 0.732,
+   "text": {
+    "moods": [
+     "sendu",
+     "chill"
+    ],
+    "energy": 0.2,
+    "positivity": 0.45,
+    "reason": "A slow, gentle ballad of nostalgia and gratitude for a parent or family who raised the singer, with a bittersweet undertone about one day leaving them behind; it is not about romance.",
+    "usage": {
+     "model": "claude-haiku-5-5",
+     "inputTokens": 2420,
+     "outputTokens": 583,
+     "usd": 0.0005938499999999999,
+     "seconds": 6.04
+    }
+   },
+   "disagreement": -0.532,
+   "flagged": true
+  },
+  {
+   "id": "885a30de-0b3d-4e73-882b-ecefca2aeb34",
+   "title": "Monokrom",
+   "artist": "Tulus",
+   "version": "",
+   "video": "x5wzO1pTt8c",
+   "videoId": "76ddc54e-6f5d-49ff-8e42-0401ccfa3bf4",
+   "videoTitle": "Let's chill and sing🎤 /bentar aja 'w'",
+   "kind": "karaoke",
+   "start": 5480,
+   "end": 6199,
+   "lyricsSource": "Synced",
+   "audio": {
+    "seconds": 209.2,
+    "tempoBpm": 117.5,
+    "loudnessDb": -17.29,
+    "brightnessHz": 1347.0,
+    "onsetsPerS": 4.23,
+    "percussiveShare": 0.101,
+    "measureSeconds": 11.1
+   },
+   "audioEnergy": 0.663,
+   "text": {
+    "moods": [
+     "sendu",
+     "romantis"
+    ],
+    "energy": 0.25,
+    "positivity": 0.45,
+    "reason": "A slow, nostalgic ballad of gratitude for family and childhood memories in black-and-white photos, bittersweet with mortality undertones and no romantic-heartache angle.",
+    "usage": {
+     "model": "claude-haiku-5-5",
+     "inputTokens": 2420,
+     "outputTokens": 678,
+     "usd": 0.00064135,
+     "seconds": 7.65
+    }
+   },
+   "disagreement": -0.413,
+   "flagged": true
+  },
+  {
+   "id": "b299a7f4-2212-4dc2-8865-49120924a3b6",
+   "title": "Hati-Hati di Jalan",
+   "artist": "Tulus",
+   "version": "",
+   "video": "x5wzO1pTt8c",
+   "videoId": "76ddc54e-6f5d-49ff-8e42-0401ccfa3bf4",
+   "videoTitle": "Let's chill and sing🎤 /bentar aja 'w'",
+   "kind": "karaoke",
+   "start": 6609,
+   "end": 6998,
+   "lyricsSource": "Synced",
+   "audio": {
+    "seconds": 257.5,
+    "tempoBpm": 95.7,
+    "loudnessDb": -19.58,
+    "brightnessHz": 1219.0,
+    "onsetsPerS": 3.02,
+    "percussiveShare": 0.094,
+    "measureSeconds": 13.9
+   },
+   "audioEnergy": 0.411,
+   "text": {
+    "moods": [
+     "galau",
+     "sendu"
+    ],
+    "energy": 0.3,
+    "positivity": 0.2,
+    "reason": "A slow, wistful ballad about two people who thought they would end up together and now must part, with lingering longing (\"semoga rindu ini menghilang\") and a bittersweet \"hati-hati di jalan\" goodbye.",
+    "usage": {
+     "model": "claude-haiku-5-5",
+     "inputTokens": 2473,
+     "outputTokens": 528,
+     "usd": 0.00057695,
+     "seconds": 6.67
+    }
+   },
+   "disagreement": -0.111,
+   "flagged": false
+  },
+  {
+   "id": "92ba350b-4e91-48e9-861f-3d24d47b1383",
+   "title": "Kukira Kau Rumah",
+   "artist": "Amigdala",
+   "version": "",
+   "video": "x5wzO1pTt8c",
+   "videoId": "76ddc54e-6f5d-49ff-8e42-0401ccfa3bf4",
+   "videoTitle": "Let's chill and sing🎤 /bentar aja 'w'",
+   "kind": "karaoke",
+   "start": 6998,
+   "end": 7257,
+   "lyricsSource": "Synced",
+   "audio": {
+    "seconds": 210.2,
+    "tempoBpm": 198.8,
+    "loudnessDb": -20.71,
+    "brightnessHz": 1118.0,
+    "onsetsPerS": 3.28,
+    "percussiveShare": 0.051,
+    "measureSeconds": 11.4
+   },
+   "audioEnergy": 0.505,
+   "text": {
+    "moods": [
+     "galau",
+     "sendu"
+    ],
+    "energy": 0.35,
+    "positivity": 0.15,
+    "reason": "A heartache song about realizing someone you thought was home was only a temporary rental, with a slow, subdued arrangement and repeated \"kau bukan rumah\" lines.",
+    "usage": {
+     "model": "claude-haiku-5-5",
+     "inputTokens": 2277,
+     "outputTokens": 465,
+     "usd": 0.00050625,
+     "seconds": 7.1
+    }
+   },
+   "disagreement": -0.155,
+   "flagged": false
+  },
+  {
+   "id": "246cd80e-ae20-4568-bea5-87fbaedbace6",
+   "title": "Jagung Rebus",
+   "artist": "Maya Jasika",
+   "version": "",
+   "video": "x5wzO1pTt8c",
+   "videoId": "76ddc54e-6f5d-49ff-8e42-0401ccfa3bf4",
+   "videoTitle": "Let's chill and sing🎤 /bentar aja 'w'",
+   "kind": "karaoke",
+   "start": 8536,
+   "end": 9154,
+   "lyricsSource": "Synced",
+   "audio": {
+    "seconds": 276.5,
+    "tempoBpm": 95.7,
+    "loudnessDb": -18.08,
+    "brightnessHz": 2040.0,
+    "onsetsPerS": 5.32,
+    "percussiveShare": 0.119,
+    "measureSeconds": 14.6
+   },
+   "audioEnergy": 0.721,
+   "text": {
+    "moods": [
+     "ceria",
+     "hype"
+    ],
+    "energy": 0.65,
+    "positivity": 0.9,
+    "reason": "A playful, comedic novelty track with a bouncy beat and cheerful call-and-response; the corn-as-innuendo lyrics are silly and light rather than emotional.",
+    "usage": {
+     "model": "claude-haiku-5-5",
+     "inputTokens": 2647,
+     "outputTokens": 587,
+     "usd": 0.00064125,
+     "seconds": 7.06
+    }
+   },
+   "disagreement": -0.071,
+   "flagged": false
+  },
+  {
+   "id": "6340dff1-aa19-445d-8437-1f6e59239ec2",
+   "title": "Kau Rumahku",
+   "artist": "Raissa Anggiani",
+   "version": "",
+   "video": "g5XJsXaeKvE",
+   "videoId": "d646073b-35b6-4281-8ebf-065789160d6f",
+   "videoTitle": "First Stream 2024 - Singing Stream 🎤",
+   "kind": "karaoke",
+   "start": 1886,
+   "end": 2570,
+   "lyricsSource": "Synced",
+   "audio": {
+    "seconds": 273.9,
+    "tempoBpm": 172.3,
+    "loudnessDb": -19.35,
+    "brightnessHz": 1265.0,
+    "onsetsPerS": 3.65,
+    "percussiveShare": 0.06,
+    "measureSeconds": 14.4
+   },
+   "audioEnergy": 0.6,
+   "text": {
+    "moods": [
+     "romantis",
+     "chill"
+    ],
+    "energy": 0.35,
+    "positivity": 0.8,
+    "reason": "A tender love song about someone who feels like home, with soft, mid-tempo pop instrumentation and hopeful, affectionate lyrics.",
+    "usage": {
+     "model": "claude-haiku-5-5",
+     "inputTokens": 2538,
+     "outputTokens": 478,
+     "usd": 0.00056495,
+     "seconds": 6.44
+    }
+   },
+   "disagreement": -0.25,
+   "flagged": false
+  },
+  {
+   "id": "220e7e93-1d1b-4855-a427-fe5de879eb2f",
+   "title": "Jiwa Yang Bersedih",
+   "artist": "Ghea Indrawari",
+   "version": "",
+   "video": "g5XJsXaeKvE",
+   "videoId": "d646073b-35b6-4281-8ebf-065789160d6f",
+   "videoTitle": "First Stream 2024 - Singing Stream 🎤",
+   "kind": "karaoke",
+   "start": 3094,
+   "end": 3697,
+   "lyricsSource": "Synced",
+   "audio": {
+    "seconds": 296.0,
+    "tempoBpm": 95.7,
+    "loudnessDb": -18.55,
+    "brightnessHz": 1350.0,
+    "onsetsPerS": 3.2,
+    "percussiveShare": 0.069,
+    "measureSeconds": 15.8
+   },
+   "audioEnergy": 0.447,
+   "text": {
+    "moods": [
+     "sendu",
+     "chill"
+    ],
+    "energy": 0.25,
+    "positivity": 0.35,
+    "reason": "A slow, gentle ballad about comforting a grieving soul (\"Menangislah, kau juga manusia\"), with a melancholic tone that is not about romance but ends on a hopeful note that you will be heard.",
+    "usage": {
+     "model": "claude-haiku-5-5",
+     "inputTokens": 2892,
+     "outputTokens": 565,
+     "usd": 0.00067925,
+     "seconds": 6.86
+    }
+   },
+   "disagreement": -0.197,
+   "flagged": false
+  },
+  {
+   "id": "63a9bf4a-1c5e-4ef7-b0c2-80a5461aa336",
+   "title": "Oh! Asmara",
+   "artist": "Kobo Kanaeru",
+   "version": "",
+   "video": "g5XJsXaeKvE",
+   "videoId": "d646073b-35b6-4281-8ebf-065789160d6f",
+   "videoTitle": "First Stream 2024 - Singing Stream 🎤",
+   "kind": "karaoke",
+   "start": 6694,
+   "end": 7314,
+   "lyricsSource": "Synced",
+   "audio": {
+    "seconds": 241.9,
+    "tempoBpm": 123.0,
+    "loudnessDb": -18.15,
+    "brightnessHz": 1607.0,
+    "onsetsPerS": 2.84,
+    "percussiveShare": 0.083,
+    "measureSeconds": 12.7
+   },
+   "audioEnergy": 0.574,
+   "text": {
+    "moods": [
+     "romantis",
+     "ceria"
+    ],
+    "energy": 0.7,
+    "positivity": 0.85,
+    "reason": "A bouncy, giddy love song about a racing heart and a crush slowly warming up, with a playful, hopeful tone throughout.",
+    "usage": {
+     "model": "claude-haiku-5-5",
+     "inputTokens": 2752,
+     "outputTokens": 426,
+     "usd": 0.00058175,
+     "seconds": 6.41
+    }
+   },
+   "disagreement": 0.126,
+   "flagged": false
+  },
+  {
+   "id": "b9021875-e551-4143-991e-39eb4a1d29e6",
+   "title": "Eiyuu no Shihen",
+   "artist": "Mirai Kodai Gakudan",
+   "version": "",
+   "video": "g5XJsXaeKvE",
+   "videoId": "d646073b-35b6-4281-8ebf-065789160d6f",
+   "videoTitle": "First Stream 2024 - Singing Stream 🎤",
+   "kind": "karaoke",
+   "start": 7896,
+   "end": 8355,
+   "lyricsSource": "Synced",
+   "audio": {
+    "seconds": 240.2,
+    "tempoBpm": 136.0,
+    "loudnessDb": -20.66,
+    "brightnessHz": 1400.0,
+    "onsetsPerS": 3.31,
+    "percussiveShare": 0.026,
+    "measureSeconds": 15.4
+   },
+   "audioEnergy": 0.5,
+   "text": {
+    "moods": [
+     "sendu",
+     "hype"
+    ],
+    "energy": 0.65,
+    "positivity": 0.45,
+    "reason": "A sweeping, anthemic epic about mortality and legacy: the lyrics dwell on birth, fleeting life and things left behind, with a melancholic undertone, but the chorus builds to a grand, triumphant \"epic poem\" climax.",
+    "usage": {
+     "model": "claude-haiku-5-5",
+     "inputTokens": 2429,
+     "outputTokens": 660,
+     "usd": 0.00063415,
+     "seconds": 7.51
+    }
+   },
+   "disagreement": 0.15,
+   "flagged": false
+  },
+  {
+   "id": "65ceeb8f-84fd-4f85-a830-f4da8fa63c18",
+   "title": "Runtuh",
+   "artist": "Feby Putri feat. Fiersa Besari",
+   "version": "",
+   "video": "g5XJsXaeKvE",
+   "videoId": "d646073b-35b6-4281-8ebf-065789160d6f",
+   "videoTitle": "First Stream 2024 - Singing Stream 🎤",
+   "kind": "karaoke",
+   "start": 12837,
+   "end": 13093,
+   "lyricsSource": "Synced",
+   "audio": {
+    "seconds": 226.4,
+    "tempoBpm": 129.2,
+    "loudnessDb": -20.19,
+    "brightnessHz": 1357.0,
+    "onsetsPerS": 3.1,
+    "percussiveShare": 0.086,
+    "measureSeconds": 16.3
+   },
+   "audioEnergy": 0.537,
+   "text": {
+    "moods": [
+     "sendu",
+     "galau"
+    ],
+    "energy": 0.3,
+    "positivity": 0.15,
+    "reason": "A slow, heavy ballad about emotional exhaustion, pretending to laugh while hurting, and wanting permission to cry; the sadness is about self-hurt rather than romance, with galau as a secondary tag for the emotional strain.",
+    "usage": {
+     "model": "claude-haiku-5-5",
+     "inputTokens": 2423,
+     "outputTokens": 647,
+     "usd": 0.00062645,
+     "seconds": 6.38
+    }
+   },
+   "disagreement": -0.237,
+   "flagged": false
+  },
+  {
+   "id": "629bf6fe-069d-4ca9-96f4-0659d363ff2f",
+   "title": "Mendarah",
+   "artist": "Nadin Amizah",
+   "version": "",
+   "video": "_5yR3KQekYs",
+   "videoId": "67543e90-f40f-4121-acc0-49b4594c0c57",
+   "videoTitle": "【FIOYODAY2023】BIRTHDAY BNUY! (˵ •̀ ᴗ - ˵ ) ✧",
+   "kind": "karaoke",
+   "start": 10398,
+   "end": 10870,
+   "lyricsSource": "Synced",
+   "audio": {
+    "seconds": 229.7,
+    "tempoBpm": 123.0,
+    "loudnessDb": -20.79,
+    "brightnessHz": 954.0,
+    "onsetsPerS": 2.61,
+    "percussiveShare": 0.021,
+    "measureSeconds": 17.4
+   },
+   "audioEnergy": 0.258,
+   "text": {
+    "moods": [
+     "galau",
+     "sendu"
+    ],
+    "energy": 0.3,
+    "positivity": 0.25,
+    "reason": "A slow, somber ballad about loving someone from far away and keeping that love as a quiet secret, with a heavy sense of longing and feeling torn apart.",
+    "usage": {
+     "model": "claude-haiku-5-5",
+     "inputTokens": 2381,
+     "outputTokens": 407,
+     "usd": 0.00049805,
+     "seconds": 6.07
+    }
+   },
+   "disagreement": 0.042,
+   "flagged": false
+  },
+  {
+   "id": "664a501a-a350-4161-91a5-c501409c4894",
+   "title": "Dia Masa Lalumu, Aku Masa Depanmu",
+   "artist": "Vionita",
+   "version": "",
+   "video": "YsUXvVM7a-g",
+   "videoId": "3f592b3d-3c7e-471c-bd8b-059769127195",
+   "videoTitle": "Menyanyi di tengah hujan",
+   "kind": "karaoke",
+   "start": 2548,
+   "end": 3099,
+   "lyricsSource": "Synced",
+   "audio": {
+    "seconds": 247.9,
+    "tempoBpm": 129.2,
+    "loudnessDb": -16.89,
+    "brightnessHz": 1513.0,
+    "onsetsPerS": 2.15,
+    "percussiveShare": 0.093,
+    "measureSeconds": 18.7
+   },
+   "audioEnergy": 0.553,
+   "text": {
+    "moods": [
+     "galau",
+     "sendu"
+    ],
+    "energy": 0.4,
+    "positivity": 0.2,
+    "reason": "A heartbreak ballad about loving someone who is still trapped by their ex, with the narrator close to giving up, so the feeling is painful overthinking with a melancholic undertone.",
+    "usage": {
+     "model": "claude-haiku-5-5",
+     "inputTokens": 2603,
+     "outputTokens": 584,
+     "usd": 0.0006309499999999999,
+     "seconds": 7.02
+    }
+   },
+   "disagreement": -0.153,
+   "flagged": false
+  },
+  {
+   "id": "070eff98-a28c-48fc-b567-21daa5994331",
+   "title": "Tertawan Hati",
+   "artist": "Awdella",
+   "version": "",
+   "video": "YsUXvVM7a-g",
+   "videoId": "3f592b3d-3c7e-471c-bd8b-059769127195",
+   "videoTitle": "Menyanyi di tengah hujan",
+   "kind": "karaoke",
+   "start": 5219,
+   "end": 5463,
+   "lyricsSource": "Synced",
+   "audio": {
+    "seconds": 243.9,
+    "tempoBpm": 129.2,
+    "loudnessDb": -15.88,
+    "brightnessHz": 1378.0,
+    "onsetsPerS": 2.48,
+    "percussiveShare": 0.096,
+    "measureSeconds": 19.8
+   },
+   "audioEnergy": 0.553,
+   "text": {
+    "moods": [
+     "galau",
+     "sendu"
+    ],
+    "energy": 0.3,
+    "positivity": 0.15,
+    "reason": "A slow, heavy ballad about staying in a relationship that is falling apart, feeling exhausted and broken but unable to let go, so it is mostly heartache and overthinking love.",
+    "usage": {
+     "model": "claude-haiku-5-5",
+     "inputTokens": 2444,
+     "outputTokens": 440,
+     "usd": 0.00052715,
+     "seconds": 5.78
+    }
+   },
+   "disagreement": -0.253,
+   "flagged": false
+  },
+  {
+   "id": "23e50543-cbfe-42af-bbda-62ff6fe5d61b",
+   "title": "Hati Yang Kau Sakiti",
+   "artist": "Rossa",
+   "version": "chorus",
+   "video": "1KNfl-oMRPE",
+   "videoId": "2a009fc3-6e31-4528-a937-93ecd8580acc",
+   "videoTitle": "NYANYI ！！！",
+   "kind": "karaoke",
+   "start": 4904,
+   "end": 5382,
+   "lyricsSource": "Synced",
+   "audio": {
+    "seconds": 247.7,
+    "tempoBpm": 123.0,
+    "loudnessDb": -26.22,
+    "brightnessHz": 1637.0,
+    "onsetsPerS": 2.81,
+    "percussiveShare": 0.129,
+    "measureSeconds": 23.9
+   },
+   "audioEnergy": 0.553,
+   "text": {
+    "moods": [
+     "galau",
+     "sendu"
+    ],
+    "energy": 0.3,
+    "positivity": 0.1,
+    "reason": "A slow, tearful ballad about being cheated on and hurt by a partner who chose someone else, with the singer crying and feeling wronged.",
+    "usage": {
+     "model": "claude-haiku-5-5",
+     "inputTokens": 2126,
+     "outputTokens": 295,
+     "usd": 0.00039105,
+     "seconds": 4.68
+    }
+   },
+   "disagreement": -0.253,
+   "flagged": false
+  },
+  {
+   "id": "09de370b-fe2f-4753-8634-2d5ddb95eafb",
+   "title": "Betelgeuse",
+   "artist": "Yuuri",
+   "version": "",
+   "video": "I6rpgZhQCBo",
+   "videoId": "087cf59b-7426-4f83-ae46-8bb36ced48cf",
+   "videoTitle": "SINGING STREAM - SADTURDAY SADTEMBER WITH FIO...",
+   "kind": "karaoke",
+   "start": 5995,
+   "end": 6574,
+   "lyricsSource": "Synced",
+   "audio": {
+    "seconds": 234.1,
+    "tempoBpm": 184.6,
+    "loudnessDb": -26.32,
+    "brightnessHz": 1942.0,
+    "onsetsPerS": 3.96,
+    "percussiveShare": 0.164,
+    "measureSeconds": 17.3
+   },
+   "audioEnergy": 0.768,
+   "text": {
+    "moods": [
+     "romantis",
+     "sendu"
+    ],
+    "energy": 0.3,
+    "positivity": 0.6,
+    "reason": "A slow, tender ballad about two people promising to shine together like Betelgeuse, hopeful and devoted but touched with quiet fear of mortality and time passing.",
+    "usage": {
+     "model": "claude-haiku-5-5",
+     "inputTokens": 2644,
+     "outputTokens": 575,
+     "usd": 0.0006346500000000001,
+     "seconds": 6.63
+    }
+   },
+   "disagreement": -0.468,
+   "flagged": true
+  },
+  {
+   "id": "7ec9eef2-e9d2-40c4-9d2c-c87eb663b968",
+   "title": "Janji",
+   "artist": "PROJEKT GENESIS",
+   "version": "acapella",
+   "video": "PlNyvoQEPUs",
+   "videoId": "8299cb83-302e-4f4f-9751-4656dea3dce5",
+   "videoTitle": "Happy #IndependenceDay2023  !!",
+   "kind": "karaoke",
+   "start": 6873,
+   "end": 7271,
+   "lyricsSource": "None",
+   "audio": {
+    "seconds": 240.0,
+    "tempoBpm": 117.5,
+    "loudnessDb": -35.76,
+    "brightnessHz": 1655.0,
+    "onsetsPerS": 2.51,
+    "percussiveShare": 0.081,
+    "measureSeconds": 18.6
+   },
+   "audioEnergy": 0.368,
+   "text": {
+    "moods": [
+     "romantis",
+     "galau"
+    ],
+    "energy": 0.5,
+    "positivity": 0.55,
+    "reason": "No lyrics available; tagged from the title \"Janji\" (promise), which suggests a love-promise theme, with a guessed mid-tempo feel and no confident knowledge of the track.",
+    "usage": {
+     "model": "claude-haiku-5-5",
+     "inputTokens": 1975,
+     "outputTokens": 535,
+     "usd": 0.00048085,
+     "seconds": 5.74
+    }
+   },
+   "disagreement": 0.132,
+   "flagged": false
+  },
+  {
+   "id": "baa8310f-f3b6-47b3-a81d-b80ad7de5099",
+   "title": "Michi ~to you all",
+   "artist": "aluto",
+   "version": "short",
+   "video": "0trjgNB55XQ",
+   "videoId": "eac5428b-fc0f-4ce9-9611-6eee677d5c85",
+   "videoTitle": "【Karaoke Stream】Nyanyi...........................",
+   "kind": "karaoke",
+   "start": 13615,
+   "end": 13867,
+   "lyricsSource": "Synced",
+   "audio": {
+    "seconds": 82.7,
+    "tempoBpm": 103.4,
+    "loudnessDb": -27.79,
+    "brightnessHz": 1960.0,
+    "onsetsPerS": 3.41,
+    "percussiveShare": 0.093,
+    "measureSeconds": 6.4
+   },
+   "audioEnergy": 0.511,
+   "text": {
+    "moods": [
+     "romantis",
+     "galau"
+    ],
+    "energy": 0.45,
+    "positivity": 0.55,
+    "reason": "Longing to reach someone's heart and being driven forward by their voice, face, and every expression reads as tender love, with some lost-and-uncertain undertone; the closing hint that the clouds will part keeps it hopeful rather than sad.",
+    "usage": {
+     "model": "claude-haiku-5-5",
+     "inputTokens": 2124,
+     "outputTokens": 652,
+     "usd": 0.00056915,
+     "seconds": 8.84
+    }
+   },
+   "disagreement": -0.061,
+   "flagged": false
+  }
+ ]
+}

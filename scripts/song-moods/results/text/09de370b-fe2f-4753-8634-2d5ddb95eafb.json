@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "romantis",
+  "sendu"
+ ],
+ "energy": 0.3,
+ "positivity": 0.6,
+ "reason": "A slow, tender ballad about two people promising to shine together like Betelgeuse, hopeful and devoted but touched with quiet fear of mortality and time passing.",
+ "usage": {
+  "model": "claude-haiku-5-5",
+  "inputTokens": 2644,
+  "outputTokens": 575,
+  "usd": 0.0006346500000000001,
+  "seconds": 6.63
+ }
+}

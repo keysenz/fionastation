@@ -1,0 +1,15 @@
+{
+ "moods": [
+  "galau"
+ ],
+ "energy": 0.45,
+ "positivity": 0.15,
+ "reason": "Longing for someone in a secret affair who is already committed, with self-doubt and an unwilling-to-let-go conflict, all carried by a mid-tempo pop arrangement.",
+ "usage": {
+  "model": "claude-haiku-5-5",
+  "inputTokens": 2685,
+  "outputTokens": 644,
+  "usd": 0.00067735,
+  "seconds": 8.19
+ }
+}

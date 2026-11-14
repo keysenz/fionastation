@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "romantis",
+  "chill"
+ ],
+ "energy": 0.3,
+ "positivity": 0.8,
+ "reason": "A tender, devoted love ballad vowing to find each other in 1000 lifetimes, sung at a slow, gentle tempo with warm, hopeful feeling.",
+ "usage": {
+  "model": "claude-haiku-5-5",
+  "inputTokens": 2773,
+  "outputTokens": 483,
+  "usd": 0.00061445,
+  "seconds": 5.8
+ }
+}

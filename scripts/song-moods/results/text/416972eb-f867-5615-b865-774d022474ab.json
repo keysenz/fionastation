@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "hype",
+  "ceria"
+ ],
+ "energy": 0.75,
+ "positivity": 0.85,
+ "reason": "Anthemic, rising orchestral-style track about courage, shining like the sun and rising above the storm, with a hopeful, determined \"now or never\" feel.",
+ "usage": {
+  "model": "claude-haiku-5-5",
+  "inputTokens": 2352,
+  "outputTokens": 532,
+  "usd": 0.00055475,
+  "seconds": 6.36
+ }
+}
