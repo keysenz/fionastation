@@ -227,7 +227,7 @@ const isAuthRoute = (route: string | undefined): route is AuthRoute =>
 const ADMIN_PATH = /^\/(?:api\/)?admin(?:\/|$)/
 
 // NOTE: keep in step with src/route.ts. Any other path gets the 404 status with the app's own 404 page.
-const PAGE_PATHS = new Set(['/', '/songs', '/hire', '/studio'])
+const PAGE_PATHS = new Set(['/', '/songs', '/hire', '/studio', '/endorse'])
 const STATS_PAGE_PATH = '/stats'
 const PLAYLIST_PAGE_PATH = /^\/p\/[0-9A-Za-z]{8}$/
 

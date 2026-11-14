@@ -8,6 +8,7 @@ export const AppRoute = defineRouteUnion({
   Radio: {},
   Playlist: { id: PlaylistId },
   Songs: {},
+  Endorse: {},
   Studio: {},
   Hire: {},
   NotFound: { path: Schema.String },
@@ -35,6 +36,11 @@ export const studioRouter = pipe(
   Route.mapTo(AppRoute.Studio),
 )
 
+export const endorseRouter = pipe(
+  Route.literal('endorse'),
+  Route.mapTo(AppRoute.Endorse),
+)
+
 export const urlToAppRoute = Route.parseUrlWithFallback(
   Route.oneOf(
     radioRouter,
@@ -42,6 +48,7 @@ export const urlToAppRoute = Route.parseUrlWithFallback(
     songsRouter,
     hireRouter,
     studioRouter,
+    endorseRouter,
   ),
   AppRoute.NotFound,
 )

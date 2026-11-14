@@ -16,7 +16,7 @@
       "destination": "/stats.html"
     },
     {
-      "source": "/:page(songs|hire|studio)",
+      "source": "/:page(songs|hire|studio|endorse)",
       "destination": "/index.html"
     },
     {

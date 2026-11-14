@@ -1,7 +1,12 @@
 import { Array, Match, Option } from 'effect'
 import { type Html, type HtmlBuilder } from 'foldkit/html'
 
-import { hireRouter, radioRouter, studioRouter } from '../../route'
+import {
+  endorseRouter,
+  hireRouter,
+  radioRouter,
+  studioRouter,
+} from '../../route'
 import {
   type FormSpec,
   Message,
@@ -411,13 +416,14 @@ export const reviewList = (
 
 // WIZARD
 
-type CommissionPage = 'hire' | 'studio'
+type CommissionPage = 'hire' | 'studio' | 'endorse'
 
 const NAV_LINKS: ReadonlyArray<
   Readonly<{ page: CommissionPage; label: string; href: string }>
 > = [
   { page: 'hire', label: "Hire Fio's voice", href: hireRouter() },
   { page: 'studio', label: 'Paopoa Studio', href: studioRouter() },
+  { page: 'endorse', label: 'Endorse', href: endorseRouter() },
 ]
 
 const commissionNav = (
