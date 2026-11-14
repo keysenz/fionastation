@@ -742,7 +742,12 @@ const fetchIfNeeded = (model: Model): UpdateReturn =>
 export const openedPlaylistNameOf = (model: Model): Option.Option<string> =>
   PlaylistOpen.matchOrElse(
     model.playlistOpen,
-    { Opened: ({ name }) => Option.some<string>(name) },
+    {
+      Opened: ({ id, name }) =>
+        Option.contains(model.setlist.maybeOpenedPlaylistId, id)
+          ? Option.some<string>(name)
+          : Option.none(),
+    },
     () => Option.none(),
   )
 
@@ -1342,7 +1347,9 @@ const updateModel = (model: Model, message: Message) =>
     }),
 
     OpenedPlaylist: ({ id }) =>
-      Option.contains(playlistIdOf(model.playlistOpen), id)
+      Option.contains(playlistIdOf(model.playlistOpen), id) &&
+      (!PlaylistOpen.guards.Opened(model.playlistOpen) ||
+        Option.contains(model.setlist.maybeOpenedPlaylistId, id))
         ? { model }
         : {
             model: modifyFields(model, {

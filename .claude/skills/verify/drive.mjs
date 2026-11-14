@@ -2144,6 +2144,16 @@ const journeys = {
       if (await dialogOpen()) throw new Error('the question came back after a reload');
       if ((await queueNow()) !== wantQueue) throw new Error(`queue ${await queueNow()}`);
     }, page);
+    await page.getByLabel('Add to Queue').first().click({ force: true });
+    await page.waitForFunction((was) => JSON.parse(localStorage.getItem('karaoke-storage')).state.queue.length > was, wantQueue.split(',').length);
+    await page.getByRole('link', { name: 'Song list' }).click();
+    await page.waitForFunction(() => location.pathname === '/songs');
+    await page.goBack();
+    await step('playlist-navigation', 'the same link again after the visitor queued another song asks like any link and drops the playlist name from the title', async () => {
+      await choiceButton(page, 'Replace').waitFor({ state: 'visible' });
+      if ((await page.title()).includes('Verify navigation')) throw new Error('the title still names the playlist');
+    }, page);
+    await choiceButton(page, 'Cancel').click();
     await page.goto(`${BASE}/p/${second.id}`);
     await step('playlist-navigation', 'a different link still asks', () => choiceButton(page, 'Replace').waitFor({ state: 'visible' }), page);
   },

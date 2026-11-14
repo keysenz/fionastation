@@ -2609,6 +2609,57 @@ test('a reload of the opened playlist link while its songs are queued does not a
   expect(reloaded.model.setlist.maybeNowPlaying).toEqual(Option.none())
 })
 
+const reopenedAfter = (...changes: ReadonlyArray<Message>) => {
+  const changed = changes.reduce<UpdateReturn>(
+    (previous, next) => update(previous.model, next),
+    openedAndPlaying(),
+  )
+  return {
+    changed,
+    reopened: [
+      Message.OpenedPlaylist({ id: openingId }),
+      Message.CompletedLoadSavedSetlist({
+        maybeJson: Option.some(toPersistedJson(changed.model.setlist)),
+      }),
+      Message.SucceededFetchPlaylist({ playlist: playlistOf(a, b, c) }),
+    ].reduce<UpdateReturn>(
+      (previous, next) => update(previous.model, next),
+      changed,
+    ),
+  }
+}
+
+test('opening the same link again asks once the visitor queued another song', () => {
+  const { changed, reopened } = reopenedAfter(
+    Message.ClickedAddToQueue({ song: d }),
+  )
+  expect(openedNameOf(changed.model)).toEqual(Option.none())
+  expect(reopened.model.playlistOpen._tag).toBe('Asking')
+})
+
+test('opening the same link again asks once the visitor removed a queued song', () => {
+  const { reopened } = reopenedAfter(
+    Message.ClickedRemoveFromQueue({ index: 0 }),
+  )
+  expect(reopened.model.playlistOpen._tag).toBe('Asking')
+})
+
+test('playing through the queue keeps the opened playlist, so its link stays a no-op', () => {
+  const { changed, reopened } = reopenedAfter(Message.ClickedNext())
+  expect(openedNameOf(changed.model)).toEqual(Option.some('Road trip'))
+  expect(reopened.model.playlistOpen._tag).toBe('Opened')
+})
+
+test('opening the same link again with a song playing and an empty queue asks', () => {
+  const { changed, reopened } = reopenedAfter(
+    Message.ClickedRemoveFromQueue({ index: 0 }),
+    Message.ClickedRemoveFromQueue({ index: 0 }),
+  )
+  expect(queueIdsOf(changed.model)).toEqual([])
+  expect(playingIdOf(changed.model)).toEqual(Option.some('a'))
+  expect(reopened.model.playlistOpen._tag).toBe('Asking')
+})
+
 test('a reload on a different playlist link still asks', () => {
   const opened = openedAndPlaying()
   const reloaded = through(

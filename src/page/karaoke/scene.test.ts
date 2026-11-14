@@ -1,4 +1,4 @@
-import { DateTime } from 'effect'
+import { DateTime, Option, Schema } from 'effect'
 import {
   Command,
   Mount,
@@ -13,6 +13,7 @@ import {
 import { test } from 'vitest'
 
 import type { PlayableSong } from '../../domain.ts'
+import { Playlist } from '../../playlist.ts'
 import { PlayerEvent } from '../../youtube'
 import {
   Message,
@@ -213,5 +214,64 @@ test('lyrics whose automatic retries ran out show that the radio gave up, and st
     expect(retryGaveUp).toExist(),
     expect(retryWaiting).toBeAbsent(),
     inside(retryGaveUp, expect(button('Try again')).toBeEnabled()),
+  )
+})
+
+const entryOf = (song: PlayableSong) => ({
+  songId: song.id,
+  videoUrl: song.video_url,
+  timestamp: song.timestamp,
+  title: song.song_title,
+})
+
+const playlistAB = Schema.decodeSync(Playlist)({
+  id: 'Ab3dE5gH',
+  name: 'Road trip',
+  entries: [entryOf(a), entryOf(b)],
+  version: 1,
+  createdAt: 'x',
+  updatedAt: 'x',
+})
+
+const askedAfter = (...setup: ReadonlyArray<Message>): Model =>
+  after(
+    fetched(a, b),
+    ...setup,
+    Message.OpenedPlaylist({ id: playlistAB.id }),
+    Message.CompletedLoadSavedSetlist({ maybeJson: Option.none() }),
+    Message.SucceededFetchPlaylist({ playlist: playlistAB }),
+  )
+
+const contextIs = (context: string) =>
+  expect(selector(`[data-playlist-context="${context}"]`)).toExist()
+
+test('the question says a song is playing when the queue is empty', () => {
+  scene(
+    { update, view },
+    given(askedAfter(Message.ClickedSong({ song: a }))),
+    playerMounted,
+    contextIs('Playing'),
+  )
+})
+
+test('the question says the queue has songs when nothing is playing', () => {
+  scene(
+    { update, view },
+    given(askedAfter(Message.ClickedAddToQueue({ song: a }))),
+    contextIs('Queued'),
+  )
+})
+
+test('the question says both when a song plays over a queue', () => {
+  scene(
+    { update, view },
+    given(
+      askedAfter(
+        Message.ClickedSong({ song: a }),
+        Message.ClickedAddToQueue({ song: b }),
+      ),
+    ),
+    playerMounted,
+    contextIs('PlayingAndQueued'),
   )
 })

@@ -38,6 +38,7 @@ import {
   Phase,
   type PlaybackIntent,
   type Repeat,
+  type Setlist,
   type Volume,
   intentOf,
   isSilent,
@@ -1871,10 +1872,25 @@ const toastView = (toast: Toast, h: HtmlBuilder<Message>): Html =>
 const promptButtonClass =
   'flex items-center justify-center gap-2 min-h-11 px-4 rounded-full border border-white/15 text-sm font-semibold transition'
 
+const playlistContextOf = (setlist: Setlist) => {
+  const isPlaying = Option.isSome(setlist.maybeNowPlaying)
+  const isQueued = setlist.queue.length > 0
+  return isPlaying && isQueued
+    ? {
+        tag: 'PlayingAndQueued',
+        text: 'A song is playing and your queue has songs in it.',
+      }
+    : isPlaying
+      ? { tag: 'Playing', text: 'A song is already playing.' }
+      : { tag: 'Queued', text: 'Your queue already has songs in it.' }
+}
+
 const playlistPromptView = (
   asking: Extract<PlaylistOpen, { _tag: 'Asking' }>,
+  setlist: Setlist,
   h: HtmlBuilder<Message>,
 ): Html => {
+  const context = playlistContextOf(setlist)
   const wrapFocus = (focusSelector: string) =>
     Option.some({
       focusSelector,
@@ -1914,10 +1930,11 @@ const playlistPromptView = (
             [asking.name],
           ),
           h.p(
-            [h.Class('text-sm text-gray-300')],
             [
-              `${songCountText(asking.songs.length)} to play. Your queue already has songs in it.`,
+              h.Class('text-sm text-gray-300'),
+              h.DataAttribute('playlist-context', context.tag),
             ],
+            [`${songCountText(asking.songs.length)} to play. ${context.text}`],
           ),
           h.div(
             [h.Class('flex flex-col gap-2')],
@@ -2025,7 +2042,7 @@ export const view = Submodel.defineView<Model, Message>((model, h): Html =>
       }),
       PlaylistOpen.matchOrElse(
         model.playlistOpen,
-        { Asking: asking => playlistPromptView(asking, h) },
+        { Asking: asking => playlistPromptView(asking, model.setlist, h) },
         () => h.empty,
       ),
       model.isInfoOpen ? infoPanelView(h) : h.empty,

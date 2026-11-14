@@ -123,8 +123,22 @@ export const play = (setlist: Setlist, song: PlayableSong): Setlist =>
     song,
   )
 
+/** A queue edit by the visitor, as opposed to playing through it, so the queue no longer
+ *  holds what an opened playlist put there. */
+const editQueue = (
+  setlist: Setlist,
+  change: (queue: Setlist['queue']) => Setlist['queue'],
+): Setlist =>
+  modifyFields(setlist, {
+    queue: change,
+    maybeOpenedPlaylistId: () => Option.none(),
+  })
+
+const withoutQueued = (queue: Setlist['queue'], index: number) =>
+  queue.filter((_, position) => position !== index)
+
 export const enqueue = (setlist: Setlist, song: PlayableSong): Setlist =>
-  modifyFields(setlist, { queue: queue => [...queue, song] })
+  editQueue(setlist, queue => [...queue, song])
 
 /** Appends songs to the queue in the order given. */
 export const enqueueAll = (
@@ -132,7 +146,7 @@ export const enqueueAll = (
   songs: ReadonlyArray<PlayableSong>,
 ): Setlist =>
   Array.isReadonlyArrayNonEmpty(songs)
-    ? modifyFields(setlist, { queue: queue => [...queue, ...songs] })
+    ? editQueue(setlist, queue => [...queue, ...songs])
     : setlist
 
 export type PlaylistLoadMode = 'Replace' | 'Append'
@@ -192,19 +206,20 @@ export const loadPlaylist = (
   if (!Array.isReadonlyArrayNonEmpty(songs)) {
     return setlist
   }
-  const opened = modifyFields(setlist, {
-    maybeOpenedPlaylistId: () => Option.some(id),
-  })
+  const opened = (loaded: Setlist) =>
+    modifyFields(loaded, { maybeOpenedPlaylistId: () => Option.some(id) })
   if (mode === 'Replace') {
-    return playNext(modifyFields(opened, { queue: () => songs }))
+    return playNext(opened(modifyFields(setlist, { queue: () => songs })))
   }
   const heldIds = new Set([
     ...setlist.queue.map(song => song.id),
     ...Option.toArray(setlist.maybeNowPlaying).map(({ song }) => song.id),
   ])
-  return enqueueAll(
-    opened,
-    Array.filter(songs, song => !heldIds.has(song.id)),
+  return opened(
+    enqueueAll(
+      setlist,
+      Array.filter(songs, song => !heldIds.has(song.id)),
+    ),
   )
 }
 
@@ -222,21 +237,26 @@ export const moveInQueue = (
   const without = queue.filter((_, index) => index !== from)
   return modifyFields(setlist, {
     queue: () => [...without.slice(0, to), queue[from]!, ...without.slice(to)],
+    maybeOpenedPlaylistId: () => Option.none(),
   })
 }
 
 export const removeFromQueue = (setlist: Setlist, index: number): Setlist =>
   Number.isInteger(index) && index >= 0 && index < setlist.queue.length
-    ? modifyFields(setlist, {
-        queue: queue => queue.filter((_, position) => position !== index),
-      })
+    ? editQueue(setlist, queue => withoutQueued(queue, index))
     : setlist
 
 export const playFromQueue = (setlist: Setlist, index: number): Setlist => {
   const maybeSong = Array.get(setlist.queue, index)
   return Option.match(maybeSong, {
     onNone: () => setlist,
-    onSome: song => play(removeFromQueue(setlist, index), song),
+    onSome: song =>
+      play(
+        modifyFields(setlist, {
+          queue: queue => withoutQueued(queue, index),
+        }),
+        song,
+      ),
   })
 }
 

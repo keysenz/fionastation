@@ -5,9 +5,14 @@ import type { PlayableSong } from '../../domain.ts'
 import { type PlaylistEntry, PlaylistId } from '../../playlist.ts'
 import {
   emptySetlist,
+  enqueue,
   enqueueAll,
   loadPlaylist,
+  moveInQueue,
   play,
+  playFromQueue,
+  playNext,
+  removeFromQueue,
   resolvePlaylist,
   restoreSaved,
   toPersistedJson,
@@ -170,4 +175,20 @@ test('a queue saved before playlists existed restores with no opened playlist', 
   expect(
     restoreSaved(emptySetlist, Option.some(old)).maybeOpenedPlaylistId,
   ).toEqual(Option.none())
+})
+
+test('a visitor queue edit forgets the opened playlist, and playing through does not', () => {
+  const opened = loadPlaylist(emptySetlist, [a!, b!, c!], 'Replace', listId)
+  expect(Option.isSome(opened.maybeOpenedPlaylistId)).toBe(true)
+  expect(Option.isSome(playNext(opened).maybeOpenedPlaylistId)).toBe(true)
+  expect(Option.isSome(playFromQueue(opened, 0).maybeOpenedPlaylistId)).toBe(
+    true,
+  )
+  for (const edited of [
+    enqueue(opened, d!),
+    removeFromQueue(opened, 0),
+    moveInQueue(opened, 0, 1),
+  ]) {
+    expect(edited.maybeOpenedPlaylistId).toEqual(Option.none())
+  }
 })
