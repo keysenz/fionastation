@@ -30,6 +30,11 @@ import {
 } from './playlists.ts'
 import { loadSongbook } from './songbook.ts'
 import { createStatApi, createStatReport, openStatStore } from './stats.ts'
+import {
+  STATS_REPORT_ROUTE,
+  createGatedReport,
+  parseStatsUserIds,
+} from './statsAccess.ts'
 import { isGone, startRefreshing } from './videoStatus.ts'
 
 const ROOT = resolve(import.meta.dirname, '../dist')
@@ -154,6 +159,33 @@ const discordAuth =
     sessions: playlistStore.sessions,
   })
 
+const statReport =
+  statStore &&
+  createStatReport({ store: statStore, findSongs: findSongsForStats })
+
+const statsUserIds = parseStatsUserIds(process.env.STATS_USER_IDS)
+if (!statsUserIds) {
+  console.warn(
+    'STATS_USER_IDS is not set to a list of Discord user ids, so the statistics page is unavailable',
+  )
+}
+
+const gatedReport = createGatedReport({
+  allowedIds: statsUserIds,
+  signedInId:
+    discordApp &&
+    discordAuth &&
+    (cookie => {
+      const viewer = discordAuth.viewer({
+        method: 'GET',
+        cookie,
+        origin: undefined,
+      })
+      return viewer.kind === 'Member' ? viewer.discordId : undefined
+    }),
+  report: statReport,
+})
+
 const STATS_ROUTE = '/api/stats'
 const PLAYLIST_ROUTE = /^\/api\/playlists(?:\/([^/]+))?$/
 const AUTH_ROUTE = /^\/api\/auth\/(.+)$/
@@ -163,6 +195,7 @@ const ADMIN_PATH = /^\/(?:api\/)?admin(?:\/|$)/
 
 // NOTE: keep in step with src/route.ts. Any other path gets the 404 status with the app's own 404 page.
 const PAGE_PATHS = new Set(['/', '/songs'])
+const STATS_PAGE_PATH = '/stats'
 const PLAYLIST_PAGE_PATH = /^\/p\/[0-9A-Za-z]{8}$/
 
 const MOVED_PAGE_PATHS = new Set([
@@ -427,6 +460,20 @@ const handle = async (req: IncomingMessage, res: ServerResponse) => {
     return replyJson(answer.status, answer.body, 'no-store')
   }
 
+  if (pathname === STATS_REPORT_ROUTE) {
+    if (!hasProxySecret(req)) {
+      return replyJson(403, { error: 'Forbidden' })
+    }
+    if (req.method !== 'GET') {
+      return replyJson(405, { error: 'Method Not Allowed' }, 'no-store')
+    }
+    const { status, body } = gatedReport(
+      req.headers.cookie,
+      new URL(req.url ?? '/', 'http://localhost').searchParams.get('days'),
+    )
+    return replyJson(status, body, 'no-store')
+  }
+
   if (pathname === STATS_ROUTE) {
     if (!hasProxySecret(req)) {
       return replyJson(403, { error: 'Forbidden' })
@@ -509,6 +556,10 @@ const handle = async (req: IncomingMessage, res: ServerResponse) => {
     return reply(405, TEXT, Buffer.from('Method Not Allowed'))
   }
 
+  if (pathname === STATS_PAGE_PATH) {
+    return reply(200, HTML, await readFile(join(ROOT, 'stats.html')))
+  }
+
   if (PAGE_PATHS.has(pathname) || PLAYLIST_PAGE_PATH.test(pathname)) {
     return replyShell(200)
   }
@@ -566,9 +617,6 @@ const startAdminListener = (secret: string) => {
       secret,
       findSongs: findSongsForPlaylist,
     })
-  const statReport =
-    statStore &&
-    createStatReport({ store: statStore, findSongs: findSongsForStats })
   const answer = async (req: IncomingMessage) => {
     if (!holdsSecret(req.headers.authorization)) {
       return { status: 403, body: { error: 'Forbidden' } }

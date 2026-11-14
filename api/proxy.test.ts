@@ -207,6 +207,24 @@ describe('login', () => {
   })
 })
 
+describe('stats page', () => {
+  it('never gives the stats report the CDN cache header and passes the session cookie up', async () => {
+    const sent = stubUpstream(ok)
+    const response = await GET(
+      new Request('https://site.test/api/proxy?path=stats-page/report&days=7', {
+        headers: { cookie: 'fs_stats_session=abc.def' },
+      }),
+    )
+    expect(response.headers.has(CDN)).toBe(false)
+    expect(sent[0]?.url).toBe(
+      'http://upstream.test/api/stats-page/report?days=7',
+    )
+    expect(new Headers(sent[0]?.init.headers).get('cookie')).toBe(
+      'fs_stats_session=abc.def',
+    )
+  })
+})
+
 describe('guards', () => {
   it('answers 500 when the proxy is not configured', async () => {
     vi.stubEnv('PROXY_SECRET', '')

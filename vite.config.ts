@@ -58,7 +58,10 @@ const nonBlockingAppStylesheet = (): Plugin => ({
   apply: 'build',
   transformIndexHtml: {
     order: 'post',
-    handler(html) {
+    handler(html, { filename }) {
+      if (!filename.endsWith('index.html')) {
+        return html
+      }
       if (!APP_STYLESHEET.test(html)) {
         throw new Error('index.html has no app stylesheet link to preload')
       }
@@ -74,6 +77,11 @@ export default defineConfig({
   plugins: [fontAwesomeSubset(), nonBlockingAppStylesheet(), foldkit()],
   optimizeDeps: {
     entries: ['src/entry.ts'],
+  },
+  build: {
+    rollupOptions: {
+      input: { main: 'index.html', stats: 'stats.html' },
+    },
   },
   server: {
     proxy: {

@@ -88,6 +88,8 @@ const reportOf = (store: StatStore, days: string | null = null) => {
     since: string
     songs: Array<Record<string, any>>
     videos: Array<Record<string, any>>
+    daily: Array<Record<string, any>>
+    skipBuckets: Array<{ songId: string; bucket: number; count: number }>
   }
 }
 
@@ -284,6 +286,7 @@ describe('write api', () => {
       },
       totalsSince: () => [],
       skipsSince: () => [],
+      dailySince: () => [],
     }
     const api = createStatApi({ store: broken, songExists, now })
     const answer = api({ ip: '1.1.1.1', body: play('a1') })
@@ -393,6 +396,73 @@ describe('report', () => {
     ).toEqual(['a1', 'a2'])
     expect(reportOf(store, '3').since).toBe('2026-11-14')
     expect(reportOf(store).days).toBe(30)
+  })
+
+  test('daily lists every UTC day of the window with plays by origin, clicks, finishes and skips', () => {
+    const store = openStatStore({ path: dbPath, now })
+    record(
+      store,
+      counted('Click', 'a1'),
+      counted('Play', 'a1'),
+      counted('Play', 'a2'),
+      counted('Play', 'a2', 'Autoplay'),
+      counted('Finish', 'a1'),
+      skip('a2', 12),
+      skip('a1', 3, 'Autoplay'),
+    )
+    clock = new Date('2026-11-16T10:00:00Z')
+    record(store, counted('Play', 'b1'), skip('b1', 40))
+    const { daily } = reportOf(store, '3')
+    expect(daily.map(day => day.day)).toEqual([
+      '2026-11-14',
+      '2026-11-15',
+      '2026-11-16',
+    ])
+    expect(daily[0]).toEqual({
+      day: '2026-11-14',
+      clicks: 1,
+      plays: { Visitor: 2, Autoplay: 1 },
+      finishes: { Visitor: 1, Autoplay: 0 },
+      skips: { Visitor: 1, Autoplay: 1 },
+    })
+    expect(daily[1]).toEqual({
+      day: '2026-11-15',
+      clicks: 0,
+      plays: { Visitor: 0, Autoplay: 0 },
+      finishes: { Visitor: 0, Autoplay: 0 },
+      skips: { Visitor: 0, Autoplay: 0 },
+    })
+    expect(daily[2]?.plays).toEqual({ Visitor: 1, Autoplay: 0 })
+    expect(daily[2]?.skips).toEqual({ Visitor: 1, Autoplay: 0 })
+  })
+
+  test('daily has one empty row for today when nothing was recorded', () => {
+    const store = openStatStore({ path: dbPath, now })
+    expect(reportOf(store, '1').daily).toHaveLength(1)
+  })
+
+  test('skipBuckets count skips per song in ten second buckets and cap the last one', () => {
+    const store = openStatStore({ path: dbPath, now })
+    record(
+      store,
+      skip('a1', 0),
+      skip('a1', 9),
+      skip('a1', 10),
+      skip('a2', 10),
+      skip('a1', 299),
+      skip('a1', 300),
+      skip('a1', 7200),
+    )
+    const buckets = reportOf(store).skipBuckets
+    const countOf = (songId: string, bucket: number) =>
+      buckets.find(entry => entry.songId === songId && entry.bucket === bucket)
+        ?.count
+    expect(countOf('a1', 0)).toBe(2)
+    expect(countOf('a1', 1)).toBe(1)
+    expect(countOf('a2', 1)).toBe(1)
+    expect(countOf('a1', 29)).toBe(1)
+    expect(countOf('a1', 30)).toBe(2)
+    expect(buckets.every(entry => entry.bucket <= 30)).toBe(true)
   })
 
   test.each(['0', '-1', 'x', '1.5', '99999'])('rejects days=%s', days => {

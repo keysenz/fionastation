@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex" />
+    <title>Fio Radio stats</title>
+    <link rel="shortcut icon" href="/FioTSKR.webp" />
+    <style>
+      :root { color-scheme: dark; --bg: #111217; --panel: #181b1f; --line: #2c3235; --text: #d8d9da; --dim: #8e8e93; --visitor: #73bf69; --autoplay: #5794f2; --clicks: #fade2a; --skips: #f2495c; --accent: #5794f2; }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.4 ui-sans-serif, system-ui, sans-serif; overflow-x: hidden; }
+      h1, h2, p { margin: 0; }
+      h1 { font-size: 1.1rem; font-weight: 600; }
+      h2 { font-size: 0.8rem; font-weight: 600; color: var(--dim); text-transform: uppercase; letter-spacing: 0.04em; }
+      .page { max-width: 1400px; margin: 0 auto; padding: 0 16px 24px; }
+      .topbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; padding: 12px 0; border-bottom: 1px solid var(--line); margin-bottom: 8px; }
+      .topbar h1 { flex: 1 1 auto; }
+      .ranges { display: flex; gap: 4px; }
+      .who { display: flex; align-items: center; gap: 8px; color: var(--dim); min-width: 0; }
+      .who span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 12rem; }
+      .btn { font: inherit; color: var(--text); background: #22252b; border: 1px solid var(--line); border-radius: 3px; padding: 6px 12px; cursor: pointer; text-decoration: none; display: inline-block; }
+      .btn:hover { background: #2c3035; }
+      .btn.on { background: var(--accent); border-color: var(--accent); color: #0b0c0f; }
+      .btn.primary { background: #5865f2; border-color: #5865f2; color: #fff; padding: 10px 18px; }
+      .hint, .note { color: var(--dim); font-size: 0.8rem; }
+      .hint { margin: 4px 0 12px; }
+      .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 12px; }
+      .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 3px; padding: 12px; min-width: 0; margin-bottom: 12px; }
+      .tiles .panel { margin-bottom: 0; }
+      .big { font-size: 2rem; font-weight: 600; margin: 6px 0 2px; }
+      [data-tile=plays] .big { color: var(--visitor); }
+      [data-tile=skips] .big { color: var(--skips); }
+      [data-tile=share] .big { color: var(--autoplay); }
+      .legend { display: flex; flex-wrap: wrap; gap: 4px 16px; list-style: none; padding: 0; margin: 6px 0; color: var(--dim); font-size: 0.8rem; }
+      .swatch { display: inline-block; width: 10px; height: 10px; margin-right: 6px; border-radius: 2px; }
+      .swatch.visitor { background: var(--visitor); } .swatch.autoplay { background: var(--autoplay); } .swatch.clicks { background: var(--clicks); } .swatch.skips { background: var(--skips); }
+      .chart { width: 100%; height: auto; display: block; margin-top: 8px; }
+      .grid { stroke: var(--line); stroke-width: 1; }
+      .axis { fill: var(--dim); font-size: 10px; } .axis.end { text-anchor: end; } .axis.middle { text-anchor: middle; } .axis.start { text-anchor: start; }
+      .bar-visitor { fill: var(--visitor); } .bar-autoplay { fill: var(--autoplay); } .bar-skip { fill: var(--skips); }
+      .line { fill: none; stroke-width: 2; } .line-clicks { stroke: var(--clicks); } .line-skips { stroke: var(--skips); }
+      .dot-clicks { fill: var(--clicks); } .dot-skips { fill: var(--skips); }
+      .hit { fill: transparent; } .bars:hover .hit { fill: rgb(255 255 255 / 0.06); }
+      .scroll { overflow: auto; max-height: 24rem; margin-top: 8px; }
+      table { border-collapse: collapse; width: 100%; min-width: 34rem; }
+      th, td { padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+      th { position: sticky; top: 0; background: var(--panel); color: var(--dim); font-weight: 600; font-size: 0.8rem; }
+      .text { text-align: left; } .num { text-align: right; font-variant-numeric: tabular-nums; }
+      td.text { white-space: normal; min-width: 12rem; }
+      .sort, .link { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; text-align: inherit; }
+      .link { color: var(--accent); } .link:hover { text-decoration: underline; }
+      tr.picked td { background: rgb(87 148 242 / 0.12); }
+      .center { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 16px; }
+      .gate { max-width: 26rem; width: 100%; display: flex; flex-direction: column; gap: 14px; align-items: flex-start; }
+      .notice { color: var(--skips); }
+      :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/stats-page/main.ts"></script>
+  </body>
+</html>

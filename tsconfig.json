@@ -15,5 +15,5 @@
     "noEmit": true,
     "types": ["node", "vite/client"]
   },
-  "include": ["src/**/*", "server/**/*", "api/**/*"]
+  "include": ["src/**/*", "server/**/*", "api/**/*", "stats-page/**/*"]
 }

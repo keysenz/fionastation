@@ -34,10 +34,18 @@ export type SkipRow = Readonly<{
   secondsIntoSong: number
 }>
 
+export type DayTotal = Readonly<{
+  day: string
+  kind: CountedKind | 'Skip'
+  origin: StatOrigin
+  count: number
+}>
+
 export type StatStore = Readonly<{
   record: (event: StatEvent) => void
   totalsSince: (firstDay: string) => StatTotal[]
   skipsSince: (firstDay: string) => SkipRow[]
+  dailySince: (firstDay: string) => DayTotal[]
 }>
 
 const HOUR_MS = 60 * 60 * 1000
@@ -95,6 +103,18 @@ export const openStatStore = ({
     WHERE day >= ?
     GROUP BY song_id, kind, origin
   `)
+  const dailyCounts = db.prepare(`
+    SELECT day, kind, origin, SUM(count) AS count
+    FROM song_stats
+    WHERE day >= ?
+    GROUP BY day, kind, origin
+  `)
+  const dailySkips = db.prepare(`
+    SELECT day, 'Skip' AS kind, origin, COUNT(*) AS count
+    FROM skips
+    WHERE day >= ?
+    GROUP BY day, origin
+  `)
   return {
     record: event => {
       if (event.kind === 'Skip') {
@@ -110,6 +130,11 @@ export const openStatStore = ({
     },
     totalsSince: firstDay => totals.all(firstDay) as unknown as StatTotal[],
     skipsSince: firstDay => skips.all(firstDay) as unknown as SkipRow[],
+    dailySince: firstDay =>
+      [
+        ...dailyCounts.all(firstDay),
+        ...dailySkips.all(firstDay),
+      ] as unknown as DayTotal[],
   }
 }
 
@@ -270,6 +295,59 @@ const mostPlayedFirst =
     right.clicks - left.clicks ||
     key(left).localeCompare(key(right))
 
+export type DayReport = Tally & Readonly<{ day: string }>
+
+export const SKIP_BUCKET_SECONDS = 10
+export const SKIP_BUCKET_COUNT = 31
+
+export type SkipBucket = Readonly<{
+  songId: string
+  bucket: number
+  count: number
+}>
+
+const tallyOfDayTotal = ({ kind, origin, count }: DayTotal): Tally =>
+  kind === 'Skip'
+    ? { ...emptyTally, skips: only(origin, count) }
+    : tallyOfTotal({ songId: '', kind, origin, count })
+
+export const buildDailySeries = (
+  rows: readonly DayTotal[],
+  firstDay: string,
+  lastDay: string,
+): DayReport[] => {
+  const byDay = Map.groupBy(rows, ({ day }) => day)
+  const series: DayReport[] = []
+  for (
+    let time = Date.parse(firstDay);
+    time <= Date.parse(lastDay);
+    time += DAY_MS
+  ) {
+    const day = dayOf(new Date(time))
+    series.push({
+      day,
+      ...(byDay.get(day) ?? []).map(tallyOfDayTotal).reduce(merge, emptyTally),
+    })
+  }
+  return series
+}
+
+export const buildSkipBuckets = (skips: readonly SkipRow[]): SkipBucket[] => {
+  const counts = new Map<string, number>()
+  for (const { songId, secondsIntoSong } of skips) {
+    const bucket = Math.min(
+      Math.floor(secondsIntoSong / SKIP_BUCKET_SECONDS),
+      SKIP_BUCKET_COUNT - 1,
+    )
+    const key = `${songId}\0${bucket}`
+    counts.set(key, (counts.get(key) ?? 0) + 1)
+  }
+  return [...counts].map(([key, count]) => {
+    const [songId = '', bucket = ''] = key.split('\0')
+    return { songId, bucket: Number(bucket), count }
+  })
+}
+
 export const parseReportDays = (raw: string | null): number | undefined => {
   if (raw === null) return DEFAULT_REPORT_DAYS
   if (!/^\d{1,4}$/.test(raw)) return undefined
@@ -342,6 +420,7 @@ export const createStatReport = ({
     if (days === undefined) {
       return failure(400, `days is a whole number from 1 to ${MAX_REPORT_DAYS}`)
     }
+    const today = dayOf(now())
     const since = dayOf(new Date(now().getTime() - (days - 1) * DAY_MS))
     try {
       const totals = store.totalsSince(since)
@@ -355,6 +434,10 @@ export const createStatReport = ({
           days,
           since,
           ...buildStatReport(totals, skips, findSongs(ids)),
+          daily: buildDailySeries(store.dailySince(since), since, today),
+          skipBuckets: buildSkipBuckets(skips),
+          skipBucketSeconds: SKIP_BUCKET_SECONDS,
+          skipBucketCount: SKIP_BUCKET_COUNT,
         },
       }
     } catch (error) {
