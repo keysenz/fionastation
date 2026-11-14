@@ -29,7 +29,7 @@ import {
   songOnBar,
 } from './karaoke'
 import {
-  currentLineOf,
+  barLineOf,
   lyricsColumnView,
   lyricsWindowView,
 } from './lyricsView.ts'
@@ -1349,7 +1349,7 @@ const playerBarView = (
   const canToggleExpanded =
     model.isExpanded || Phase.isAnyOf(['Playing', 'Paused'])(nowPlaying.phase)
   const shownSong = songOnBar(model, nowPlaying)
-  const maybeLine = Option.flatMap(nowSingingOf(model), currentLineOf)
+  const maybeLine = Option.flatMap(nowSingingOf(model), barLineOf)
   const maybeTrouble = troubleOf(nowPlaying)
   const subline = Option.getOrElse(maybeTrouble, () =>
     kindLabel(shownSong.kind),
@@ -1507,6 +1507,7 @@ const playerBarView = (
                 onSome: line =>
                   h.p(
                     [
+                      h.DataAttribute('bar-lyric', ''),
                       h.Class(
                         'hidden sm:block max-w-full truncate text-xs text-sky-200',
                       ),
