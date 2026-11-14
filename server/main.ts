@@ -11,6 +11,8 @@ import {
   listKaraokeVideos,
   listSongIds,
 } from './db.ts'
+import { AUTH_ROUTES, createDiscordAuth } from './discordAuth.ts'
+import type { AuthRoute } from './discordAuth.ts'
 import {
   loadAlignments,
   loadOverrides,
@@ -100,8 +102,36 @@ const playlistApi =
     createsPerIpPerHour,
   })
 
+const SITE_ORIGIN = process.env.SITE_ORIGIN ?? 'https://fionastation.vercel.app'
+
+const discordApp = (() => {
+  const clientId = process.env.DISCORD_CLIENT_ID
+  const clientSecret = process.env.DISCORD_CLIENT_SECRET
+  if (!clientId || !clientSecret) {
+    console.warn(
+      'DISCORD_CLIENT_ID or DISCORD_CLIENT_SECRET is not set, so Discord login is unavailable',
+    )
+    return undefined
+  }
+  return {
+    clientId,
+    clientSecret,
+    apiBase: process.env.DISCORD_API_BASE ?? 'https://discord.com/api',
+  }
+})()
+
+const discordAuth =
+  playlistStore &&
+  createDiscordAuth({
+    discord: discordApp,
+    siteOrigin: SITE_ORIGIN,
+    sessions: playlistStore.sessions,
+  })
+
 const PLAYLIST_ROUTE = /^\/api\/playlists(?:\/([^/]+))?$/
-const ADMIN_ROUTE = /^\/admin\/playlists\/([^/]+)$/
+const AUTH_ROUTE = /^\/api\/auth\/(.+)$/
+const isAuthRoute = (route: string | undefined): route is AuthRoute =>
+  route !== undefined && Object.hasOwn(AUTH_ROUTES, route)
 const ADMIN_PATH = /^\/(?:api\/)?admin(?:\/|$)/
 
 // NOTE: keep in step with src/route.ts. Any other path gets the 404 status with the app's own 404 page.
@@ -315,12 +345,46 @@ const handle = async (req: IncomingMessage, res: ServerResponse) => {
     return replyJson(404, { error: 'Not Found' }, 'no-store')
   }
 
+  const authRoute = AUTH_ROUTE.exec(pathname)?.[1]
+  if (isAuthRoute(authRoute)) {
+    if (!hasProxySecret(req)) {
+      return replyJson(403, { error: 'Forbidden' })
+    }
+    if (!discordAuth) {
+      return replyJson(
+        503,
+        { error: 'Discord login is unavailable right now' },
+        'no-store',
+      )
+    }
+    const answer = await discordAuth.handle({
+      method: req.method ?? 'GET',
+      route: authRoute,
+      query: new URL(req.url ?? '/', 'http://localhost').searchParams,
+      cookie: req.headers.cookie,
+      origin: req.headers.origin,
+    })
+    if (answer.cookies.length > 0) {
+      res.setHeader('Set-Cookie', [...answer.cookies])
+    }
+    if (answer.kind === 'Redirect') {
+      res.writeHead(302, {
+        ...SECURITY_HEADERS,
+        'Cache-Control': 'no-store',
+        Location: answer.location,
+      })
+      res.end()
+      return
+    }
+    return replyJson(answer.status, answer.body, 'no-store')
+  }
+
   const playlistRoute = PLAYLIST_ROUTE.exec(pathname)
   if (playlistRoute) {
     if (!hasProxySecret(req)) {
       return replyJson(403, { error: 'Forbidden' })
     }
-    if (!playlistApi) {
+    if (!playlistApi || !discordAuth) {
       return replyJson(
         503,
         { error: 'Playlists are unavailable right now' },
@@ -334,11 +398,17 @@ const handle = async (req: IncomingMessage, res: ServerResponse) => {
       res.setHeader('Connection', 'close')
       return replyJson(413, { error: 'The request is too large' }, 'no-store')
     }
+    const method = req.method ?? 'GET'
     const { status, body: payload } = playlistApi({
-      method: req.method ?? 'GET',
+      method,
       id: playlistRoute[1],
       ip: visitorIp(req),
       authorization: req.headers.authorization,
+      viewer: discordAuth.viewer({
+        method,
+        cookie: req.headers.cookie,
+        origin: req.headers.origin,
+      }),
       body,
     })
     return replyJson(status, payload, 'no-store')
@@ -414,21 +484,41 @@ const startAdminListener = (secret: string) => {
     console.warn('The playlists database is unavailable, so no admin listener')
     return
   }
-  const adminApi = createAdminApi({ store: playlistStore, secret })
-  const adminServer = createServer((req, res) => {
-    const route = ADMIN_ROUTE.exec(parsePath(req.url ?? '/')?.pathname ?? '')
-    const { status, body } = route
-      ? adminApi({
+  const adminApi = createAdminApi({
+    store: playlistStore,
+    secret,
+    findSongs: findSongsForPlaylist,
+  })
+  const answer = async (req: IncomingMessage) => {
+    const acting = req.headers['x-acting-discord-id']
+    const body = await readBody(req)
+    return body === undefined
+      ? { status: 413, body: { error: 'The request is too large' } }
+      : adminApi({
           method: req.method ?? 'GET',
-          id: route[1],
+          pathname: parsePath(req.url ?? '/')?.pathname ?? '',
           authorization: req.headers.authorization,
+          actingDiscordId: typeof acting === 'string' ? acting : undefined,
+          body,
         })
-      : { status: 404, body: { error: 'Not Found' } }
-    res.writeHead(status, {
-      'Content-Type': JSON_TYPE,
-      'Cache-Control': 'no-store',
-    })
-    res.end(JSON.stringify(body))
+  }
+  const adminServer = createServer((req, res) => {
+    answer(req)
+      .catch(error => {
+        console.error(`Error serving admin ${req.url}:`, error)
+        return { status: 500, body: { error: 'Internal Server Error' } }
+      })
+      .then(({ status, body }) => {
+        if (status === 413) {
+          res.once('finish', () => req.destroy())
+          res.setHeader('Connection', 'close')
+        }
+        res.writeHead(status, {
+          'Content-Type': JSON_TYPE,
+          'Cache-Control': 'no-store',
+        })
+        res.end(JSON.stringify(body))
+      })
   })
   adminServer.on('error', error => {
     console.error('The admin listener failed:', error)

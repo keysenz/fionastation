@@ -12,17 +12,24 @@ const BASE62 = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
 const UNBIASED_BYTE_LIMIT = 256 - (256 % BASE62.length)
 const HOUR_MS = 60 * 60 * 1000
 const ID_ATTEMPTS = 8
+const MAX_OWNED_LISTED = 200
 
 export type PlaylistWrite = Readonly<{
   name: string
   entries: readonly PlaylistEntry[]
 }>
 
+export type Account = Readonly<{ discordId: string; name: string }>
+
+export type Creator =
+  | Readonly<{ kind: 'Site'; ownerDiscordId: string | undefined }>
+  | Readonly<{ kind: 'Discord'; discordId: string }>
+
 export type CreateResult =
   | Readonly<{
       kind: 'Created'
       id: string
-      editToken: string
+      editToken: string | undefined
       version: number
     }>
   | Readonly<{ kind: 'DailyCapReached' }>
@@ -49,11 +56,20 @@ export type SummaryResult =
   | Readonly<{ kind: 'Found'; summary: PlaylistSummary }>
   | Readonly<{ kind: 'Unknown' }>
 
+export type SessionStore = Readonly<{
+  start: (idHash: string, account: Account, expiresAt: Date) => void
+  find: (idHash: string) => Account | undefined
+  end: (idHash: string) => void
+}>
+
 export type PlaylistStore = Readonly<{
   dailyCapReached: () => boolean
-  create: (write: PlaylistWrite) => CreateResult
+  create: (write: PlaylistWrite, creator: Creator) => CreateResult
   read: (id: string) => ReadResult
   authorize: (id: string, editToken: string | undefined) => AuthResult
+  authorizeOwner: (id: string, discordId: string) => AuthResult
+  claim: (editTokens: readonly string[], discordId: string) => string[]
+  listOwned: (discordId: string) => PlaylistSummary[]
   replace: (
     id: string,
     write: PlaylistWrite,
@@ -61,6 +77,7 @@ export type PlaylistStore = Readonly<{
   ) => ReplaceResult
   remove: (id: string) => RemoveResult
   summarize: (id: string) => SummaryResult
+  sessions: SessionStore
 }>
 
 type PlaylistRow = {
@@ -68,6 +85,7 @@ type PlaylistRow = {
   name: string
   entries: string
   edit_token_hash: string | null
+  owner_discord_id: string | null
   version: number
   created_at: string
   updated_at: string
@@ -109,6 +127,15 @@ const toJson = (row: PlaylistRow): PlaylistJson => ({
   updatedAt: row.updated_at,
 })
 
+const toSummary = (row: PlaylistRow): PlaylistSummary => ({
+  id: row.id,
+  name: row.name,
+  entryCount: (JSON.parse(row.entries) as unknown[]).length,
+  createdAt: row.created_at,
+  updatedAt: row.updated_at,
+  deleted: row.deleted_at !== null,
+})
+
 const utcDayBounds = (at: Date) => {
   const start = new Date(
     Date.UTC(at.getUTCFullYear(), at.getUTCMonth(), at.getUTCDate()),
@@ -145,6 +172,27 @@ export const openPlaylistStore = ({
       deleted_at TEXT
     );
     CREATE INDEX IF NOT EXISTS playlists_created_at ON playlists (created_at);
+    CREATE TABLE IF NOT EXISTS sessions (
+      id_hash TEXT PRIMARY KEY,
+      discord_id TEXT NOT NULL,
+      discord_name TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL
+    );
+  `)
+  const columns = db
+    .prepare('PRAGMA table_info(playlists)')
+    .all() as unknown as {
+    name: string
+  }[]
+  if (!columns.some(column => column.name === 'owner_discord_id')) {
+    db.exec('ALTER TABLE playlists ADD COLUMN owner_discord_id TEXT')
+  }
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS playlists_owner
+      ON playlists (owner_discord_id) WHERE owner_discord_id IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS playlists_edit_token
+      ON playlists (edit_token_hash) WHERE edit_token_hash IS NOT NULL;
   `)
 
   const selectRow = db.prepare('SELECT * FROM playlists WHERE id = ?')
@@ -152,8 +200,9 @@ export const openPlaylistStore = ({
     'SELECT COUNT(*) AS n FROM playlists WHERE created_at >= ? AND created_at < ?',
   )
   const insert = db.prepare(
-    `INSERT INTO playlists (id, name, entries, edit_token_hash, version, created_at, updated_at)
-     VALUES (?, ?, ?, ?, 1, ?, ?)
+    `INSERT INTO playlists
+       (id, name, entries, edit_token_hash, owner_discord_id, version, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, 1, ?, ?)
      ON CONFLICT (id) DO NOTHING`,
   )
   const update = db.prepare(
@@ -165,8 +214,39 @@ export const openPlaylistStore = ({
      WHERE id = ? AND deleted_at IS NULL`,
   )
 
+  const claimByToken = db.prepare(
+    `UPDATE playlists SET owner_discord_id = ?
+     WHERE edit_token_hash = ? AND owner_discord_id IS NULL AND deleted_at IS NULL`,
+  )
+  const selectClaimed = db.prepare(
+    `SELECT id FROM playlists
+     WHERE edit_token_hash = ? AND owner_discord_id = ? AND deleted_at IS NULL`,
+  )
+  const selectOwned = db.prepare(
+    `SELECT * FROM playlists WHERE owner_discord_id = ? AND deleted_at IS NULL
+     ORDER BY updated_at DESC, id LIMIT ${MAX_OWNED_LISTED}`,
+  )
+  const insertSession = db.prepare(
+    `INSERT INTO sessions (id_hash, discord_id, discord_name, created_at, expires_at)
+     VALUES (?, ?, ?, ?, ?)`,
+  )
+  const selectSession = db.prepare(
+    'SELECT discord_id, discord_name FROM sessions WHERE id_hash = ? AND expires_at > ?',
+  )
+  const deleteSession = db.prepare('DELETE FROM sessions WHERE id_hash = ?')
+  const deleteExpiredSessions = db.prepare(
+    'DELETE FROM sessions WHERE expires_at <= ?',
+  )
+
   const find = (id: string) =>
     selectRow.get(id) as unknown as PlaylistRow | undefined
+
+  const live = (id: string, allowed: (row: PlaylistRow) => boolean) => {
+    const row = find(id)
+    if (!row) return 'Unknown'
+    if (row.deleted_at !== null) return 'Deleted'
+    return allowed(row) ? 'Allowed' : 'Forbidden'
+  }
 
   const capReached = (at: Date) => {
     const { start, end } = utcDayBounds(at)
@@ -177,12 +257,14 @@ export const openPlaylistStore = ({
   return {
     dailyCapReached: () => capReached(now()),
 
-    create: ({ name, entries }) => {
+    create: ({ name, entries }, creator) => {
       const at = now()
       if (capReached(at)) {
         return { kind: 'DailyCapReached' }
       }
-      const editToken = newEditToken()
+      const editToken = creator.kind === 'Site' ? newEditToken() : undefined
+      const owner =
+        creator.kind === 'Site' ? creator.ownerDiscordId : creator.discordId
       const stamp = at.toISOString()
       for (let attempt = 0; attempt < ID_ATTEMPTS; attempt++) {
         const id = newId()
@@ -190,7 +272,8 @@ export const openPlaylistStore = ({
           id,
           name,
           JSON.stringify(entries),
-          hashToken(editToken),
+          editToken === undefined ? null : hashToken(editToken),
+          owner ?? null,
           stamp,
           stamp,
         )
@@ -208,19 +291,31 @@ export const openPlaylistStore = ({
       return { kind: 'Found', playlist: toJson(row) }
     },
 
-    authorize: (id, editToken) => {
-      const row = find(id)
-      if (!row) return 'Unknown'
-      if (row.deleted_at !== null) return 'Deleted'
-      if (row.edit_token_hash === null || editToken === undefined) {
-        return 'Forbidden'
-      }
-      const stored = Buffer.from(row.edit_token_hash)
-      const given = Buffer.from(hashToken(editToken))
-      return stored.length === given.length && timingSafeEqual(stored, given)
-        ? 'Allowed'
-        : 'Forbidden'
-    },
+    authorize: (id, editToken) =>
+      live(id, row => {
+        if (row.edit_token_hash === null || editToken === undefined) {
+          return false
+        }
+        const stored = Buffer.from(row.edit_token_hash)
+        const given = Buffer.from(hashToken(editToken))
+        return stored.length === given.length && timingSafeEqual(stored, given)
+      }),
+
+    authorizeOwner: (id, discordId) =>
+      live(id, row => row.owner_discord_id === discordId),
+
+    claim: (editTokens, discordId) =>
+      [...new Set(editTokens)].flatMap(editToken => {
+        const hash = hashToken(editToken)
+        claimByToken.run(discordId, hash)
+        const claimed = selectClaimed.get(hash, discordId) as unknown as
+          | { id: string }
+          | undefined
+        return claimed ? [claimed.id] : []
+      }),
+
+    listOwned: discordId =>
+      (selectOwned.all(discordId) as unknown as PlaylistRow[]).map(toSummary),
 
     replace: (id, { name, entries }, expectedVersion) => {
       const { changes } = update.run(
@@ -247,17 +342,25 @@ export const openPlaylistStore = ({
     summarize: id => {
       const row = find(id)
       if (!row) return { kind: 'Unknown' }
-      return {
-        kind: 'Found',
-        summary: {
-          id: row.id,
-          name: row.name,
-          entryCount: (JSON.parse(row.entries) as unknown[]).length,
-          createdAt: row.created_at,
-          updatedAt: row.updated_at,
-          deleted: row.deleted_at !== null,
-        },
-      }
+      return { kind: 'Found', summary: toSummary(row) }
+    },
+
+    sessions: {
+      start: (idHash, { discordId, name }, expiresAt) => {
+        const at = now().toISOString()
+        deleteExpiredSessions.run(at)
+        insertSession.run(idHash, discordId, name, at, expiresAt.toISOString())
+      },
+      find: idHash => {
+        const row = selectSession.get(
+          idHash,
+          now().toISOString(),
+        ) as unknown as { discord_id: string; discord_name: string } | undefined
+        return row && { discordId: row.discord_id, name: row.discord_name }
+      },
+      end: idHash => {
+        deleteSession.run(idHash)
+      },
     },
   }
 }
@@ -281,59 +384,136 @@ const windowLimiter = (max: number, windowMs: number, now: () => Date) => {
   }
 }
 
+export type Viewer =
+  | Readonly<{ kind: 'Anonymous' }>
+  | Readonly<{ kind: 'Member'; discordId: string }>
+  | Readonly<{ kind: 'CrossSite' }>
+
 export type PlaylistRequest = Readonly<{
   method: string
   id: string | undefined
   ip: string
   authorization: string | undefined
+  viewer: Viewer
   body: string
 }>
 export type PlaylistReply = Readonly<{ status: number; body: unknown }>
+
+type Checked<T> =
+  | Readonly<{ kind: 'Ready'; value: T }>
+  | Readonly<{ kind: 'Refused'; reply: PlaylistReply }>
 
 const reply = (status: number, body: unknown): PlaylistReply => ({
   status,
   body,
 })
 const failure = (status: number, error: string) => reply(status, { error })
+const ready = <T>(value: T): Checked<T> => ({ kind: 'Ready', value })
+const refuse = (status: number, error: string): Checked<never> => ({
+  kind: 'Refused',
+  reply: failure(status, error),
+})
+
 const capReply = failure(
   503,
   'Too many playlists were saved today. Try tomorrow.',
 )
+const unknownReply = failure(404, 'No such playlist')
+const deletedReply = failure(410, 'This playlist was deleted')
+const notOwnerReply = failure(403, 'This playlist belongs to someone else')
+const crossSiteReply = failure(403, 'This request came from another site')
+const signedOutReply = failure(401, 'Connect Discord first')
+const methodReply = failure(405, 'Method Not Allowed')
+const songCountError = `A playlist holds 1 to ${MAX_ENTRIES} songs`
 
-type ParsedWrite =
-  | Readonly<{
-      kind: 'Parsed'
-      name: string
-      songIds: string[]
-      version: unknown
-    }>
-  | Readonly<{ kind: 'Invalid'; error: string }>
-
-const parseWrite = (body: string): ParsedWrite => {
+const parseObject = (body: string): Checked<Record<string, unknown>> => {
   let json: unknown
   try {
     json = JSON.parse(body)
   } catch {
-    return { kind: 'Invalid', error: 'The body is not JSON' }
+    return refuse(400, 'The body is not JSON')
   }
   if (typeof json !== 'object' || json === null || Array.isArray(json)) {
-    return { kind: 'Invalid', error: 'The body must be an object' }
+    return refuse(400, 'The body must be an object')
   }
-  const { name, songIds, version } = json as Record<string, unknown>
-  if (typeof name !== 'string') {
-    return { kind: 'Invalid', error: 'The name must be text' }
-  }
-  if (
-    !Array.isArray(songIds) ||
-    !songIds.every(id => typeof id === 'string' && id !== '')
-  ) {
-    return { kind: 'Invalid', error: 'songIds must be a list of song ids' }
-  }
-  return { kind: 'Parsed', name, songIds, version }
+  return ready(json as Record<string, unknown>)
 }
+
+const checkName = (name: unknown): Checked<string> => {
+  if (typeof name !== 'string') return refuse(400, 'The name must be text')
+  const cleaned = cleanPlaylistName(name)
+  return cleaned.kind === 'TooLong'
+    ? refuse(400, 'The name is longer than 60 characters')
+    : ready(cleaned.name)
+}
+
+const isSongId = (id: unknown): id is string =>
+  typeof id === 'string' && id !== ''
+
+const songIdTooLong = refuse(
+  400,
+  `A song id is longer than ${MAX_SONG_ID_LENGTH} characters`,
+)
+
+type FindSongs = (ids: readonly string[]) => PlaylistEntry[]
+
+const checkWrite = (
+  findSongs: FindSongs,
+  body: string,
+): Checked<Readonly<{ write: PlaylistWrite; version: unknown }>> => {
+  const parsed = parseObject(body)
+  if (parsed.kind === 'Refused') return parsed
+  const { name, songIds, version } = parsed.value
+  if (typeof name !== 'string') return refuse(400, 'The name must be text')
+  if (!Array.isArray(songIds) || !songIds.every(isSongId)) {
+    return refuse(400, 'songIds must be a list of song ids')
+  }
+  const cleaned = checkName(name)
+  if (cleaned.kind === 'Refused') return cleaned
+  if (songIds.length < 1 || songIds.length > MAX_ENTRIES) {
+    return refuse(400, songCountError)
+  }
+  if (songIds.some(id => id.length > MAX_SONG_ID_LENGTH)) return songIdTooLong
+  if (new Set(songIds).size !== songIds.length) {
+    return refuse(400, 'Each song may appear once')
+  }
+  const found = new Map(findSongs(songIds).map(song => [song.songId, song]))
+  const entries = songIds.flatMap(id => found.get(id) ?? [])
+  if (entries.length !== songIds.length) {
+    return refuse(400, 'Some songs are not in the song list')
+  }
+  return ready({ write: { name: cleaned.value, entries }, version })
+}
+
+const replaceFailure = (
+  kind: Exclude<ReplaceResult['kind'], 'Updated'>,
+): PlaylistReply => {
+  switch (kind) {
+    case 'Stale':
+      return failure(409, 'The playlist changed. Reload it.')
+    case 'Deleted':
+      return deletedReply
+    case 'Unknown':
+      return unknownReply
+  }
+}
+
+const bearerToken = (authorization: string | undefined) =>
+  /^Bearer (\S+)$/.exec(authorization ?? '')?.[1]
 
 const isPlaylistId = (id: string) =>
   new RegExp(`^[0-9A-Za-z]{${ID_LENGTH}}$`).test(id)
+
+const answerSafely =
+  <Request>(label: string, handle: (request: Request) => PlaylistReply) =>
+  (request: Request): PlaylistReply => {
+    try {
+      return handle(request)
+    } catch (error) {
+      console.error(`${label}:`, error)
+      return failure(500, 'Could not read or save playlists')
+    }
+  }
 
 export const createPlaylistApi = ({
   store,
@@ -343,7 +523,7 @@ export const createPlaylistApi = ({
   editsPerHour = 30,
 }: Readonly<{
   store: PlaylistStore
-  findSongs: (ids: readonly string[]) => PlaylistEntry[]
+  findSongs: FindSongs
   now?: () => Date
   createsPerIpPerHour?: number
   editsPerHour?: number
@@ -351,54 +531,19 @@ export const createPlaylistApi = ({
   const allowCreate = windowLimiter(createsPerIpPerHour, HOUR_MS, now)
   const allowEdit = windowLimiter(editsPerHour, HOUR_MS, now)
 
-  const checkWrite = (
-    body: string,
-  ):
-    | Readonly<{ kind: 'Ready'; write: PlaylistWrite; version: unknown }>
-    | Readonly<{ kind: 'Refused'; reply: PlaylistReply }> => {
-    const refuse = (error: string) => ({
-      kind: 'Refused' as const,
-      reply: failure(400, error),
-    })
-    const parsed = parseWrite(body)
-    if (parsed.kind === 'Invalid') return refuse(parsed.error)
-    const cleaned = cleanPlaylistName(parsed.name)
-    if (cleaned.kind === 'TooLong') {
-      return refuse('The name is longer than 60 characters')
-    }
-    const { songIds } = parsed
-    if (songIds.length < 1 || songIds.length > MAX_ENTRIES) {
-      return refuse(`A playlist holds 1 to ${MAX_ENTRIES} songs`)
-    }
-    if (
-      songIds.some(id => id.length > MAX_SONG_ID_LENGTH)
-    ) {
-      return refuse(`A song id is longer than ${MAX_SONG_ID_LENGTH} characters`)
-    }
-    if (new Set(songIds).size !== songIds.length) {
-      return refuse('Each song may appear once')
-    }
-    const found = new Map(findSongs(songIds).map(song => [song.songId, song]))
-    const entries = songIds.flatMap(id => found.get(id) ?? [])
-    if (entries.length !== songIds.length) {
-      return refuse('Some songs are not in the song list')
-    }
-    return {
-      kind: 'Ready',
-      write: { name: cleaned.name, entries },
-      version: parsed.version,
-    }
-  }
-
-  const create = (request: PlaylistRequest) => {
-    if (!allowCreate(request.ip)) {
+  const create = ({ ip, viewer, body }: PlaylistRequest) => {
+    if (viewer.kind === 'CrossSite') return crossSiteReply
+    if (!allowCreate(ip)) {
       return failure(429, 'Too many playlists from this address. Try later.')
     }
     // Turnstile check goes here: after the per-IP limit, before the daily cap.
     if (store.dailyCapReached()) return capReply
-    const checked = checkWrite(request.body)
+    const checked = checkWrite(findSongs, body)
     if (checked.kind === 'Refused') return checked.reply
-    const created = store.create(checked.write)
+    const created = store.create(checked.value.write, {
+      kind: 'Site',
+      ownerDiscordId: viewer.kind === 'Member' ? viewer.discordId : undefined,
+    })
     if (created.kind === 'DailyCapReached') return capReply
     const { id, editToken, version } = created
     return reply(201, { id, editToken, version })
@@ -408,9 +553,9 @@ export const createPlaylistApi = ({
     if (!allowEdit(id)) {
       return failure(429, 'This playlist was edited too often. Try later.')
     }
-    const checked = checkWrite(request.body)
+    const checked = checkWrite(findSongs, request.body)
     if (checked.kind === 'Refused') return checked.reply
-    const { version } = checked
+    const { write, version } = checked.value
     if (
       typeof version !== 'number' ||
       !Number.isInteger(version) ||
@@ -418,50 +563,85 @@ export const createPlaylistApi = ({
     ) {
       return failure(400, 'version must be a whole number')
     }
-    const replaced = store.replace(id, checked.write, version)
-    switch (replaced.kind) {
-      case 'Updated':
-        return reply(200, { version: replaced.version })
-      case 'Stale':
-        return failure(409, 'The playlist changed. Reload it.')
-      case 'Deleted':
-        return failure(410, 'This playlist was deleted')
-      case 'Unknown':
-        return failure(404, 'No such playlist')
+    const replaced = store.replace(id, write, version)
+    return replaced.kind === 'Updated'
+      ? reply(200, { version: replaced.version })
+      : replaceFailure(replaced.kind)
+  }
+
+  const editRight = (
+    { authorization, viewer }: PlaylistRequest,
+    id: string,
+  ): AuthResult | 'CrossSite' | 'NotOwner' => {
+    const byToken = store.authorize(id, bearerToken(authorization))
+    if (byToken !== 'Forbidden') return byToken
+    switch (viewer.kind) {
+      case 'Anonymous':
+        return 'Forbidden'
+      case 'CrossSite':
+        return 'CrossSite'
+      case 'Member':
+        return store.authorizeOwner(id, viewer.discordId) === 'Allowed'
+          ? 'Allowed'
+          : 'NotOwner'
     }
   }
 
-  const withToken = (
+  const withEditRight = (
     request: PlaylistRequest,
     id: string,
     next: () => PlaylistReply,
   ) => {
-    const token = /^Bearer (\S+)$/.exec(request.authorization ?? '')?.[1]
-    switch (store.authorize(id, token)) {
+    switch (editRight(request, id)) {
       case 'Unknown':
-        return failure(404, 'No such playlist')
+        return unknownReply
+      case 'Deleted':
+        return deletedReply
       case 'Forbidden':
         return failure(403, 'Wrong edit token')
-      case 'Deleted':
-        return failure(410, 'This playlist was deleted')
+      case 'CrossSite':
+        return crossSiteReply
+      case 'NotOwner':
+        return notOwnerReply
       case 'Allowed':
         return next()
     }
   }
 
-  const handle = (request: PlaylistRequest): PlaylistReply => {
+  const mine = ({ method, viewer }: PlaylistRequest) => {
+    if (method !== 'GET') return methodReply
+    return viewer.kind === 'Member'
+      ? reply(200, { playlists: store.listOwned(viewer.discordId) })
+      : signedOutReply
+  }
+
+  const claim = ({ method, viewer, body }: PlaylistRequest) => {
+    if (method !== 'POST') return methodReply
+    if (viewer.kind === 'CrossSite') return crossSiteReply
+    if (viewer.kind === 'Anonymous') return signedOutReply
+    const parsed = parseObject(body)
+    if (parsed.kind === 'Refused') return parsed.reply
+    const { editTokens } = parsed.value
+    if (
+      !Array.isArray(editTokens) ||
+      !editTokens.every(token => typeof token === 'string')
+    ) {
+      return failure(400, 'editTokens must be a list of edit tokens')
+    }
+    return reply(200, { claimed: store.claim(editTokens, viewer.discordId) })
+  }
+
+  return answerSafely('Playlist store error', (request: PlaylistRequest) => {
     if (Buffer.byteLength(request.body) > MAX_BODY_BYTES) {
       return failure(413, 'The request is too large')
     }
     const { id } = request
     if (id === undefined) {
-      return request.method === 'POST'
-        ? create(request)
-        : failure(405, 'Method Not Allowed')
+      return request.method === 'POST' ? create(request) : methodReply
     }
-    if (!isPlaylistId(id)) {
-      return failure(404, 'No such playlist')
-    }
+    if (id === 'mine') return mine(request)
+    if (id === 'claim') return claim(request)
+    if (!isPlaylistId(id)) return unknownReply
     switch (request.method) {
       case 'GET': {
         const read = store.read(id)
@@ -469,71 +649,224 @@ export const createPlaylistApi = ({
           case 'Found':
             return reply(200, read.playlist)
           case 'Deleted':
-            return failure(410, 'This playlist was deleted')
+            return deletedReply
           case 'Unknown':
-            return failure(404, 'No such playlist')
+            return unknownReply
         }
       }
       case 'PUT':
-        return withToken(request, id, () => edit(request, id))
+        return withEditRight(request, id, () => edit(request, id))
       case 'DELETE':
-        return withToken(request, id, () => {
+        return withEditRight(request, id, () => {
           store.remove(id)
           return reply(200, { id })
         })
       default:
-        return failure(405, 'Method Not Allowed')
+        return methodReply
     }
-  }
-  return (request: PlaylistRequest): PlaylistReply => {
-    try {
-      return handle(request)
-    } catch (error) {
-      console.error('Playlist store error:', error)
-      return failure(500, 'Could not read or save playlists')
-    }
-  }
+  })
 }
 
 export type AdminRequest = Readonly<{
   method: string
-  id: string | undefined
+  pathname: string
   authorization: string | undefined
+  actingDiscordId: string | undefined
+  body: string
 }>
+
+const MOD_ROUTE = /^\/admin\/playlists(?:\/([^/]+))?$/
+const OWNER_ROUTE =
+  /^\/admin\/owner\/playlists(?:\/([^/]+)(?:\/(name|songs)(?:\/([^/]+))?)?)?$/
+const DISCORD_ID = /^\d{17,20}$/
 
 const digest = (value: string) => createHash('sha256').update(value).digest()
 
 export const createAdminApi = ({
   store,
   secret,
-}: Readonly<{ store: PlaylistStore; secret: string }>) => {
+  findSongs,
+  now = () => new Date(),
+  createsPerMemberPerHour = 10,
+  editsPerHour = 30,
+}: Readonly<{
+  store: PlaylistStore
+  secret: string
+  findSongs: FindSongs
+  now?: () => Date
+  createsPerMemberPerHour?: number
+  editsPerHour?: number
+}>) => {
   const expected = digest(secret)
+  const allowCreate = windowLimiter(createsPerMemberPerHour, HOUR_MS, now)
+  const allowEdit = windowLimiter(editsPerHour, HOUR_MS, now)
+
   const holdsSecret = (authorization: string | undefined) => {
-    const given = /^Bearer (\S+)$/.exec(authorization ?? '')?.[1]
+    const given = bearerToken(authorization)
     return given !== undefined && timingSafeEqual(digest(given), expected)
   }
 
-  const handle = ({ method, id, authorization }: AdminRequest) => {
-    if (!holdsSecret(authorization)) return failure(403, 'Forbidden')
+  const moderate = (method: string, id: string | undefined) => {
     if (id === undefined || (method !== 'GET' && method !== 'DELETE')) {
-      return failure(405, 'Method Not Allowed')
+      return methodReply
     }
-    if (!isPlaylistId(id)) return failure(404, 'No such playlist')
+    if (!isPlaylistId(id)) return unknownReply
     if (method === 'DELETE' && store.remove(id) === 'Unknown') {
-      return failure(404, 'No such playlist')
+      return unknownReply
     }
     const found = store.summarize(id)
-    return found.kind === 'Found'
-      ? reply(200, found.summary)
-      : failure(404, 'No such playlist')
+    return found.kind === 'Found' ? reply(200, found.summary) : unknownReply
   }
 
-  return (request: AdminRequest): PlaylistReply => {
-    try {
-      return handle(request)
-    } catch (error) {
-      console.error('Admin playlist error:', error)
-      return failure(500, 'Could not read or save playlists')
+  const create = (discordId: string, body: string) => {
+    if (!allowCreate(discordId)) {
+      return failure(429, 'Too many playlists from this member. Try later.')
+    }
+    if (store.dailyCapReached()) return capReply
+    const checked = checkWrite(findSongs, body)
+    if (checked.kind === 'Refused') return checked.reply
+    const created = store.create(checked.value.write, {
+      kind: 'Discord',
+      discordId,
+    })
+    if (created.kind === 'DailyCapReached') return capReply
+    const read = store.read(created.id)
+    return read.kind === 'Found' ? reply(201, read.playlist) : unknownReply
+  }
+
+  const withOwned = (
+    discordId: string,
+    id: string,
+    next: (playlist: PlaylistJson) => PlaylistReply,
+  ) => {
+    if (!isPlaylistId(id)) return unknownReply
+    switch (store.authorizeOwner(id, discordId)) {
+      case 'Unknown':
+        return unknownReply
+      case 'Deleted':
+        return deletedReply
+      case 'Forbidden':
+        return notOwnerReply
+      case 'Allowed': {
+        const read = store.read(id)
+        return read.kind === 'Found' ? next(read.playlist) : unknownReply
+      }
     }
   }
+
+  const save = (
+    { id, version }: PlaylistJson,
+    change: Checked<PlaylistWrite>,
+  ) => {
+    if (change.kind === 'Refused') return change.reply
+    if (!allowEdit(id)) {
+      return failure(429, 'This playlist was edited too often. Try later.')
+    }
+    const replaced = store.replace(id, change.value, version)
+    if (replaced.kind !== 'Updated') return replaceFailure(replaced.kind)
+    const read = store.read(id)
+    return read.kind === 'Found' ? reply(200, read.playlist) : unknownReply
+  }
+
+  const renamed = (
+    { entries }: PlaylistJson,
+    body: string,
+  ): Checked<PlaylistWrite> => {
+    const parsed = parseObject(body)
+    if (parsed.kind === 'Refused') return parsed
+    const name = checkName(parsed.value.name)
+    return name.kind === 'Refused' ? name : ready({ name: name.value, entries })
+  }
+
+  const withSong = (
+    { name, entries }: PlaylistJson,
+    body: string,
+  ): Checked<PlaylistWrite> => {
+    const parsed = parseObject(body)
+    if (parsed.kind === 'Refused') return parsed
+    const { songId } = parsed.value
+    if (!isSongId(songId)) return refuse(400, 'songId must be a song id')
+    if (songId.length > MAX_SONG_ID_LENGTH) return songIdTooLong
+    if (entries.some(entry => entry.songId === songId)) {
+      return refuse(400, 'Each song may appear once')
+    }
+    if (entries.length >= MAX_ENTRIES) return refuse(400, songCountError)
+    const [song] = findSongs([songId])
+    return song
+      ? ready({ name, entries: [...entries, song] })
+      : refuse(400, 'Some songs are not in the song list')
+  }
+
+  const withoutSong = (
+    { name, entries }: PlaylistJson,
+    songId: string,
+  ): Checked<PlaylistWrite> => {
+    const kept = entries.filter(entry => entry.songId !== songId)
+    if (kept.length === entries.length) {
+      return refuse(404, 'That song is not in the playlist')
+    }
+    return kept.length === 0
+      ? refuse(400, songCountError)
+      : ready({ name, entries: kept })
+  }
+
+  const own = (
+    { method, actingDiscordId, body }: AdminRequest,
+    [id, part, songId]: readonly (string | undefined)[],
+  ) => {
+    if (actingDiscordId === undefined || !DISCORD_ID.test(actingDiscordId)) {
+      return failure(400, 'X-Acting-Discord-Id must be a Discord user id')
+    }
+    const owned = (
+      playlistId: string,
+      next: (playlist: PlaylistJson) => PlaylistReply,
+    ) => withOwned(actingDiscordId, playlistId, next)
+
+    if (id === undefined) {
+      switch (method) {
+        case 'GET':
+          return reply(200, { playlists: store.listOwned(actingDiscordId) })
+        case 'POST':
+          return create(actingDiscordId, body)
+        default:
+          return methodReply
+      }
+    }
+    if (part === undefined) {
+      switch (method) {
+        case 'GET':
+          return owned(id, playlist => reply(200, playlist))
+        case 'DELETE':
+          return owned(id, () => {
+            store.remove(id)
+            return reply(200, { id })
+          })
+        default:
+          return methodReply
+      }
+    }
+    if (part === 'name' && songId === undefined && method === 'PUT') {
+      return owned(id, playlist => save(playlist, renamed(playlist, body)))
+    }
+    if (part === 'songs' && songId === undefined && method === 'POST') {
+      return owned(id, playlist => save(playlist, withSong(playlist, body)))
+    }
+    if (part === 'songs' && songId !== undefined && method === 'DELETE') {
+      return owned(id, playlist =>
+        save(playlist, withoutSong(playlist, songId)),
+      )
+    }
+    return methodReply
+  }
+
+  return answerSafely('Admin playlist error', (request: AdminRequest) => {
+    if (!holdsSecret(request.authorization)) return failure(403, 'Forbidden')
+    if (Buffer.byteLength(request.body) > MAX_BODY_BYTES) {
+      return failure(413, 'The request is too large')
+    }
+    const mod = MOD_ROUTE.exec(request.pathname)
+    if (mod) return moderate(request.method, mod[1])
+    const owner = OWNER_ROUTE.exec(request.pathname)
+    return owner ? own(request, owner.slice(1)) : failure(404, 'Not Found')
+  })
 }
