@@ -7,9 +7,11 @@ import { afterEach, beforeEach, describe, expect, test } from 'vitest'
 
 import type { PlaylistEntry } from '../src/playlist.ts'
 import {
+  type Creator,
   MAX_BODY_BYTES,
   type PlaylistReply,
   type PlaylistStore,
+  type Viewer,
   createAdminApi,
   createPlaylistApi,
   openPlaylistStore,
@@ -21,6 +23,13 @@ const entry = (songId: string): PlaylistEntry => ({
   timestamp: '0:30',
   title: `Title of ${songId}`,
 })
+
+const VISITOR: Creator = { kind: 'Site', ownerDiscordId: undefined }
+const ANONYMOUS: Viewer = { kind: 'Anonymous' }
+const ALICE = '111111111111111111'
+const BOB = '222222222222222222'
+const member = (discordId: string): Viewer => ({ kind: 'Member', discordId })
+const CROSS_SITE: Viewer = { kind: 'CrossSite' }
 
 let dir: string
 let dbPath: string
@@ -38,7 +47,7 @@ afterEach(() => {
 })
 
 const created = (store: PlaylistStore, name = 'Rainy day Fio', ids = ['a']) => {
-  const result = store.create({ name, entries: ids.map(entry) })
+  const result = store.create({ name, entries: ids.map(entry) }, VISITOR)
   if (result.kind !== 'Created') throw new Error(`create gave ${result.kind}`)
   return result
 }
@@ -138,27 +147,28 @@ describe('store', () => {
     const store = openPlaylistStore({ path: dbPath, now })
     for (let i = 0; i < 1000; i++) created(store, `p${i}`)
     expect(
-      store.create({ name: 'one too many', entries: [entry('a')] }),
+      store.create({ name: 'one too many', entries: [entry('a')] }, VISITOR),
     ).toEqual({
       kind: 'DailyCapReached',
     })
     clock = new Date('2026-11-14T23:59:59Z')
     expect(
-      store.create({ name: 'still today', entries: [entry('a')] }).kind,
+      store.create({ name: 'still today', entries: [entry('a')] }, VISITOR)
+        .kind,
     ).toBe('DailyCapReached')
     clock = new Date('2026-11-15T00:00:00Z')
-    expect(store.create({ name: 'tomorrow', entries: [entry('a')] }).kind).toBe(
-      'Created',
-    )
+    expect(
+      store.create({ name: 'tomorrow', entries: [entry('a')] }, VISITOR).kind,
+    ).toBe('Created')
   })
 
   test('deleted playlists still count against the daily cap', () => {
     const store = openPlaylistStore({ path: dbPath, now, dailyCap: 2 })
     store.remove(created(store).id)
     created(store)
-    expect(store.create({ name: 'c', entries: [entry('a')] }).kind).toBe(
-      'DailyCapReached',
-    )
+    expect(
+      store.create({ name: 'c', entries: [entry('a')] }, VISITOR).kind,
+    ).toBe('DailyCapReached')
   })
 
   test('reopening the same file keeps the data and converges on the schema', () => {
@@ -173,6 +183,93 @@ describe('store', () => {
       journal_mode: 'wal',
     })
   })
+
+  test('a database from before ownership upgrades in place and keeps its playlists', () => {
+    const old = new DatabaseSync(dbPath)
+    old.exec(`
+      CREATE TABLE playlists (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        entries TEXT NOT NULL,
+        edit_token_hash TEXT,
+        version INTEGER NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+      );
+    `)
+    old
+      .prepare(
+        `INSERT INTO playlists VALUES ('OLDplay1', 'Before login', ?, 'hash', 3, ?, ?, NULL)`,
+      )
+      .run(
+        JSON.stringify([entry('a')]),
+        '2026-11-01T00:00:00.000Z',
+        '2026-11-02T00:00:00.000Z',
+      )
+    old.close()
+
+    openPlaylistStore({ path: dbPath, now })
+    const store = openPlaylistStore({ path: dbPath, now })
+
+    const read = store.read('OLDplay1')
+    if (read.kind !== 'Found') throw new Error(read.kind)
+    expect(read.playlist.name).toBe('Before login')
+    expect(read.playlist.version).toBe(3)
+    expect(store.authorizeOwner('OLDplay1', ALICE)).toBe('Forbidden')
+    const raw = new DatabaseSync(dbPath, { readOnly: true })
+    const columns = raw.prepare('PRAGMA table_info(playlists)').all()
+    expect(columns.map(column => column['name'])).toContain('owner_discord_id')
+    expect(
+      raw
+        .prepare(`SELECT name FROM sqlite_master WHERE name = 'sessions'`)
+        .get(),
+    ).toEqual({ name: 'sessions' })
+  })
+
+  test('an account keeps only its 10 newest sessions', () => {
+    const store = openPlaylistStore({ path: dbPath, now })
+    const alice = { discordId: ALICE, name: 'Alice' }
+    const bob = { discordId: BOB, name: 'Bob' }
+    const later = new Date('2026-12-14T10:00:00Z')
+    store.sessions.start('bob', bob, later)
+    for (let i = 1; i <= 15; i++) {
+      clock = new Date(clock.getTime() + 1000)
+      store.sessions.start(`a${i}`, alice, later)
+    }
+    const alive = (n: number) => store.sessions.find(`a${n}`) !== undefined
+    expect([1, 5].some(alive)).toBe(false)
+    expect([6, 10, 15].every(alive)).toBe(true)
+    expect(store.sessions.find('bob')).toEqual(bob)
+  })
+
+  test('a session is found until it expires or ends', () => {
+    const store = openPlaylistStore({ path: dbPath, now })
+    const alice = { discordId: ALICE, name: 'Alice' }
+    store.sessions.start('hash-a', alice, new Date('2026-11-15T10:00:00Z'))
+    store.sessions.start('hash-b', alice, new Date('2026-12-14T10:00:00Z'))
+    expect(store.sessions.find('hash-a')).toEqual(alice)
+    expect(store.sessions.find('unknown')).toBeUndefined()
+
+    clock = new Date('2026-11-15T10:00:00Z')
+    expect(store.sessions.find('hash-a')).toBeUndefined()
+    expect(store.sessions.find('hash-b')).toEqual(alice)
+
+    store.sessions.end('hash-b')
+    expect(store.sessions.find('hash-b')).toBeUndefined()
+  })
+
+  test('starting a session clears the expired ones', () => {
+    const store = openPlaylistStore({ path: dbPath, now })
+    const alice = { discordId: ALICE, name: 'Alice' }
+    store.sessions.start('old', alice, new Date('2026-11-14T11:00:00Z'))
+    clock = new Date('2026-11-14T12:00:00Z')
+    store.sessions.start('new', alice, new Date('2026-12-14T12:00:00Z'))
+    const raw = new DatabaseSync(dbPath, { readOnly: true })
+    expect(raw.prepare('SELECT id_hash FROM sessions').all()).toEqual([
+      { id_hash: 'new' },
+    ])
+  })
 })
 
 type Body = {
@@ -185,26 +282,32 @@ type Body = {
 const bodyOf = (reply: PlaylistReply) => reply.body as Body
 
 const harness = (
-  overrides: { createsPerIpPerHour?: number; editsPerHour?: number } = {},
+  overrides: {
+    createsPerIpPerHour?: number
+    editsPerHour?: number
+    claimsPerHour?: number
+  } = {},
 ) => {
   const store = openPlaylistStore({ path: dbPath, now })
   const known = new Set(['s1', 's2', 's3', 's4'])
+  const findSongs = (ids: readonly string[]) =>
+    ids
+      .filter(id => known.has(id))
+      .map(entry)
+      .reverse()
   const api = createPlaylistApi({
     store,
     now,
-    findSongs: ids =>
-      ids
-        .filter(id => known.has(id))
-        .map(entry)
-        .reverse(),
+    findSongs,
     ...overrides,
   })
-  const post = (body: unknown, ip = '1.1.1.1') =>
+  const post = (body: unknown, ip = '1.1.1.1', viewer: Viewer = ANONYMOUS) =>
     api({
       method: 'POST',
       id: undefined,
       ip,
       authorization: undefined,
+      viewer,
       body: typeof body === 'string' ? body : JSON.stringify(body),
     })
   const send = (
@@ -213,21 +316,28 @@ const harness = (
     token: string | undefined,
     body?: unknown,
     ip = '1.1.1.1',
+    viewer: Viewer = ANONYMOUS,
   ) =>
     api({
       method,
       id,
       ip,
       authorization: token === undefined ? undefined : `Bearer ${token}`,
+      viewer,
       body: body === undefined ? '' : JSON.stringify(body),
     })
+  const as = (viewer: Viewer) => ({
+    post: (body: unknown) => post(body, '1.1.1.1', viewer),
+    send: (method: string, id: string, body?: unknown) =>
+      send(method, id, undefined, body, '1.1.1.1', viewer),
+  })
   const rows = () =>
     (
       new DatabaseSync(dbPath, { readOnly: true })
         .prepare('SELECT COUNT(*) AS n FROM playlists')
         .get() as { n: number }
     ).n
-  return { api, post, send, rows, store }
+  return { api, post, send, as, rows, store, findSongs }
 }
 
 describe('api', () => {
@@ -353,6 +463,7 @@ describe('api', () => {
       id: undefined,
       ip: '1.1.1.1',
       authorization: undefined,
+      viewer: ANONYMOUS,
       body: JSON.stringify({ name: 'x', songIds: ['s1'] }),
     }
     expect(api(request).status).toBe(503)
@@ -376,6 +487,7 @@ describe('api', () => {
         id: undefined,
         ip: '1.1.1.1',
         authorization: undefined,
+        viewer: ANONYMOUS,
         body,
       }).status
     expect(post('nope')).toBe(503)
@@ -401,6 +513,7 @@ describe('api', () => {
       id: 'abcd1234',
       ip: '1.1.1.1',
       authorization: undefined,
+      viewer: ANONYMOUS,
       body: '',
     })
     expect(failed.status).toBe(500)
@@ -526,6 +639,7 @@ describe('api', () => {
         id: withId,
         ip: '1.1.1.1',
         authorization: undefined,
+        viewer: ANONYMOUS,
         body: '',
       }).status
     expect(call('GET', undefined)).toBe(405)
@@ -535,24 +649,166 @@ describe('api', () => {
   })
 })
 
+describe('ownership', () => {
+  const idsOf = (reply: PlaylistReply) =>
+    (reply.body as { playlists: { id: string }[] }).playlists.map(
+      ({ id }) => id,
+    )
+  const version1 = { name: 'Renamed', songIds: ['s2'], version: 1 }
+
+  test('a claim with the edit tokens makes both playlists the member’s own', () => {
+    const { post, send, as } = harness()
+    const first = bodyOf(post({ name: 'one', songIds: ['s1'] }))
+    const second = bodyOf(post({ name: 'two', songIds: ['s2'] }))
+    const alice = as(member(ALICE))
+
+    const claimed = alice.send('POST', 'claim', {
+      editTokens: [first.editToken, second.editToken, 'not-a-token'],
+    })
+
+    expect(claimed.status).toBe(200)
+    expect(claimed.body).toEqual({ claimed: [first.id, second.id] })
+    expect(idsOf(alice.send('GET', 'mine')).sort()).toEqual(
+      [first.id, second.id].sort(),
+    )
+    expect(send('GET', first.id, undefined).status).toBe(200)
+  })
+
+  test('a claim never takes a playlist that already has an owner, and repeats safely', () => {
+    const { post, as } = harness()
+    const { id, editToken } = bodyOf(post({ name: 'one', songIds: ['s1'] }))
+    const claim = (viewer: Viewer) =>
+      as(viewer).send('POST', 'claim', { editTokens: [editToken] }).body
+
+    expect(claim(member(ALICE))).toEqual({ claimed: [id] })
+    expect(claim(member(ALICE))).toEqual({ claimed: [id] })
+    expect(claim(member(BOB))).toEqual({ claimed: [] })
+    expect(idsOf(as(member(BOB)).send('GET', 'mine'))).toEqual([])
+  })
+
+  test('a claim is limited per member and holds at most 100 tokens', () => {
+    const { as } = harness({ claimsPerHour: 2 })
+    const alice = as(member(ALICE))
+    const claim = (editTokens: string[]) =>
+      alice.send('POST', 'claim', { editTokens }).status
+    expect(claim(Array(101).fill('t'))).toBe(400)
+    expect([claim(['t']), claim(['t']), claim(['t'])]).toEqual([200, 200, 429])
+    expect(
+      as(member(BOB)).send('POST', 'claim', { editTokens: [] }).status,
+    ).toBe(200)
+  })
+
+  test('claim and mine need a session, and a cross-site claim is refused', () => {
+    const { post, as } = harness()
+    const { editToken } = bodyOf(post({ name: 'one', songIds: ['s1'] }))
+    const body = { editTokens: [editToken] }
+    const alice = as(member(ALICE))
+
+    expect(as(ANONYMOUS).send('POST', 'claim', body).status).toBe(401)
+    expect(as(ANONYMOUS).send('GET', 'mine').status).toBe(401)
+    expect(as(CROSS_SITE).send('POST', 'claim', body).status).toBe(403)
+    expect(alice.send('POST', 'claim', { editTokens: 'x' }).status).toBe(400)
+    expect(alice.send('GET', 'claim').status).toBe(405)
+    expect(alice.send('POST', 'mine').status).toBe(405)
+    expect(idsOf(alice.send('GET', 'mine'))).toEqual([])
+  })
+
+  test('a playlist saved with a session belongs to that member and still gets a token', () => {
+    const { as, send } = harness()
+    const alice = as(member(ALICE))
+    const made = bodyOf(alice.post({ name: 'mine', songIds: ['s1'] }))
+
+    expect(made.editToken).toMatch(/^[A-Za-z0-9_-]{43}$/)
+    expect(idsOf(alice.send('GET', 'mine'))).toEqual([made.id])
+    expect(send('PUT', made.id, made.editToken, version1).status).toBe(200)
+  })
+
+  test('the owner edits and deletes without a token', () => {
+    const { as, send } = harness()
+    const alice = as(member(ALICE))
+    const { id } = bodyOf(alice.post({ name: 'mine', songIds: ['s1'] }))
+
+    expect(alice.send('PUT', id, version1).body).toEqual({ version: 2 })
+    expect(bodyOf(send('GET', id, undefined)).name).toBe('Renamed')
+    expect(alice.send('DELETE', id).status).toBe(200)
+    expect(send('GET', id, undefined).status).toBe(410)
+    expect(idsOf(alice.send('GET', 'mine'))).toEqual([])
+  })
+
+  test('another member, a visitor and a cross-site request cannot edit or delete it', () => {
+    const { as, send } = harness()
+    const { id } = bodyOf(
+      as(member(ALICE)).post({ name: 'mine', songIds: ['s1'] }),
+    )
+
+    for (const viewer of [member(BOB), ANONYMOUS, CROSS_SITE]) {
+      expect(as(viewer).send('PUT', id, version1).status).toBe(403)
+      expect(as(viewer).send('DELETE', id).status).toBe(403)
+    }
+    const read = bodyOf(send('GET', id, undefined))
+    expect(read.name).toBe('mine')
+    expect(read.version).toBe(1)
+  })
+
+  test('a cross-site save is refused before it counts or writes', () => {
+    const { as, rows } = harness({ createsPerIpPerHour: 1 })
+    const body = { name: 'x', songIds: ['s1'] }
+
+    expect(as(CROSS_SITE).post(body).status).toBe(403)
+    expect(rows()).toBe(0)
+    expect(as(ANONYMOUS).post(body).status).toBe(201)
+  })
+
+  test('the edit token still works for a visitor after a member claims the playlist', () => {
+    const { post, send, as } = harness()
+    const { id, editToken } = bodyOf(post({ name: 'one', songIds: ['s1'] }))
+    const alice = as(member(ALICE))
+    alice.send('POST', 'claim', { editTokens: [editToken] })
+
+    expect(send('PUT', id, editToken, version1).status).toBe(200)
+    expect(alice.send('PUT', id, { ...version1, version: 2 }).status).toBe(200)
+  })
+})
+
 describe('admin api', () => {
   const SECRET = 'a-throwaway-admin-secret'
   const adminHarness = () => {
-    const { post, send, store } = harness()
-    const admin = createAdminApi({ store, secret: SECRET })
+    const { post, send, store, findSongs } = harness()
+    const admin = createAdminApi({ store, secret: SECRET, findSongs, now })
+    const request = (
+      method: string,
+      pathname: string,
+      options: Readonly<{
+        secret?: string | null
+        acting?: string
+        body?: unknown
+      }> = {},
+    ) =>
+      admin({
+        method,
+        pathname,
+        authorization:
+          options.secret === null
+            ? undefined
+            : `Bearer ${options.secret ?? SECRET}`,
+        actingDiscordId: options.acting,
+        body: options.body === undefined ? '' : JSON.stringify(options.body),
+      })
     const call = (
       method: string,
       id: string | undefined,
       secret: string | null = SECRET,
     ) =>
-      admin({
+      request(
         method,
-        id,
-        authorization: secret === null ? undefined : `Bearer ${secret}`,
-      })
+        id === undefined ? '/admin/playlists' : `/admin/playlists/${id}`,
+        { secret },
+      )
+    const owner = (acting: string, method: string, path = '', body?: unknown) =>
+      request(method, `/admin/owner/playlists${path}`, { acting, body })
     const make = (name = 'Rainy day Fio', songIds = ['s1', 's2']) =>
       bodyOf(post({ name, songIds }))
-    return { call, make, send }
+    return { call, make, send, owner, request, store }
   }
 
   test('GET summarises a live playlist without its entries or token', () => {
@@ -570,6 +826,14 @@ describe('admin api', () => {
     })
   })
 
+  test('the secret can be checked without reading a body', () => {
+    const { store, findSongs } = harness()
+    const admin = createAdminApi({ store, secret: SECRET, findSongs, now })
+    expect(admin.holdsSecret(`Bearer ${SECRET}`)).toBe(true)
+    expect(admin.holdsSecret('Bearer wrong')).toBe(false)
+    expect(admin.holdsSecret(undefined)).toBe(false)
+  })
+
   test('GET of an unknown or malformed id is 404', () => {
     const { call } = adminHarness()
     expect(call('GET', 'zzzzzzzz').status).toBe(404)
@@ -584,10 +848,16 @@ describe('admin api', () => {
     expect(call('DELETE', id, 'wrong').status).toBe(403)
     expect(call('DELETE', id, null).status).toBe(403)
     expect(
-      createAdminApi({ store: harness().store, secret: SECRET })({
+      createAdminApi({
+        store: harness().store,
+        secret: SECRET,
+        findSongs: () => [],
+      })({
         method: 'GET',
-        id,
+        pathname: `/admin/playlists/${id}`,
         authorization: SECRET,
+        actingDiscordId: undefined,
+        body: '',
       }).status,
     ).toBe(403)
     expect(send('GET', id, undefined).status).toBe(200)
@@ -636,5 +906,163 @@ describe('admin api', () => {
     expect(call('PUT', id).status).toBe(405)
     expect(call('POST', id).status).toBe(405)
     expect(call('GET', undefined).status).toBe(405)
+  })
+  describe('owner routes', () => {
+    const songsOf = (reply: PlaylistReply) =>
+      bodyOf(reply).entries.map(({ songId }) => songId)
+    const start = (acting = ALICE, songIds = ['s1']) => {
+      const tools = adminHarness()
+      const made = tools.owner(acting, 'POST', '', {
+        name: ' Rainy  ',
+        songIds,
+      })
+      return { ...tools, made, id: bodyOf(made).id }
+    }
+
+    test('a member creates, lists, renames, adds to, removes from and deletes a playlist', () => {
+      const { owner, send, made, id } = start()
+      const read = () => bodyOf(send('GET', id, undefined))
+
+      expect(made.status).toBe(201)
+      expect(bodyOf(made)).toMatchObject({ name: 'Rainy', version: 1 })
+      expect(bodyOf(made).editToken).toBeUndefined()
+      expect(owner(ALICE, 'GET').body).toEqual({
+        playlists: [
+          expect.objectContaining({ id, name: 'Rainy', entryCount: 1 }),
+        ],
+      })
+
+      const renamed = owner(ALICE, 'PUT', `/${id}/name`, { name: 'Sunny' })
+      expect(renamed.status).toBe(200)
+      expect(read()).toMatchObject({ name: 'Sunny', version: 2 })
+
+      const added = owner(ALICE, 'POST', `/${id}/songs`, { songId: 's2' })
+      expect(added.status).toBe(200)
+      expect(songsOf(added)).toEqual(['s1', 's2'])
+      expect(read().entries).toEqual([entry('s1'), entry('s2')])
+
+      const removed = owner(ALICE, 'DELETE', `/${id}/songs/s1`)
+      expect(removed.status).toBe(200)
+      expect(read()).toMatchObject({ entries: [entry('s2')], version: 4 })
+      expect(songsOf(owner(ALICE, 'GET', `/${id}`))).toEqual(['s2'])
+
+      expect(owner(ALICE, 'DELETE', `/${id}`).body).toEqual({ id })
+      expect(send('GET', id, undefined).status).toBe(410)
+      expect(owner(ALICE, 'GET').body).toEqual({ playlists: [] })
+      expect(owner(ALICE, 'GET', `/${id}`).status).toBe(410)
+    })
+
+    test('a playlist made from Discord has no edit token', () => {
+      const { send, id } = start()
+      const body = { name: 'x', songIds: ['s1'], version: 1 }
+      expect(send('PUT', id, 'any-token', body).status).toBe(403)
+      expect(send('PUT', id, undefined, body).status).toBe(403)
+    })
+
+    test('another Discord id is refused on every route and nothing changes', () => {
+      const { owner, send, id } = start()
+      const status = (method: string, path: string, body?: unknown) =>
+        owner(BOB, method, path, body).status
+
+      expect(status('GET', `/${id}`)).toBe(403)
+      expect(status('PUT', `/${id}/name`, { name: 'Taken' })).toBe(403)
+      expect(status('POST', `/${id}/songs`, { songId: 's2' })).toBe(403)
+      expect(status('DELETE', `/${id}/songs/s1`)).toBe(403)
+      expect(status('DELETE', `/${id}`)).toBe(403)
+      expect(owner(BOB, 'GET').body).toEqual({ playlists: [] })
+      expect(bodyOf(send('GET', id, undefined))).toMatchObject({
+        name: 'Rainy',
+        entries: [entry('s1')],
+        version: 1,
+      })
+    })
+
+    test('a playlist with no owner is refused, and an unknown one is 404', () => {
+      const { owner, make } = adminHarness()
+      const { id } = make()
+      const rename = owner(ALICE, 'PUT', `/${id}/name`, { name: 'Mine now' })
+      expect(rename.status).toBe(403)
+      expect(owner(ALICE, 'GET', '/zzzzzzzz').status).toBe(404)
+      expect(owner(ALICE, 'GET', '/short').status).toBe(404)
+    })
+
+    test('the acting id must be a Discord user id, and the secret still gates', () => {
+      const { request } = adminHarness()
+      const path = '/admin/owner/playlists'
+      expect(request('GET', path).status).toBe(400)
+      expect(request('GET', path, { acting: 'alice' }).status).toBe(400)
+      expect(
+        request('GET', path, { acting: ALICE, secret: 'wrong' }).status,
+      ).toBe(403)
+      expect(request('GET', '/admin/owner', { acting: ALICE }).status).toBe(404)
+    })
+
+    test('names and songs follow the public rules', () => {
+      const { owner, send, id } = start(ALICE, ['s1', 's2'])
+      const status = (method: string, path: string, body?: unknown) =>
+        owner(ALICE, method, path, body).status
+      const long = 'x'.repeat(61)
+
+      expect(status('POST', '', { name: 'x', songIds: ['s1', 's1'] })).toBe(400)
+      expect(status('POST', '', { name: 'x', songIds: ['nope'] })).toBe(400)
+      expect(status('POST', '', { name: long, songIds: ['s1'] })).toBe(400)
+      expect(status('PUT', `/${id}/name`, { name: long })).toBe(400)
+      expect(status('PUT', `/${id}/name`, { name: 7 })).toBe(400)
+      expect(status('POST', `/${id}/songs`, { songId: 's1' })).toBe(400)
+      expect(status('POST', `/${id}/songs`, { songId: 'nope' })).toBe(400)
+      expect(status('POST', `/${id}/songs`, {})).toBe(400)
+      expect(status('DELETE', `/${id}/songs/s3`)).toBe(404)
+      expect(status('DELETE', `/${id}/songs/s1`)).toBe(200)
+      expect(status('DELETE', `/${id}/songs/s2`)).toBe(400)
+      expect(status('PATCH', `/${id}`)).toBe(405)
+      expect(status('GET', `/${id}/songs`)).toBe(405)
+      expect(bodyOf(send('GET', id, undefined)).entries).toEqual([entry('s2')])
+
+      const blank = owner(ALICE, 'PUT', `/${id}/name`, { name: '   ' })
+      expect(bodyOf(blank).name).toBe('Untitled playlist')
+    })
+
+    const withEverySong = (dailyCap = 1000) => {
+      const admin = createAdminApi({
+        store: openPlaylistStore({ path: dbPath, now, dailyCap }),
+        secret: SECRET,
+        now,
+        findSongs: ids => ids.map(entry),
+      })
+      return (method: string, path: string, body: unknown) =>
+        admin({
+          method,
+          pathname: `/admin/owner/playlists${path}`,
+          authorization: `Bearer ${SECRET}`,
+          actingDiscordId: ALICE,
+          body: JSON.stringify(body),
+        })
+    }
+
+    test('a playlist stops at 100 songs', () => {
+      const call = withEverySong()
+      const songIds = Array.from({ length: 100 }, (_, i) => `song${i}`)
+      const made = call('POST', '', { name: 'full', songIds })
+      expect(made.status).toBe(201)
+      const add = call('POST', `/${bodyOf(made).id}/songs`, { songId: 'more' })
+      expect(add.status).toBe(400)
+    })
+
+    test('the 11th create from one member in an hour is a 429 and another member is fine', () => {
+      const { owner } = adminHarness()
+      const body = { name: 'x', songIds: ['s1'] }
+      for (let i = 0; i < 10; i++) {
+        expect(owner(ALICE, 'POST', '', body).status).toBe(201)
+      }
+      expect(owner(ALICE, 'POST', '', body).status).toBe(429)
+      expect(owner(BOB, 'POST', '', body).status).toBe(201)
+      clock = new Date(clock.getTime() + 61 * 60 * 1000)
+      expect(owner(ALICE, 'POST', '', body).status).toBe(201)
+    })
+
+    test('the daily cap stops a member create', () => {
+      const call = withEverySong(0)
+      expect(call('POST', '', { name: 'x', songIds: ['s1'] }).status).toBe(503)
+    })
   })
 })

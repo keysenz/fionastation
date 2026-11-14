@@ -2,7 +2,7 @@
 // environment settings so the devbox hostname stays out of this public repo.
 const API_PATH = /^[\w-]+(\/[\w-]+)*$/
 
-const FORWARDED_HEADERS = ['content-type', 'authorization']
+const FORWARDED_HEADERS = ['content-type', 'authorization', 'cookie', 'origin']
 
 const DROPPED_HEADERS = [
   'content-encoding',
@@ -10,7 +10,7 @@ const DROPPED_HEADERS = [
   'transfer-encoding',
 ]
 
-const PLAYLIST_PATH = /^playlists(\/|$)/
+const UNCACHED_PATH = /^(playlists|auth)(\/|$)/
 
 const visitorIp = (request: Request) =>
   request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || undefined
@@ -46,14 +46,14 @@ async function forward(request: Request): Promise<Response> {
   const upstream = await fetch(`${origin}/api/${path}${url.search}`, {
     method: request.method,
     headers,
+    redirect: 'manual',
     ...(hasBody && { body: await request.arrayBuffer() }),
   })
   const responseHeaders = new Headers(upstream.headers)
   for (const name of DROPPED_HEADERS) {
     responseHeaders.delete(name)
   }
-  // NOTE: the hop to devbox takes 1-3 s, so Vercel's CDN answers from cache and refreshes in the background; browsers still revalidate every load. Playlists change on every write, so they and every write skip it.
-  if (request.method === 'GET' && upstream.ok && !PLAYLIST_PATH.test(path)) {
+  if (request.method === 'GET' && upstream.ok && !UNCACHED_PATH.test(path)) {
     responseHeaders.set(
       'Vercel-CDN-Cache-Control',
       'max-age=60, stale-while-revalidate=86400',

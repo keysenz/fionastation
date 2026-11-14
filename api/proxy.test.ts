@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { DELETE, GET, POST, PUT } from './proxy'
@@ -63,9 +64,9 @@ describe('writes', () => {
         headers: { 'x-forwarded-for': '203.0.113.9, 10.0.0.1' },
       }),
     )
-    expect(
-      new Headers(sent[0]?.init.headers).get('x-forwarded-for'),
-    ).toBe('203.0.113.9')
+    expect(new Headers(sent[0]?.init.headers).get('x-forwarded-for')).toBe(
+      '203.0.113.9',
+    )
   })
 
   it('sends no x-forwarded-for when the request has none', async () => {
@@ -133,6 +134,60 @@ describe('reads', () => {
     const headers = new Headers(sent[0]?.init.headers)
     expect(headers.get('x-proxy-secret')).toBe('s3cret')
     expect(headers.has('x-forwarded-for')).toBe(false)
+  })
+})
+
+describe('login', () => {
+  it('forwards the cookie and the origin upstream', async () => {
+    const sent = stubUpstream(ok)
+    await POST(
+      new Request('https://site.test/api/proxy?path=auth/logout', {
+        method: 'POST',
+        headers: {
+          cookie: 'fs_session=abc; other=1',
+          origin: 'https://site.test',
+        },
+      }),
+    )
+    const headers = new Headers(sent[0]?.init.headers)
+    expect(headers.get('cookie')).toBe('fs_session=abc; other=1')
+    expect(headers.get('origin')).toBe('https://site.test')
+  })
+
+  it('hands a redirect back to the browser with its location and every cookie', async () => {
+    const sent = stubUpstream(() => {
+      const headers = new Headers({
+        location: 'https://discord.test/authorize',
+      })
+      headers.append('set-cookie', 'fs_session=abc; Path=/; HttpOnly')
+      headers.append('set-cookie', 'fs_oauth_state=; Path=/api/auth; Max-Age=0')
+      return new Response(null, { status: 302, headers })
+    })
+    const response = await GET(
+      new Request(
+        'https://site.test/api/proxy?path=auth/discord/callback&code=c1&state=s1',
+      ),
+    )
+    expect(sent[0]?.url).toBe(
+      'http://upstream.test/api/auth/discord/callback?code=c1&state=s1',
+    )
+    expect(sent[0]?.init.redirect).toBe('manual')
+    expect(response.status).toBe(302)
+    expect(response.headers.get('location')).toBe(
+      'https://discord.test/authorize',
+    )
+    expect(response.headers.getSetCookie()).toEqual([
+      'fs_session=abc; Path=/; HttpOnly',
+      'fs_oauth_state=; Path=/api/auth; Max-Age=0',
+    ])
+  })
+
+  it('never gives an auth read the CDN cache header', async () => {
+    stubUpstream(ok)
+    const response = await GET(
+      new Request('https://site.test/api/proxy?path=auth/me'),
+    )
+    expect(response.headers.has(CDN)).toBe(false)
   })
 })
 
