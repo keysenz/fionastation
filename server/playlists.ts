@@ -37,6 +37,17 @@ export type ReplaceResult =
   | Readonly<{ kind: 'Deleted' }>
   | Readonly<{ kind: 'Unknown' }>
 export type RemoveResult = 'Removed' | 'Unknown'
+export type PlaylistSummary = Readonly<{
+  id: string
+  name: string
+  entryCount: number
+  createdAt: string
+  updatedAt: string
+  deleted: boolean
+}>
+export type SummaryResult =
+  | Readonly<{ kind: 'Found'; summary: PlaylistSummary }>
+  | Readonly<{ kind: 'Unknown' }>
 
 export type PlaylistStore = Readonly<{
   dailyCapReached: () => boolean
@@ -49,6 +60,7 @@ export type PlaylistStore = Readonly<{
     expectedVersion: number,
   ) => ReplaceResult
   remove: (id: string) => RemoveResult
+  summarize: (id: string) => SummaryResult
 }>
 
 type PlaylistRow = {
@@ -231,6 +243,22 @@ export const openPlaylistStore = ({
       markDeleted.run(stamp, stamp, id)
       return find(id) ? 'Removed' : 'Unknown'
     },
+
+    summarize: id => {
+      const row = find(id)
+      if (!row) return { kind: 'Unknown' }
+      return {
+        kind: 'Found',
+        summary: {
+          id: row.id,
+          name: row.name,
+          entryCount: (JSON.parse(row.entries) as unknown[]).length,
+          createdAt: row.created_at,
+          updatedAt: row.updated_at,
+          deleted: row.deleted_at !== null,
+        },
+      }
+    },
   }
 }
 
@@ -303,6 +331,9 @@ const parseWrite = (body: string): ParsedWrite => {
   }
   return { kind: 'Parsed', name, songIds, version }
 }
+
+const isPlaylistId = (id: string) =>
+  new RegExp(`^[0-9A-Za-z]{${ID_LENGTH}}$`).test(id)
 
 export const createPlaylistApi = ({
   store,
@@ -428,7 +459,7 @@ export const createPlaylistApi = ({
         ? create(request)
         : failure(405, 'Method Not Allowed')
     }
-    if (!new RegExp(`^[0-9A-Za-z]{${ID_LENGTH}}$`).test(id)) {
+    if (!isPlaylistId(id)) {
       return failure(404, 'No such playlist')
     }
     switch (request.method) {
@@ -459,6 +490,49 @@ export const createPlaylistApi = ({
       return handle(request)
     } catch (error) {
       console.error('Playlist store error:', error)
+      return failure(500, 'Could not read or save playlists')
+    }
+  }
+}
+
+export type AdminRequest = Readonly<{
+  method: string
+  id: string | undefined
+  authorization: string | undefined
+}>
+
+const digest = (value: string) => createHash('sha256').update(value).digest()
+
+export const createAdminApi = ({
+  store,
+  secret,
+}: Readonly<{ store: PlaylistStore; secret: string }>) => {
+  const expected = digest(secret)
+  const holdsSecret = (authorization: string | undefined) => {
+    const given = /^Bearer (\S+)$/.exec(authorization ?? '')?.[1]
+    return given !== undefined && timingSafeEqual(digest(given), expected)
+  }
+
+  const handle = ({ method, id, authorization }: AdminRequest) => {
+    if (!holdsSecret(authorization)) return failure(403, 'Forbidden')
+    if (id === undefined || (method !== 'GET' && method !== 'DELETE')) {
+      return failure(405, 'Method Not Allowed')
+    }
+    if (!isPlaylistId(id)) return failure(404, 'No such playlist')
+    if (method === 'DELETE' && store.remove(id) === 'Unknown') {
+      return failure(404, 'No such playlist')
+    }
+    const found = store.summarize(id)
+    return found.kind === 'Found'
+      ? reply(200, found.summary)
+      : failure(404, 'No such playlist')
+  }
+
+  return (request: AdminRequest): PlaylistReply => {
+    try {
+      return handle(request)
+    } catch (error) {
+      console.error('Admin playlist error:', error)
       return failure(500, 'Could not read or save playlists')
     }
   }
