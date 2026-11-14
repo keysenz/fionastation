@@ -39,6 +39,7 @@ export type ReplaceResult =
 export type RemoveResult = 'Removed' | 'Unknown'
 
 export type PlaylistStore = Readonly<{
+  dailyCapReached: () => boolean
   create: (write: PlaylistWrite) => CreateResult
   read: (id: string) => ReadResult
   authorize: (id: string, editToken: string | undefined) => AuthResult
@@ -118,7 +119,7 @@ export const openPlaylistStore = ({
   const db = new DatabaseSync(path)
   db.exec('PRAGMA journal_mode = WAL')
   db.exec('PRAGMA synchronous = NORMAL')
-  db.exec('PRAGMA busy_timeout = 5000')
+  db.exec('PRAGMA busy_timeout = 1000')
   db.exec(`
     CREATE TABLE IF NOT EXISTS playlists (
       id TEXT PRIMARY KEY,
@@ -155,12 +156,18 @@ export const openPlaylistStore = ({
   const find = (id: string) =>
     selectRow.get(id) as unknown as PlaylistRow | undefined
 
+  const capReached = (at: Date) => {
+    const { start, end } = utcDayBounds(at)
+    const { n } = countCreated.get(start, end) as unknown as { n: number }
+    return n >= dailyCap
+  }
+
   return {
+    dailyCapReached: () => capReached(now()),
+
     create: ({ name, entries }) => {
       const at = now()
-      const { start, end } = utcDayBounds(at)
-      const { n } = countCreated.get(start, end) as unknown as { n: number }
-      if (n >= dailyCap) {
+      if (capReached(at)) {
         return { kind: 'DailyCapReached' }
       }
       const editToken = newEditToken()
@@ -260,6 +267,10 @@ const reply = (status: number, body: unknown): PlaylistReply => ({
   body,
 })
 const failure = (status: number, error: string) => reply(status, { error })
+const capReply = failure(
+  503,
+  'Too many playlists were saved today. Try tomorrow.',
+)
 
 type ParsedWrite =
   | Readonly<{
@@ -329,9 +340,11 @@ export const createPlaylistApi = ({
       return refuse(`A playlist holds 1 to ${MAX_ENTRIES} songs`)
     }
     if (
-      new Set(songIds).size !== songIds.length ||
       songIds.some(id => id.length > MAX_SONG_ID_LENGTH)
     ) {
+      return refuse(`A song id is longer than ${MAX_SONG_ID_LENGTH} characters`)
+    }
+    if (new Set(songIds).size !== songIds.length) {
       return refuse('Each song may appear once')
     }
     const found = new Map(findSongs(songIds).map(song => [song.songId, song]))
@@ -351,12 +364,11 @@ export const createPlaylistApi = ({
       return failure(429, 'Too many playlists from this address. Try later.')
     }
     // Turnstile check goes here: after the per-IP limit, before the daily cap.
+    if (store.dailyCapReached()) return capReply
     const checked = checkWrite(request.body)
     if (checked.kind === 'Refused') return checked.reply
     const created = store.create(checked.write)
-    if (created.kind === 'DailyCapReached') {
-      return failure(503, 'Too many playlists were saved today. Try tomorrow.')
-    }
+    if (created.kind === 'DailyCapReached') return capReply
     const { id, editToken, version } = created
     return reply(201, { id, editToken, version })
   }
@@ -406,7 +418,7 @@ export const createPlaylistApi = ({
     }
   }
 
-  return (request: PlaylistRequest): PlaylistReply => {
+  const handle = (request: PlaylistRequest): PlaylistReply => {
     if (Buffer.byteLength(request.body) > MAX_BODY_BYTES) {
       return failure(413, 'The request is too large')
     }
@@ -440,6 +452,14 @@ export const createPlaylistApi = ({
         })
       default:
         return failure(405, 'Method Not Allowed')
+    }
+  }
+  return (request: PlaylistRequest): PlaylistReply => {
+    try {
+      return handle(request)
+    } catch (error) {
+      console.error('Playlist store error:', error)
+      return failure(500, 'Could not read or save playlists')
     }
   }
 }

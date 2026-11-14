@@ -358,6 +358,63 @@ describe('api', () => {
     expect(api(request).status).toBe(429)
   })
 
+  test('with the daily cap reached, invalid and duplicate-id bodies get 503 and no song lookup runs', () => {
+    const store = openPlaylistStore({ path: dbPath, now, dailyCap: 0 })
+    let lookups = 0
+    const api = createPlaylistApi({
+      store,
+      now,
+      findSongs: ids => {
+        lookups++
+        return ids.map(entry)
+      },
+    })
+    const post = (body: string) =>
+      api({
+        method: 'POST',
+        id: undefined,
+        ip: '1.1.1.1',
+        authorization: undefined,
+        body,
+      }).status
+    expect(post('nope')).toBe(503)
+    expect(post(JSON.stringify({ name: 'x', songIds: ['s1', 's1'] }))).toBe(503)
+    expect(post(JSON.stringify({ name: 'x', songIds: ['s1'] }))).toBe(503)
+    expect(lookups).toBe(0)
+  })
+
+  test('a store error answers a JSON 500 instead of throwing', () => {
+    const store = openPlaylistStore({ path: dbPath, now })
+    const api = createPlaylistApi({
+      store: {
+        ...store,
+        read: () => {
+          throw new Error('database is locked')
+        },
+      },
+      now,
+      findSongs: ids => ids.map(entry),
+    })
+    const failed = api({
+      method: 'GET',
+      id: 'abcd1234',
+      ip: '1.1.1.1',
+      authorization: undefined,
+      body: '',
+    })
+    expect(failed.status).toBe(500)
+    expect(failed.body).toEqual({ error: expect.any(String) })
+  })
+
+  test('a song id over 64 characters is a 400 whose message is not the duplicate one', () => {
+    const { post, rows } = harness()
+    const tooLong = post({ name: 'x', songIds: ['s'.repeat(65)] })
+    const duplicate = post({ name: 'x', songIds: ['s1', 's1'] })
+    expect(tooLong.status).toBe(400)
+    expect(tooLong.body).not.toEqual(duplicate.body)
+    expect(rows()).toBe(0)
+  })
+
   test('an edit with the right token and current version bumps the version, a stale one is a 409', () => {
     const { post, send } = harness()
     const { id, editToken } = bodyOf(post({ name: 'one', songIds: ['s1'] }))

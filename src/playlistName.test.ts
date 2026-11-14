@@ -39,7 +39,7 @@ describe('cleanPlaylistName', () => {
     },
   )
 
-  test('the limit counts graphemes, so a family emoji is one', () => {
+  test('the limit counts graphemes, not code units', () => {
     expect(cleaned('a'.repeat(MAX_PLAYLIST_NAME_GRAPHEMES))).toHaveLength(
       MAX_PLAYLIST_NAME_GRAPHEMES,
     )
