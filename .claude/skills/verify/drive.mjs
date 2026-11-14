@@ -508,6 +508,132 @@ const expectId = (id) => {
   if (!/^[0-9A-Za-z]{8}$/.test(id)) throw new Error(`odd id ${id}`);
 };
 
+const RUN_DIR = join(dirname(fileURLToPath(import.meta.url)), '.run');
+const FAKE_USER = { id: '100000000000000001', name: 'Fake Fan' };
+const OTHER_USER = { id: '100000000000000002', name: 'User B' };
+
+const waitUntilUp = async (url, ok) => {
+  for (let i = 0; i < 90; i++) {
+    const res = await fetch(url).catch(() => null);
+    if (res && ok(res)) return;
+    await sleepMs(1000);
+  }
+  throw new Error(`${url} did not come up`);
+};
+
+// A second server wired to fake-discord.mjs, because the default server has no Discord login.
+const startDiscordStack = async () => {
+  const first = Number(process.env.VERIFY_PORT ?? 3456) + 1;
+  const [serverPort, fakePort, adminPort] = [first, first + 1, first + 2];
+  const base = `http://127.0.0.1:${serverPort}`;
+  const fake = `http://127.0.0.1:${fakePort}`;
+  const admin = `http://127.0.0.1:${adminPort}`;
+  const secret = 'verify-admin-secret';
+  const credentials = { DISCORD_CLIENT_ID: 'fake-client', DISCORD_CLIENT_SECRET: 'fake-secret' };
+  const children = [];
+  const close = () => children.forEach((child) => child.kill());
+  try {
+    children.push(
+      spawn(process.execPath, [join(dirname(fileURLToPath(import.meta.url)), 'fake-discord.mjs')], {
+        env: { ...process.env, ...credentials, FAKE_DISCORD_PORT: String(fakePort) },
+        stdio: 'ignore',
+      }),
+    );
+    children.push(
+      spawn(process.execPath, ['--disable-warning=ExperimentalWarning', 'server/main.ts'], {
+        cwd: join(dirname(fileURLToPath(import.meta.url)), '../../..'),
+        env: {
+          ...process.env,
+          ...credentials,
+          PORT: String(serverPort),
+          HOSTNAME: '127.0.0.1',
+          PLAYLISTS_DB_PATH: join(mkdtempSync(join(tmpdir(), 'verify-discord-')), 'p.db'),
+          PLAYLISTS_IP_LIMIT_PER_HOUR: '1000',
+          DATABASE_PATH: join(RUN_DIR, 'karaoke.db'),
+          DISCORD_API_BASE: fake,
+          SITE_ORIGIN: base,
+          ADMIN_SECRET: secret,
+          ADMIN_PORT: String(adminPort),
+        },
+        stdio: 'ignore',
+      }),
+    );
+    await waitUntilUp(`${fake}/nothing`, () => true);
+    await waitUntilUp(`${base}/api/get-karaoke`, (res) => res.ok);
+  } catch (e) {
+    close();
+    throw e;
+  }
+  const actAs = async (user) => {
+    await fetch(`${fake}/fake/as?id=${user.id}&name=${encodeURIComponent(user.name)}`);
+  };
+  const refuseCodes = (on) => fetch(`${fake}/fake/refuse?on=${on ? 1 : 0}`);
+  const createAs = async (user, name, songs) => {
+    const res = await fetch(`${admin}/admin/owner/playlists`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${secret}`, 'x-acting-discord-id': user.id, 'content-type': 'application/json' },
+      body: JSON.stringify({ name, songIds: songs.map((song) => song.id) }),
+    });
+    if (res.status !== 201) throw new Error(`the owner route answered ${res.status}`);
+    return res.json();
+  };
+  return { base, close, actAs, refuseCodes, createAs };
+};
+
+const myPlaylistsButton = (page) => page.locator('[data-playlist-action="Mine"]');
+const accountPanel = (page, state) => page.locator(`[data-playlist-dialog="Account"] [data-account="${state}"]`);
+const accountDialogAction = (page, action) => page.locator(`[data-playlist-dialog="Account"] [data-playlist-action="${action}"]`);
+const openMyPlaylists = async (page) => {
+  await myPlaylistsButton(page).click();
+  await page.locator('[data-playlist-dialog="Account"]').waitFor();
+};
+const listedIds = (page) => page.locator('[data-my-playlist]').evaluateAll((links) => links.map((link) => link.getAttribute('data-my-playlist')));
+const listedIdsEventually = async (page, want) => {
+  await page.waitForFunction(
+    (ids) => {
+      const shown = [...document.querySelectorAll('[data-my-playlist]')].map((link) => link.getAttribute('data-my-playlist'));
+      return ids.every((id) => shown.includes(id));
+    },
+    want,
+  );
+  return listedIds(page);
+};
+
+const connectDiscord = async (page, base) => {
+  await openMyPlaylists(page);
+  await accountDialogAction(page, 'Connect').click();
+  await page.waitForFunction((root) => location.href === `${root}/`, base);
+  await myPlaylistsButton(page).waitFor();
+  await openMyPlaylists(page);
+  await accountPanel(page, 'Connected').waitFor();
+};
+
+const startedSession = async (label, base, songs, options) => {
+  const page = options?.blocked ? blockedStoragePage(label) : makeSession(label, options).page();
+  await page.goto(base + '/');
+  if (songs) await setSavedQueue(page, songs);
+  await page.goto(base + '/');
+  await page.locator('[data-playlist-action="Save"]').waitFor();
+  return page;
+};
+
+const saveQueueAs = async (page, name) => {
+  await openSaveDialog(page);
+  const saved = await saveFrom(page, 'Queue', name);
+  await dialogButton(page, 'Done').click();
+  return saved;
+};
+
+const openFromList = async (page, id) => {
+  await page.locator(`[data-my-playlist="${id}"]`).click();
+  const replace = page.locator('[data-playlist-choice="Replace"]');
+  await page.waitForFunction(() => document.querySelector('[data-playlist-bar], [data-playlist-choice="Replace"]'));
+  if (await replace.isVisible()) await replace.click();
+  await page.locator('[data-playlist-bar]').waitFor();
+};
+
+const barKind = (page) => page.locator('[data-playlist-bar]').getAttribute('data-playlist-bar');
+
 const journeys = {
   async site(page) {
     await page.goto(BASE + '/');
@@ -2819,6 +2945,320 @@ const journeys = {
     check('api', 'is_gone matches oEmbed for every video', mismatches.length === 0 && videos.every((v) => typeof v.is_gone === 'boolean'), mismatches.slice(0, 3).join(' | '));
     for (const route of ['/api/get-cover', '/api/post-karaoke', '/api/update-cover', '/api/update-karaoke', '/api/webhook', '/input_video']) {
       check('api', `${route} no longer exists`, (await api(route, { method: 'GET' })).status === 404);
+    }
+  },
+
+  async playlistDiscord(page) {
+    const stack = await startDiscordStack();
+    try {
+      const songs = distinctByTitle(await livePlayables(), 4);
+      const f = 'playlist-discord';
+      const a = await startedSession('discord-a', stack.base, songs.slice(0, 3));
+      await step(
+        f,
+        'a signed-out visitor is offered Connect Discord',
+        async () => {
+          await openMyPlaylists(a);
+          await accountPanel(a, 'SignedOut').waitFor();
+          await accountDialogAction(a, 'Connect').waitFor();
+          await a.screenshot({ path: join(out, 'discord-connect.png') });
+          await dialogButton(a, 'Done').click();
+        },
+        a,
+      );
+      const one = await saveQueueAs(a, 'Claim one');
+      const two = await saveQueueAs(a, 'Claim two');
+      await step(
+        f,
+        'connecting claims the playlists this browser held tokens for and lists them with the account name',
+        async () => {
+          await connectDiscord(a, stack.base);
+          const name = await a.locator('[data-account-name]').innerText();
+          if (name !== FAKE_USER.name) throw new Error(name);
+          const shown = await listedIdsEventually(a, [one.id, two.id]);
+          await a.screenshot({ path: join(out, 'discord-connected.png') });
+          await a.screenshot({ path: join(out, 'discord-claim.png') });
+          const mine = await a.evaluate(() => fetch('/api/playlists/mine').then((res) => res.json()));
+          const claimed = mine.playlists.map((entry) => entry.id);
+          if (![one.id, two.id].every((id) => claimed.includes(id))) throw new Error(`server lists ${claimed.join()} after the page showed ${shown.join()}`);
+          await dialogButton(a, 'Done').click();
+        },
+        a,
+      );
+      const b = makeSession('discord-b').page();
+      await b.goto(stack.base + '/');
+      await b.locator('[data-playlist-action="Save"]').waitFor();
+      await step(
+        f,
+        'a second browser with no tokens connects as the same user, lists the playlists and renames one',
+        async () => {
+          await connectDiscord(b, stack.base);
+          await listedIdsEventually(b, [one.id, two.id]);
+          await b.screenshot({ path: join(out, 'discord-other-browser-list.png') });
+          await openFromList(b, one.id);
+          if ((await barKind(b)) !== 'Owner') throw new Error('no owner actions without a token');
+          const held = await b.evaluate(() => localStorage.getItem('karaoke-my-playlists'));
+          if (held && JSON.parse(held).length) throw new Error(`browser B holds tokens ${held}`);
+          await rename(b, 'Renamed from B');
+          await b.screenshot({ path: join(out, 'discord-other-browser.png') });
+          const stored = await (await fetch(`${stack.base}/api/playlists/${one.id}`)).json();
+          if (stored.name !== 'Renamed from B') throw new Error(stored.name);
+        },
+        b,
+      );
+      await step(
+        f,
+        'a playlist deleted from the page while connected leaves a link that lands on / with the deleted toast',
+        async () => {
+          await playlistAction(b, 'Delete').click();
+          await dialogButton(b, 'Submit').click();
+          await b.locator('[data-toast="PlaylistDeleted"]').waitFor();
+          if (new URL(await b.url()).pathname !== '/') throw new Error(await b.url());
+          const c = makeSession('discord-link').page();
+          await c.goto(`${stack.base}/p/${one.id}`);
+          await c.locator('[data-toast="PlaylistDeleted"]').waitFor();
+          if (new URL(await c.url()).pathname !== '/') throw new Error(await c.url());
+          await c.screenshot({ path: join(out, 'discord-delete.png') });
+        },
+        b,
+      );
+      await step(
+        f,
+        'disconnecting leaves no account, ends the session, and token-held playlists stay editable',
+        async () => {
+          await openMyPlaylists(a);
+          await accountDialogAction(a, 'Disconnect').click();
+          await accountPanel(a, 'SignedOut').waitFor();
+          const me = await a.evaluate(() => fetch('/api/auth/me').then((res) => res.status));
+          if (me !== 401) throw new Error(`me answered ${me}`);
+          await a.screenshot({ path: join(out, 'discord-disconnect.png') });
+          await openFromList(a, two.id);
+          if ((await barKind(a)) !== 'Owner') throw new Error('the token no longer edits');
+        },
+        a,
+      );
+      await step(
+        f,
+        'a different user sees a stranger playlist with no owner actions and Save a copy',
+        async () => {
+          await stack.actAs(OTHER_USER);
+          const c = await startedSession('discord-c', stack.base);
+          await connectDiscord(c, stack.base);
+          await dialogButton(c, 'Done').click();
+          await c.goto(`${stack.base}/p/${two.id}`);
+          await c.locator('[data-playlist-bar]').waitFor();
+          if ((await barKind(c)) !== 'Visitor') throw new Error('owner actions offered to a stranger');
+          if ((await playlistAction(c, 'Rename').count()) !== 0) throw new Error('Rename offered');
+          await playlistAction(c, 'SaveCopy').waitFor();
+          await c.screenshot({ path: join(out, 'discord-not-owner.png') });
+          await stack.actAs(FAKE_USER);
+        },
+        a,
+      );
+      await step(
+        f,
+        'a playlist made through the owner route appears after connecting and is editable',
+        async () => {
+          const made = await stack.createAs(FAKE_USER, 'Made by the bot', songs.slice(0, 2));
+          const d = await startedSession('discord-d', stack.base);
+          await connectDiscord(d, stack.base);
+          await listedIdsEventually(d, [made.id]);
+          await openFromList(d, made.id);
+          if ((await barKind(d)) !== 'Owner') throw new Error('no owner actions');
+          await rename(d, 'Renamed after the bot');
+          await d.screenshot({ path: join(out, 'discord-bot-made.png') });
+        },
+        a,
+      );
+    } finally {
+      stack.close();
+    }
+  },
+
+  async playlistDiscordEdge(page) {
+    const stack = await startDiscordStack();
+    try {
+      const songs = distinctByTitle(await livePlayables(), 2);
+      const f = 'playlist-discord-edge';
+      await step(
+        f,
+        'with storage blocked, connecting still works and the page does not crash',
+        async () => {
+          const blocked = await startedSession('discord-blocked', stack.base, undefined, { blocked: true });
+          await connectDiscord(blocked, stack.base);
+          await blocked.screenshot({ path: join(out, 'discord-no-storage.png') });
+        },
+        page,
+      );
+      await step(
+        f,
+        'a display name with markup shows as text and runs nothing',
+        async () => {
+          await stack.actAs({ id: OTHER_USER.id, name: '<img src=x onerror=window.__pwned=1>' });
+          const x = await startedSession('discord-xss', stack.base);
+          await connectDiscord(x, stack.base);
+          const shown = await x.locator('[data-account-name]').innerText();
+          if (shown !== '<img src=x onerror=window.__pwned=1>') throw new Error(shown);
+          const hostile = await x.evaluate(() => ({ imgs: document.querySelectorAll('img[src="x"]').length, ran: window.__pwned === 1 }));
+          if (hostile.imgs !== 0 || hostile.ran) throw new Error(JSON.stringify(hostile));
+          await x.screenshot({ path: join(out, 'discord-xss.png') });
+          await stack.actAs(FAKE_USER);
+        },
+        page,
+      );
+      await step(
+        f,
+        'at 375px the connected dialog and the header fit with no sideways scroll',
+        async () => {
+          const m = makeSession('discord-mobile', { viewport: { width: 375, height: 800 } }).page();
+          await m.goto(stack.base + '/');
+          await setSavedQueue(m, songs);
+          await m.goto(stack.base + '/');
+          await m.locator('[data-playlist-action="Save"]').waitFor();
+          await saveQueueAs(m, 'A rather long playlist name that has to wrap on a phone');
+          if (!(await noSidewaysScroll(m))) throw new Error('the header scrolls sideways');
+          const header = await m.evaluate(() => ({
+            titleRight: document.querySelector('h1').getBoundingClientRect().right,
+            firstButtonLeft: document.querySelector('[data-playlist-action="Mine"]').getBoundingClientRect().left,
+            titleClipped: document.querySelector('h1').scrollWidth > document.querySelector('h1').clientWidth,
+          }));
+          if (header.titleRight + 8 > header.firstButtonLeft || header.titleClipped) throw new Error(`title collides: ${JSON.stringify(header)}`);
+          await connectDiscord(m, stack.base);
+          if (!(await noSidewaysScroll(m))) throw new Error('the page scrolls sideways');
+          const box = await m.locator('[data-playlist-dialog="Account"] [role="dialog"]').boundingBox();
+          if (box.x < 0 || box.x + box.width > 375) throw new Error(JSON.stringify(box));
+          await m.screenshot({ path: join(out, 'discord-mobile.png') });
+        },
+        page,
+      );
+    } finally {
+      stack.close();
+    }
+  },
+
+  async playlistDiscordFailure(page) {
+    const stack = await startDiscordStack();
+    try {
+      const f = 'playlist-discord-failure';
+      const songs = distinctByTitle(await livePlayables(), 2);
+      const toastShows = async (p, reason, shot) => {
+        await p.locator(`[data-toast="LoginFailed"][data-toast-reason="${reason}"]`).waitFor();
+        const url = new URL(await p.url());
+        if (url.pathname !== '/' || url.search) throw new Error(`the address bar kept ${url.pathname}${url.search}`);
+        await p.locator('[data-playlist-action="Save"]').waitFor();
+        await p.screenshot({ path: join(out, shot) });
+      };
+      await step(
+        f,
+        'Discord refusing the code lands on / with the refused toast and no session, and the radio keeps playing',
+        async () => {
+          await stack.refuseCodes(true);
+          const p = await startedSession('discord-refused', stack.base, songs);
+          await openMyPlaylists(p);
+          await accountDialogAction(p, 'Connect').click();
+          await toastShows(p, 'refused', 'discord-login-refused.png');
+          const me = await p.evaluate(() => fetch('/api/auth/me').then((res) => res.status));
+          if (me !== 401) throw new Error(`a session exists (${me})`);
+          await stack.refuseCodes(false);
+        },
+        page,
+      );
+      await step(
+        f,
+        'a callback with a state this browser never started lands on / with the state toast',
+        async () => {
+          const p = await startedSession('discord-state', stack.base, songs);
+          await p.goto(`${stack.base}/api/auth/discord/callback?code=x&state=forged`);
+          await toastShows(p, 'state', 'discord-login-state.png');
+        },
+        page,
+      );
+      await step(
+        f,
+        'too many login attempts land on / with the limit toast',
+        async () => {
+          for (let i = 0; i < 40; i++) await fetch(`${stack.base}/api/auth/discord/start`, { redirect: 'manual' });
+          const p = await startedSession('discord-limit', stack.base, songs);
+          await p.goto(`${stack.base}/api/auth/discord/start`);
+          await toastShows(p, 'limit', 'discord-login-limit.png');
+        },
+        page,
+      );
+    } finally {
+      stack.close();
+    }
+  },
+
+  async playlistDiscordUnavailable(page) {
+    await step(
+      'playlist-discord-unavailable',
+      'a server without Discord login offers no Connect, lists local playlists and keeps the radio working',
+      async () => {
+        const songs = distinctByTitle(await livePlayables(), 2);
+        const me = await api('/api/auth/me');
+        if (me.status === 200) throw new Error('this server has a login configured');
+        await page.goto(BASE + '/');
+        await setSavedQueue(page, songs);
+        await page.goto(BASE + '/');
+        await page.locator('[data-playlist-action="Save"]').waitFor();
+        await saveQueueAs(page, 'Local only');
+        await openMyPlaylists(page);
+        await page.locator('[data-my-playlist]').first().waitFor();
+        if ((await page.locator('[data-playlist-action="Connect"]').count()) !== 0) throw new Error('Connect is offered');
+        await page.screenshot({ path: join(out, 'discord-unavailable.png') });
+        await dialogButton(page, 'Done').click();
+      },
+      page,
+    );
+    await step(
+      'playlist-discord-unavailable',
+      'a dead /api/auth route (an old server answers 404, a lost network aborts) reads as no account',
+      async () => {
+        const offline = makeSession('discord-offline').page();
+        await offline.routeAbort('**/api/auth/**');
+        await offline.goto(BASE + '/');
+        await offline.locator('[data-playlist-action="Save"]').waitFor();
+        await openMyPlaylists(offline);
+        if ((await offline.locator('[data-playlist-action="Connect"]').count()) !== 0) throw new Error('Connect is offered');
+        if ((await offline.locator('[data-account]').count()) !== 0) throw new Error('an account state shows');
+      },
+      page,
+    );
+  },
+
+  async playlistDiscordTiming(page) {
+    const stack = await startDiscordStack();
+    try {
+      const runs = Number(process.env.TIMING_RUNS ?? 10);
+      const radioVideos = (await pageVideos()).body.filter((v) => !v.is_gone).map((v) => v.video_url);
+      const songs = distinctByTitle(await livePlayables(), 1);
+      const timeToPlaying = async (p) => {
+        await p.goto('about:blank');
+        const started = Date.now();
+        await p.goto(stack.base + '/');
+        await setSavedQueue(p, songs);
+        await p.goto(stack.base + '/');
+        await videoRows(p).first().waitFor();
+        await (await songRowOf(p, (await pageVideos()).body, songs[0])).click();
+        await videoLoads(p, radioVideos, { timeout: 60000 });
+        return Date.now() - started;
+      };
+      const median = (values) => [...values].sort((x, y) => x - y)[Math.floor(values.length / 2)];
+      const signedOut = [];
+      const connected = [];
+      const p = await startedSession('discord-timing', stack.base);
+      for (let i = 0; i < runs; i++) {
+        await p.evaluate(() => fetch('/api/auth/logout', { method: 'POST' }));
+        signedOut.push(await timeToPlaying(p));
+        await connectDiscord(p, stack.base);
+        await dialogButton(p, 'Done').click();
+        connected.push(await timeToPlaying(p));
+      }
+      console.log(`TIMING signed out median ${median(signedOut)} ms ${JSON.stringify(signedOut)}`);
+      console.log(`TIMING connected median ${median(connected)} ms ${JSON.stringify(connected)}`);
+      check('playlist-discord-timing', 'both states reach Playing', signedOut.length === runs && connected.length === runs, `signed out ${median(signedOut)} ms, connected ${median(connected)} ms`);
+    } finally {
+      stack.close();
     }
   },
 };

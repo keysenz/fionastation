@@ -94,7 +94,6 @@ export const savePlaylistButtonView = (h: HtmlBuilder<Message>): Html =>
     [
       h.i([h.Class('fas fa-bookmark'), h.AriaHidden(true)]),
       h.span([h.Class('hidden sm:inline')], ['Save as playlist']),
-      h.span([h.Class('sm:hidden')], ['Save']),
     ],
   )
 

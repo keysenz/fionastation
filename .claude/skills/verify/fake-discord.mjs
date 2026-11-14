@@ -16,6 +16,7 @@ let nextUser = {
   username: 'fakefan',
   global_name: 'Fake Fan',
 }
+let refusing = false
 const codes = new Map()
 const tokens = new Map()
 
@@ -46,6 +47,10 @@ const routes = {
     }
     json(res, 200, nextUser)
   },
+  'GET /fake/refuse': (req, res, query) => {
+    refusing = query.get('on') === '1'
+    json(res, 200, { refusing })
+  },
   'GET /oauth2/authorize': (req, res, query) => {
     const redirectUri = query.get('redirect_uri')
     if (
@@ -65,6 +70,9 @@ const routes = {
   },
   'POST /oauth2/token': async (req, res) => {
     const form = await bodyOf(req)
+    if (refusing) {
+      return json(res, 400, { error: 'invalid_grant' })
+    }
     const grant = codes.get(form.get('code'))
     codes.delete(form.get('code'))
     if (

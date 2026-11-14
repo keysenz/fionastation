@@ -763,7 +763,7 @@ const headerView = (model: Model, h: HtmlBuilder<Message>): Html =>
             ],
           ),
           h.div(
-            [h.Class('flex shrink-0 items-center gap-2')],
+            [h.Class('flex shrink-0 items-center gap-1.5 sm:gap-2')],
             [
               myPlaylistsButtonView(h),
               savePlaylistButtonView(h),
