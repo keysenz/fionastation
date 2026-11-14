@@ -771,7 +771,7 @@ const headerView = (model: Model, h: HtmlBuilder<Message>): Html =>
                 [
                   h.Href(songsRouter()),
                   h.Class(
-                    'flex shrink-0 items-center gap-2 min-h-10 px-3 sm:px-4 whitespace-nowrap rounded-full border border-white/15 bg-black/40 text-sm font-semibold text-gray-100 hover:bg-white/10 drop-shadow-md transition',
+                    'flex shrink-0 items-center gap-2 min-h-10 px-3 sm:px-4 whitespace-nowrap rounded-full border border-white/15 bg-black/40 text-sm font-semibold text-gray-100 hover:bg-black/70 hover:border-white/30 drop-shadow-md transition',
                   ),
                 ],
                 [

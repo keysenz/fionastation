@@ -63,7 +63,7 @@ const primaryClass = twMerge(buttonClass, 'bg-[#446e92] hover:bg-[#54809f]')
 const quietClass = twMerge(buttonClass, 'text-gray-300 hover:bg-white/10')
 
 const barButtonClass =
-  'flex shrink-0 items-center gap-2 min-h-9 px-3 sm:min-h-10 whitespace-nowrap rounded-full border border-white/15 bg-black/40 text-xs sm:text-sm font-semibold text-gray-100 hover:bg-white/10 drop-shadow-md transition'
+  'flex shrink-0 items-center gap-2 min-h-9 px-3 sm:min-h-10 whitespace-nowrap rounded-full border border-white/15 bg-black/40 text-xs sm:text-sm font-semibold text-gray-100 hover:bg-black/70 hover:border-white/30 drop-shadow-md transition'
 
 const barButtonView = (
   action: string,
