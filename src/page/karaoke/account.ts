@@ -1,4 +1,4 @@
-import { Array, Option, Schema } from 'effect'
+import { Array, Option, Record, Schema } from 'effect'
 import { defineTaggedUnion } from 'foldkit/schema'
 
 import type { FetchFailure } from '../../api.ts'
@@ -37,7 +37,10 @@ export const loginFailureOfSearch = (
     Schema.decodeUnknownOption(LoginFailure),
   )
 
-export const MeReply = Schema.Struct({ name: Schema.String })
+export const MeReply = Schema.Struct({
+  discordId: Schema.String,
+  name: Schema.String,
+})
 
 export const MineReply = Schema.Struct({
   playlists: Schema.Array(
@@ -126,16 +129,52 @@ export const reachablePlaylists = (
   ]
 }
 
-export const unclaimedTokens = (
+export const claimable = (
   mine: ReadonlyArray<Owned>,
   listed: ReadonlyArray<Listed>,
-): ReadonlyArray<string> =>
-  Array.map(
-    Array.filter(mine, ({ id }) => !listed.some(entry => entry.id === id)),
-    ({ editToken }) => editToken,
+  attempted: ReadonlyArray<PlaylistId>,
+): ReadonlyArray<Owned> =>
+  Array.filter(
+    mine,
+    ({ id, origin }) =>
+      origin === 'Created' &&
+      !listed.some(entry => entry.id === id) &&
+      !attempted.includes(id),
   )
 
-export const claimBatches = (
-  tokens: ReadonlyArray<string>,
-): ReadonlyArray<ReadonlyArray<string>> =>
-  Array.chunksOf(tokens, MAX_CLAIM_TOKENS)
+export const claimBatches = <A>(
+  items: ReadonlyArray<A>,
+): ReadonlyArray<ReadonlyArray<A>> => Array.chunksOf(items, MAX_CLAIM_TOKENS)
+
+export const Attempts = Schema.Record(Schema.String, Schema.Array(PlaylistId))
+export type Attempts = typeof Attempts.Type
+
+const AttemptsJson = Schema.fromJsonString(Attempts)
+
+export const parseAttempts = (maybeJson: Option.Option<string>): Attempts =>
+  Option.getOrElse(
+    Option.flatMap(maybeJson, Schema.decodeUnknownOption(AttemptsJson)),
+    () => ({}),
+  )
+
+export const attemptsToJson = (attempts: Attempts): string =>
+  Schema.encodeSync(AttemptsJson)(attempts)
+
+export const attemptedBy = (
+  attempts: Attempts,
+  accountId: string,
+): ReadonlyArray<PlaylistId> => attempts[accountId] ?? []
+
+export const markAttempted = (
+  attempts: Attempts,
+  accountId: string,
+  ids: ReadonlyArray<PlaylistId>,
+): Attempts => ({
+  ...attempts,
+  [accountId]: Array.dedupe([...attemptedBy(attempts, accountId), ...ids]),
+})
+
+export const mergeAttempts = (loaded: Attempts, current: Attempts): Attempts =>
+  Record.reduce(current, loaded, (merged, ids, accountId) =>
+    markAttempted(merged, accountId, ids),
+  )

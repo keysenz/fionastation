@@ -67,6 +67,7 @@ import {
 } from '../../youtube'
 import {
   Account,
+  Attempts,
   ClaimReply,
   Listed,
   LoginFailure,
@@ -74,13 +75,18 @@ import {
   MineReply,
   NoAccount,
   accountOwns,
+  attemptedBy,
+  attemptsToJson,
   claimBatches,
+  claimable,
   listPlaylist,
   listedOf,
   loginFailureOfSearch,
+  markAttempted,
+  mergeAttempts,
   noAccountOf,
+  parseAttempts,
   renameListed,
-  unclaimedTokens,
   unlistPlaylist,
   withPlaylists,
 } from './account.ts'
@@ -103,6 +109,7 @@ import {
   CopyResult,
   CopyTarget,
   EditToken,
+  Origin,
   Owned,
   OwnedChange,
   PlaylistDialog,
@@ -114,6 +121,7 @@ import {
   editTokenOf,
   isUnproven,
   mergeOwned,
+  originFor,
   ownedToJson,
   parseOwned,
   playlistPath,
@@ -172,6 +180,7 @@ const AUTOPLAY_KEY = 'karaoke-autoplay'
 const REPEAT_KEY = 'karaoke-repeat'
 const VOLUME_KEY = 'karaoke-volume'
 const MY_PLAYLISTS_KEY = 'karaoke-my-playlists'
+const CLAIM_ATTEMPTS_KEY = 'karaoke-claim-attempts'
 const LYRIC_NUDGES_KEY = 'karaoke-lyric-nudges'
 const PLAYER_HOST_ID = 'karaoke'
 export const SONG_LIST_ID = 'karaoke-song-list'
@@ -234,6 +243,7 @@ export const Model = Schema.Struct({
   playlistOpen: PlaylistOpen,
   account: Account,
   mine: Schema.Array(Owned),
+  claimAttempts: Attempts,
   maybeCandidate: Schema.Option(Candidate),
   siteOrigin: Schema.String,
   playlistDialog: PlaylistDialog,
@@ -265,15 +275,22 @@ export const Message = defineMessageUnion({
   PickedUpEditToken: { id: PlaylistId, editToken: EditToken },
   CompletedLoadMyPlaylists: {
     maybeJson: Schema.Option(Schema.String),
+    maybeAttemptsJson: Schema.Option(Schema.String),
     origin: Schema.String,
   },
   ChangedMyPlaylistsElsewhere: { maybeJson: Schema.Option(Schema.String) },
   SucceededSaveMyPlaylists: {},
   FailedSaveMyPlaylists: {},
-  SucceededLoadAccount: { name: Schema.String },
+  SucceededLoadAccount: { discordId: Schema.String, name: Schema.String },
   FailedLoadAccount: { kind: NoAccount },
-  SucceededLoadAccountPlaylists: { playlists: Schema.Array(Listed) },
+  SucceededLoadAccountPlaylists: {
+    accountId: Schema.String,
+    playlists: Schema.Array(Listed),
+    attempted: Schema.Array(PlaylistId),
+  },
   FailedLoadAccountPlaylists: {},
+  CompletedRecheckAccount: { signedOut: Schema.Boolean },
+  CompletedSaveClaimAttempts: {},
   ClickedOpenMyPlaylists: {},
   ClickedConnectDiscord: {},
   CompletedStartLogin: {},
@@ -527,21 +544,23 @@ export const RemovePlaylist = Command.define('RemovePlaylist', {
     ),
 })
 
-// NOTE: browsers throw on any localStorage access when site data is blocked, so LoadMyPlaylists and SaveMyPlaylists catch it.
+const readStored = (key: string): Option.Option<string> =>
+  Effect.runSync(
+    Effect.try({
+      try: () => Option.fromNullishOr(window.localStorage.getItem(key)),
+      catch: () => 'storage is blocked',
+    }).pipe(Effect.orElseSucceed(() => Option.none<string>())),
+  )
+
+// NOTE: browsers throw on any localStorage access when site data is blocked, so every read and write of it catches that.
 export const LoadMyPlaylists = Command.define('LoadMyPlaylists', {
   messages: [Message.CompletedLoadMyPlaylists],
-  execute: Effect.try({
-    try: () =>
-      Option.fromNullishOr(window.localStorage.getItem(MY_PLAYLISTS_KEY)),
-    catch: () => 'storage is blocked',
-  }).pipe(
-    Effect.orElseSucceed(() => Option.none<string>()),
-    Effect.map(maybeJson =>
-      Message.CompletedLoadMyPlaylists({
-        maybeJson,
-        origin: window.location.origin,
-      }),
-    ),
+  execute: Effect.sync(() =>
+    Message.CompletedLoadMyPlaylists({
+      maybeJson: readStored(MY_PLAYLISTS_KEY),
+      maybeAttemptsJson: readStored(CLAIM_ATTEMPTS_KEY),
+      origin: window.location.origin,
+    }),
   ),
 })
 
@@ -551,7 +570,8 @@ export const LoadAccount = Command.define('LoadAccount', {
     Effect.match({
       onFailure: failure =>
         Message.FailedLoadAccount({ kind: noAccountOf(failure) }),
-      onSuccess: ({ name }) => Message.SucceededLoadAccount({ name }),
+      onSuccess: ({ discordId, name }) =>
+        Message.SucceededLoadAccount({ discordId, name }),
     }),
   ),
 })
@@ -561,43 +581,87 @@ const listAccountPlaylists = fetchJsonOrFailure(
   MineReply,
 ).pipe(Effect.map(listedOf))
 
-const claimTokens = (tokens: ReadonlyArray<string>) =>
+const claimTokens = (batch: ReadonlyArray<Owned>) =>
   sendJson(
     {
       method: 'POST',
       path: '/api/playlists/claim',
-      maybeBody: Option.some({ editTokens: tokens }),
+      maybeBody: Option.some({
+        editTokens: Array.map(batch, ({ editToken }) => editToken),
+      }),
       maybeBearer: Option.none(),
     },
     ClaimReply,
   ).pipe(Effect.map(({ claimed }) => claimed.length))
 
+const claimUnattempted = (
+  entries: ReadonlyArray<Owned>,
+): Effect.Effect<
+  Readonly<{ claimedAny: boolean; attempted: ReadonlyArray<PlaylistId> }>
+> =>
+  Effect.gen(function* () {
+    let claimedAny = false
+    let attempted: ReadonlyArray<PlaylistId> = []
+    for (const batch of claimBatches(entries)) {
+      const maybeCount = yield* claimTokens(batch).pipe(
+        Effect.match({
+          onFailure: () => Option.none<number>(),
+          onSuccess: Option.some,
+        }),
+      )
+      if (Option.isNone(maybeCount)) {
+        break
+      }
+      claimedAny = claimedAny || maybeCount.value > 0
+      attempted = [...attempted, ...Array.map(batch, ({ id }) => id)]
+    }
+    return { claimedAny, attempted }
+  })
+
 export const LoadAccountPlaylists = Command.define('LoadAccountPlaylists', {
-  args: { owned: Schema.Array(Owned) },
+  args: {
+    owned: Schema.Array(Owned),
+    accountId: Schema.String,
+    attempted: Schema.Array(PlaylistId),
+  },
   messages: [
     Message.SucceededLoadAccountPlaylists,
     Message.FailedLoadAccountPlaylists,
   ],
-  execute: ({ owned }) =>
+  execute: ({ owned, accountId, attempted }) =>
     Effect.gen(function* () {
       const listed = yield* listAccountPlaylists
-      const batches = claimBatches(unclaimedTokens(owned, listed))
-      if (!Array.isReadonlyArrayNonEmpty(batches)) {
-        return listed
+      const toClaim = claimable(owned, listed, attempted)
+      if (!Array.isReadonlyArrayNonEmpty(toClaim)) {
+        return { accountId, playlists: listed, attempted: [] }
       }
-      const claimedCounts = yield* Effect.forEach(batches, claimTokens, {
-        concurrency: 1,
-      })
-      return claimedCounts.some(count => count > 0)
-        ? yield* listAccountPlaylists
-        : listed
+      const claimed = yield* claimUnattempted(toClaim)
+      return {
+        accountId,
+        attempted: claimed.attempted,
+        playlists: claimed.claimedAny
+          ? yield* listAccountPlaylists.pipe(Effect.orElseSucceed(() => listed))
+          : listed,
+      }
     }).pipe(
       Effect.match({
         onFailure: () => Message.FailedLoadAccountPlaylists(),
-        onSuccess: playlists =>
-          Message.SucceededLoadAccountPlaylists({ playlists }),
+        onSuccess: Message.SucceededLoadAccountPlaylists,
       }),
     ),
+})
+
+export const RecheckAccount = Command.define('RecheckAccount', {
+  messages: [Message.CompletedRecheckAccount],
+  execute: fetchJsonOrFailure('/api/auth/me', MeReply).pipe(
+    Effect.match({
+      onFailure: failure =>
+        Message.CompletedRecheckAccount({
+          signedOut: noAccountOf(failure) === 'SignedOut',
+        }),
+      onSuccess: () => Message.CompletedRecheckAccount({ signedOut: false }),
+    }),
+  ),
 })
 
 export const StartLogin = Command.define('StartLogin', {
@@ -646,6 +710,26 @@ export const SaveMyPlaylists = Command.define('SaveMyPlaylists', {
         onSuccess: () => Message.SucceededSaveMyPlaylists(),
       }),
     ),
+})
+
+export const SaveClaimAttempts = Command.define('SaveClaimAttempts', {
+  args: { accountId: Schema.String, ids: Schema.Array(PlaylistId) },
+  messages: [Message.CompletedSaveClaimAttempts],
+  execute: ({ accountId, ids }) =>
+    Effect.try({
+      try: () =>
+        window.localStorage.setItem(
+          CLAIM_ATTEMPTS_KEY,
+          attemptsToJson(
+            markAttempted(
+              parseAttempts(readStored(CLAIM_ATTEMPTS_KEY)),
+              accountId,
+              ids,
+            ),
+          ),
+        ),
+      catch: () => 'storage is blocked or full',
+    }).pipe(Effect.ignore, Effect.as(Message.CompletedSaveClaimAttempts())),
 })
 
 export const CopyLink = Command.define('CopyLink', {
@@ -1105,6 +1189,7 @@ export const init = (): Model => ({
   playlistOpen: PlaylistOpen.Idle(),
   account: Account.Loading(),
   mine: [],
+  claimAttempts: {},
   maybeCandidate: Option.none(),
   siteOrigin: '',
   playlistDialog: PlaylistDialog.Closed(),
@@ -1678,10 +1763,11 @@ const rememberEditToken = (
   id: PlaylistId,
   name: string,
   editToken: EditToken,
+  origin: Origin,
 ): UpdateReturn => {
   const remembered = withMine(
     result,
-    OwnedChange.Remember({ entry: { id, name, editToken } }),
+    OwnedChange.Remember({ entry: { id, name, editToken, origin } }),
   )
   return {
     ...remembered,
@@ -1709,7 +1795,13 @@ const acceptEditToken = (
           SyncUrl({ url: playlistPath(id), change: 'Replace' }),
         ],
       }
-    : rememberEditToken(result, id, name, editToken)
+    : rememberEditToken(
+        result,
+        id,
+        name,
+        editToken,
+        originFor(result.model.mine, id, editToken),
+      )
 
 const pickUpEditToken = (
   model: Model,
@@ -1923,28 +2015,30 @@ const failWrite = (
         Option.match(openedOf(model), {
           onNone: () => ({ model: showWriteFailure(model, form, failure) }),
           onSome: ({ id }) =>
-            Option.match(
-              Option.filter(
-                model.maybeCandidate,
-                candidate =>
-                  candidate.id === id &&
-                  !Option.contains(maybeTried, candidate.editToken),
-              ),
-              {
-                onSome: ({ editToken }) =>
-                  submitPlaylistForm(model, form, Option.some(editToken)),
-                onNone: () =>
-                  withMine(
-                    {
-                      model: modifyFields(
-                        showWriteFailure(model, form, failure),
-                        { maybeCandidate: () => Option.none() },
-                      ),
-                    },
-                    OwnedChange.Forget({ id }),
+            Option.isNone(maybeTried) && Account.guards.Connected(model.account)
+              ? { model, commands: [RecheckAccount()] }
+              : Option.match(
+                  Option.filter(
+                    model.maybeCandidate,
+                    candidate =>
+                      candidate.id === id &&
+                      !Option.contains(maybeTried, candidate.editToken),
                   ),
-              },
-            ),
+                  {
+                    onSome: ({ editToken }) =>
+                      submitPlaylistForm(model, form, Option.some(editToken)),
+                    onNone: () =>
+                      withMine(
+                        {
+                          model: modifyFields(
+                            showWriteFailure(model, form, failure),
+                            { maybeCandidate: () => Option.none() },
+                          ),
+                        },
+                        OwnedChange.Forget({ id }),
+                      ),
+                  },
+                ),
         }),
       Deleted: () =>
         Option.match(openedOf(model), {
@@ -2666,9 +2760,11 @@ const updateModel = (model: Model, message: Message) =>
     CompletedFocusInfoButton: () => ({ model }),
     CompletedFocusPlaylistPrompt: () => ({ model }),
 
-    CompletedLoadMyPlaylists: ({ maybeJson, origin }) => ({
+    CompletedLoadMyPlaylists: ({ maybeJson, maybeAttemptsJson, origin }) => ({
       model: modifyFields(model, {
         mine: current => mergeOwned(parseOwned(maybeJson), current),
+        claimAttempts: current =>
+          mergeAttempts(parseAttempts(maybeAttemptsJson), current),
         siteOrigin: () => origin,
       }),
     }),
@@ -2677,11 +2773,17 @@ const updateModel = (model: Model, message: Message) =>
       model: modifyFields(model, { mine: () => parseOwned(maybeJson) }),
     }),
 
-    SucceededLoadAccount: ({ name }) => ({
+    SucceededLoadAccount: ({ discordId, name }) => ({
       model: modifyFields(model, {
         account: () => Account.Connected({ name, playlists: [] }),
       }),
-      commands: [LoadAccountPlaylists({ owned: model.mine })],
+      commands: [
+        LoadAccountPlaylists({
+          owned: model.mine,
+          accountId: discordId,
+          attempted: attemptedBy(model.claimAttempts, discordId),
+        }),
+      ],
     }),
 
     FailedLoadAccount: ({ kind }) => ({
@@ -2691,13 +2793,42 @@ const updateModel = (model: Model, message: Message) =>
       }),
     }),
 
-    SucceededLoadAccountPlaylists: ({ playlists }) => ({
+    SucceededLoadAccountPlaylists: ({ accountId, playlists, attempted }) => ({
       model: modifyFields(model, {
         account: account => withPlaylists(account, playlists),
+        claimAttempts: current => markAttempted(current, accountId, attempted),
       }),
+      ...(Array.isReadonlyArrayNonEmpty(attempted)
+        ? { commands: [SaveClaimAttempts({ accountId, ids: attempted })] }
+        : {}),
     }),
 
+    CompletedSaveClaimAttempts: () => ({ model }),
+
     FailedLoadAccountPlaylists: () => ({ model }),
+
+    CompletedRecheckAccount: ({ signedOut }) =>
+      PlaylistDialog.matchOrElse(
+        model.playlistDialog,
+        {
+          Sending: ({ form }) =>
+            signedOut
+              ? {
+                  model: modifyFields(model, {
+                    account: () => Account.SignedOut(),
+                    playlistDialog: () => PlaylistDialog.Account(),
+                  }),
+                }
+              : {
+                  model: showWriteFailure(
+                    model,
+                    form,
+                    WriteFailure.Forbidden(),
+                  ),
+                },
+        },
+        () => ({ model }),
+      ),
 
     ClickedOpenMyPlaylists: () => ({
       model: modifyFields(model, {
@@ -2848,6 +2979,7 @@ const updateModel = (model: Model, message: Message) =>
         id,
         name,
         editToken,
+        'Created',
       )
     },
 
@@ -2874,7 +3006,14 @@ const updateModel = (model: Model, message: Message) =>
             onSome: editToken =>
               withMine(
                 updated,
-                OwnedChange.Remember({ entry: { id, name, editToken } }),
+                OwnedChange.Remember({
+                  entry: {
+                    id,
+                    name,
+                    editToken,
+                    origin: originFor(model.mine, id, editToken),
+                  },
+                }),
               ),
           })
         },

@@ -2454,6 +2454,7 @@ const journeys = {
     const { id } = await createPlaylist('Verify fallback', live);
     const db = new DatabaseSync(PLAYLISTS_DB_PATH);
     const row = db.prepare('SELECT entries FROM playlists WHERE id = ?').get(id);
+    if (!row) throw new Error(`playlist ${id} is not in ${PLAYLISTS_DB_PATH}: this journey edits the server's own database, so start the server with launch.sh or set PLAYLISTS_DB_PATH to the file the server uses`);
     const entries = JSON.parse(row.entries).map((entry, index) => (index === 1 ? { ...entry, songId: 'renumbered-away' } : entry));
     db.prepare('UPDATE playlists SET entries = ? WHERE id = ?').run(JSON.stringify(entries), id);
     db.close();

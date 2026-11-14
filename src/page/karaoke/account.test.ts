@@ -6,13 +6,13 @@ import { PlaylistId } from '../../playlist.ts'
 import {
   Account,
   claimBatches,
+  claimable,
   listPlaylist,
   listedOf,
   loginFailureOfSearch,
   noAccountOf,
   reachablePlaylists,
   renameListed,
-  unclaimedTokens,
   unlistPlaylist,
 } from './account.ts'
 import { EditToken, type Owned } from './playlists.ts'
@@ -23,6 +23,7 @@ const owned = (value: string): Owned => ({
   id: id(value),
   name: `name ${value}`,
   editToken: token(`token-${value}`),
+  origin: 'Created',
 })
 const connected = (...ids: ReadonlyArray<string>) =>
   Account.Connected({
@@ -95,12 +96,17 @@ test('a browser reaches its tokens and the account playlists once each', () => {
   ).toEqual(['CCCCCCCC'])
 })
 
-test('only tokens of playlists the account lacks are claimed', () => {
+test('only created playlists the account lacks and was never refused are claimed', () => {
   const listed = [{ id: id('AAAAAAAA'), name: 'a' }]
+  const pickedUp: Owned = { ...owned('DDDDDDDD'), origin: 'PickedUp' }
   expect(
-    unclaimedTokens([owned('AAAAAAAA'), owned('BBBBBBBB')], listed),
-  ).toEqual(['token-BBBBBBBB'])
-  expect(unclaimedTokens([owned('AAAAAAAA')], listed)).toEqual([])
+    claimable(
+      [owned('AAAAAAAA'), owned('BBBBBBBB'), owned('CCCCCCCC'), pickedUp],
+      listed,
+      [id('CCCCCCCC')],
+    ).map(entry => entry.id),
+  ).toEqual(['BBBBBBBB'])
+  expect(claimable([owned('AAAAAAAA')], listed, [])).toEqual([])
 })
 
 test('claims go out at most 100 tokens at a time', () => {
