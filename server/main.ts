@@ -102,7 +102,6 @@ const playlistApi =
 
 const PLAYLIST_ROUTE = /^\/api\/playlists(?:\/([^/]+))?$/
 const ADMIN_ROUTE = /^\/admin\/playlists\/([^/]+)$/
-// NOTE: the admin listener owns these paths. The public port, which the funnel exposes, answers 404 for them.
 const ADMIN_PATH = /^\/(?:api\/)?admin(?:\/|$)/
 
 // NOTE: keep in step with src/route.ts. Any other path gets the 404 status with the app's own 404 page.
