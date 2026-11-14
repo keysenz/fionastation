@@ -15,6 +15,7 @@ import { test } from 'vitest'
 import type { PlayableSong } from '../../domain.ts'
 import { Playlist } from '../../playlist.ts'
 import { PlayerEvent } from '../../youtube'
+import { Account } from './account.ts'
 import {
   Message,
   type Model,
@@ -300,5 +301,53 @@ test('the save dialog has no such hint once a song is queued', () => {
       ),
     ),
     expect(nothingToSave).toBeAbsent(),
+  )
+})
+
+const accountSection = (tag: string) => selector(`[data-account="${tag}"]`)
+const connectButton = selector('[data-playlist-action="Connect"]')
+const listing = (account: Model['account']): Model => ({
+  ...after(Message.ClickedOpenMyPlaylists()),
+  account,
+})
+
+test('a signed-out visitor is offered Connect Discord in the playlists dialog', () => {
+  scene(
+    { update, view },
+    given(listing(Account.SignedOut())),
+    expect(connectButton).toExist(),
+    expect(accountSection('Connected')).toBeAbsent(),
+  )
+})
+
+test.each([Account.Loading(), Account.Unavailable()])(
+  'Connect Discord is not offered while the account is %s',
+  account => {
+    scene(
+      { update, view },
+      given(listing(account)),
+      expect(connectButton).toBeAbsent(),
+      expect(selector('[data-my-playlists]')).toExist(),
+    )
+  },
+)
+
+test('a display name with markup is shown as text and never becomes an element', () => {
+  scene(
+    { update, view },
+    given(
+      listing(
+        Account.Connected({
+          name: '<img src=x onerror=alert(1)>',
+          playlists: [],
+        }),
+      ),
+    ),
+    expect(accountSection('Connected')).toExist(),
+    expect(selector('[data-account-name]')).toHaveText(
+      '<img src=x onerror=alert(1)>',
+    ),
+    expect(selector('img[src="x"]')).toBeAbsent(),
+    expect(connectButton).toBeAbsent(),
   )
 })

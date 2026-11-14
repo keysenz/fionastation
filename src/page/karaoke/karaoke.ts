@@ -2616,16 +2616,31 @@ const updateModel = (model: Model, message: Message) =>
     }),
 
     OpenedFromUrl: ({ search }) => {
-      const opened = modifyFields(model, {
-        maybeSelectedVideoId: () => parseLayers(search).maybeVideoId,
-      })
-      return Option.match(loginFailureOfSearch(search), {
-        onNone: () => ({ model: opened }),
+      const opened: UpdateReturn = {
+        model: modifyFields(model, {
+          maybeSelectedVideoId: () => parseLayers(search).maybeVideoId,
+        }),
+      }
+      if (!new URLSearchParams(search).has('login')) {
+        return opened
+      }
+      const toasted = Option.match(loginFailureOfSearch(search), {
+        onNone: () => opened,
         onSome: reason =>
-          withToast({ model: opened }, dismissId =>
+          withToast(opened, dismissId =>
             Toast.LoginFailed({ reason, dismissId }),
           ),
       })
+      return {
+        ...toasted,
+        commands: [
+          ...(toasted.commands ?? []),
+          SyncUrl({
+            url: layersToUrl(layersOf(toasted.model)),
+            change: 'Replace',
+          }),
+        ],
+      }
     },
 
     CompletedSyncUrl: () => ({ model }),

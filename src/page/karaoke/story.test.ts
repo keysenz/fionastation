@@ -7,6 +7,7 @@ import type { PlayableSong } from '../../domain.ts'
 import { LyricCursor, type Lyrics } from '../../lyrics.ts'
 import { Playlist, PlaylistId } from '../../playlist.ts'
 import { PlayerEvent } from '../../youtube'
+import { Account } from './account.ts'
 import {
   ApplyPlayback,
   ApplyVolume,
@@ -23,7 +24,10 @@ import {
   LoadAutoplay,
   LoadLyricNudges,
   LoadAccount,
+  LoadAccountPlaylists,
+  Logout,
   LoadMyPlaylists,
+  StartLogin,
   LoadRepeat,
   LoadSavedSetlist,
   LoadVolume,
@@ -3520,4 +3524,268 @@ test('a playlist deleted by someone else leaves the owner in the deleted state',
   expect(dialogOf(failed.model)._tag).toBe('Closed')
   expect(toastOf(failed.model)?._tag).toBe('PlaylistDeleted')
   expect(urlSyncs(failed)).toContain('/')
+})
+
+const connectedAs = (
+  base: Model,
+  name = 'Fake Fan',
+  playlists: ReadonlyArray<{ id: PlaylistId; name: string }> = [],
+): Model =>
+  update(
+    update(base, Message.SucceededLoadAccount({ name })).model,
+    Message.SucceededLoadAccountPlaylists({ playlists }),
+  ).model
+
+const argsOf = (result: UpdateReturn, name: string) =>
+  commandNamed(result, name)?.args
+
+test('the account is asked for once, then connecting lists the account playlists', () => {
+  const asked = entered(init())
+  expect(commandNamed(asked, LoadAccount.name)).toBeDefined()
+  const connected = update(
+    asked.model,
+    Message.SucceededLoadAccount({ name: 'Fake Fan' }),
+  )
+  expect(connected.model.account._tag).toBe('Connected')
+  expect(argsOf(connected, LoadAccountPlaylists.name)).toEqual({ owned: [] })
+  const listed = update(
+    connected.model,
+    Message.SucceededLoadAccountPlaylists({
+      playlists: [{ id: openingId, name: 'Road trip' }],
+    }),
+  )
+  expect(listed.model.account).toEqual(
+    Account.Connected({
+      name: 'Fake Fan',
+      playlists: [{ id: openingId, name: 'Road trip' }],
+    }),
+  )
+})
+
+test('connecting sends the tokens this browser already holds to be claimed', () => {
+  const held = update(
+    init(),
+    Message.CompletedLoadMyPlaylists({
+      maybeJson: ownedJson(
+        JSON.stringify([
+          { id: openingId, name: 'Road trip', editToken: token },
+        ]),
+      ),
+      origin: 'https://fio.example',
+    }),
+  )
+  const connected = update(
+    held.model,
+    Message.SucceededLoadAccount({ name: 'Fake Fan' }),
+  )
+  expect(argsOf(connected, LoadAccountPlaylists.name)).toEqual({
+    owned: [{ id: openingId, name: 'Road trip', editToken: token }],
+  })
+})
+
+test.each([
+  ['SignedOut', 'SignedOut'],
+  ['Unavailable', 'Unavailable'],
+] as const)(
+  'no account (%s) is the account state %s, never a failure',
+  (kind, tag) => {
+    const result = update(
+      entered(init()).model,
+      Message.FailedLoadAccount({ kind }),
+    )
+    expect(result.model.account._tag).toBe(tag)
+    expect(result.commands).toBeUndefined()
+    expect(toastOf(result.model)).toBeUndefined()
+  },
+)
+
+test('Connect Discord starts the login only when login is offered and nobody is connected', () => {
+  const signedOut = update(
+    init(),
+    Message.FailedLoadAccount({ kind: 'SignedOut' }),
+  )
+  expect(
+    commandNamed(
+      update(signedOut.model, Message.ClickedConnectDiscord()),
+      StartLogin.name,
+    ),
+  ).toBeDefined()
+  for (const account of [
+    Account.Loading(),
+    Account.Unavailable(),
+    Account.Connected({ name: 'x', playlists: [] }),
+  ]) {
+    const clicked = update(
+      { ...init(), account },
+      Message.ClickedConnectDiscord(),
+    )
+    expect(clicked.commands).toBeUndefined()
+  }
+})
+
+test('a connected account owns its playlists with no edit token held', () => {
+  const visitor = openedAs(Option.none()).model
+  expect(ownedOpenedOf(visitor)._tag).toBe('None')
+  const connected = connectedAs(visitor, 'Fake Fan', [
+    { id: openingId, name: 'Road trip' },
+  ])
+  const owned = ownedOpenedOf(connected)
+  expect(Option.map(owned, ({ maybeEditToken }) => maybeEditToken)).toEqual(
+    Option.some(Option.none()),
+  )
+})
+
+test('another account sees no owner actions on a playlist it does not own', () => {
+  const other = connectedAs(openedAs(Option.none()).model, 'User B', [
+    { id: otherId, name: 'Theirs' },
+  ])
+  expect(ownedOpenedOf(other)._tag).toBe('None')
+})
+
+test('an owner renames without a token, and the account list follows the name', () => {
+  const owner = connectedAs(openedAs(Option.none()).model, 'Fake Fan', [
+    { id: openingId, name: 'Road trip' },
+  ])
+  const submitted = update(
+    update(
+      update(owner, Message.ClickedRenamePlaylist()).model,
+      Message.UpdatedPlaylistName({ value: 'Night drive' }),
+    ).model,
+    Message.SubmittedPlaylistForm(),
+  )
+  expect(argsOf(submitted, ReplacePlaylist.name)).toMatchObject({
+    id: openingId,
+    maybeEditToken: Option.none(),
+    name: 'Night drive',
+  })
+  const done = update(
+    submitted.model,
+    Message.SucceededReplacePlaylist({
+      name: 'Night drive',
+      songIds: ['a', 'b'],
+      version: 2,
+      maybeEditToken: Option.none(),
+    }),
+  )
+  expect(done.model.mine).toEqual([])
+  expect(commandNamed(done, SaveMyPlaylists.name)).toBeUndefined()
+  expect(done.model.account).toEqual(
+    Account.Connected({
+      name: 'Fake Fan',
+      playlists: [{ id: openingId, name: 'Night drive' }],
+    }),
+  )
+  expect(toastOf(done.model)?._tag).toBe('PlaylistUpdated')
+})
+
+test('an owner deletes without a token, and the playlist leaves the account list', () => {
+  const owner = connectedAs(openedAs(Option.none()).model, 'Fake Fan', [
+    { id: openingId, name: 'Road trip' },
+  ])
+  const sent = update(
+    update(owner, Message.ClickedDeletePlaylist()).model,
+    Message.SubmittedPlaylistForm(),
+  )
+  expect(argsOf(sent, RemovePlaylist.name)).toEqual({
+    id: openingId,
+    maybeEditToken: Option.none(),
+  })
+  const done = update(sent.model, Message.SucceededRemovePlaylist())
+  expect(done.model.account).toEqual(
+    Account.Connected({ name: 'Fake Fan', playlists: [] }),
+  )
+  expect(done.model.playlistOpen._tag).toBe('Idle')
+  expect(toastOf(done.model)?._tag).toBe('PlaylistDeleted')
+})
+
+test('a connected owner who also holds the token sends the token along', () => {
+  const owner = connectedAs(openedAs(Option.some(token)).model, 'Fake Fan', [
+    { id: openingId, name: 'Road trip' },
+  ])
+  const sent = update(
+    update(
+      update(owner, Message.ClickedRenamePlaylist()).model,
+      Message.UpdatedPlaylistName({ value: 'Night drive' }),
+    ).model,
+    Message.SubmittedPlaylistForm(),
+  )
+  expect(tokenSent(sent)).toBe(token)
+})
+
+test('saving while connected lists the new playlist on the account', () => {
+  const created = update(
+    connectedAs(init()),
+    Message.SucceededCreatePlaylist({
+      id: openingId,
+      editToken: token,
+      name: 'Rainy day Fio',
+      songIds: ['a'],
+    }),
+  )
+  expect(created.model.account).toEqual(
+    Account.Connected({
+      name: 'Fake Fan',
+      playlists: [{ id: openingId, name: 'Rainy day Fio' }],
+    }),
+  )
+})
+
+test('disconnecting asks the server, then leaves no account while token playlists stay editable', () => {
+  const owner = connectedAs(openedAs(Option.some(token)).model, 'Fake Fan', [
+    { id: openingId, name: 'Road trip' },
+  ])
+  const asked = update(owner, Message.ClickedDisconnectDiscord())
+  expect(commandNamed(asked, Logout.name)).toBeDefined()
+  const gone = update(asked.model, Message.SucceededLogout())
+  expect(gone.model.account._tag).toBe('SignedOut')
+  expect(ownedOpenedOf(gone.model)._tag).toBe('Some')
+  expect(gone.model.mine).toHaveLength(1)
+})
+
+test('a disconnect the server refuses keeps the account and says so', () => {
+  const owner = connectedAs(init())
+  const failed = update(owner, Message.FailedLogout())
+  expect(failed.model.account._tag).toBe('Connected')
+  expect(toastOf(failed.model)?._tag).toBe('DisconnectFailed')
+})
+
+test('only a disconnected visitor is asked to disconnect nothing', () => {
+  const signedOut = update(
+    init(),
+    Message.FailedLoadAccount({ kind: 'SignedOut' }),
+  ).model
+  expect(
+    update(signedOut, Message.ClickedDisconnectDiscord()).commands,
+  ).toBeUndefined()
+})
+
+test.each(['state', 'limit', 'refused'] as const)(
+  'landing on /?login=%s shows that failure and clears it from the address bar',
+  reason => {
+    const landed = update(
+      init(),
+      Message.OpenedFromUrl({ search: `?login=${reason}` }),
+    )
+    expect(toastOf(landed.model)).toMatchObject({ _tag: 'LoginFailed', reason })
+    expect(urlSyncs(landed)).toEqual(['/'])
+  },
+)
+
+test('an unknown login reason shows no toast but is still cleared from the address bar', () => {
+  const landed = update(
+    init(),
+    Message.OpenedFromUrl({ search: '?login=<script>' }),
+  )
+  expect(toastOf(landed.model)).toBeUndefined()
+  expect(urlSyncs(landed)).toEqual(['/'])
+})
+
+test('opening a playlist from the list closes the list', () => {
+  const listing = update(init(), Message.ClickedOpenMyPlaylists())
+  expect(dialogOf(listing.model)._tag).toBe('Account')
+  const opened = update(
+    listing.model,
+    Message.OpenedPlaylist({ id: openingId, maybeEditToken: Option.none() }),
+  )
+  expect(dialogOf(opened.model)._tag).toBe('Closed')
 })
