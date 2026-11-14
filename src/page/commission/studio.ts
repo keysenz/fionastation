@@ -16,6 +16,7 @@ import {
   listOf,
   makeUpdate,
 } from './inquiry'
+import { DEADLINE_LABELS, MAX_TRACKS, SINGER_LABELS } from './inquiryContract'
 import {
   ADD_ONS,
   type AddOn,
@@ -96,7 +97,10 @@ const ServiceChoice = Schema.Literals([
   'Tuning Only',
 ])
 const LengthChoice = Schema.Literals(['Short', 'Standard', 'Long'])
-const TRACK_COUNTS: ReadonlyArray<number> = Array.makeBy(10, index => index + 1)
+const TRACK_COUNTS: ReadonlyArray<number> = Array.makeBy(
+  MAX_TRACKS,
+  index => index + 1,
+)
 const TracksChoice = Schema.Literals(
   Array.map(TRACK_COUNTS, count => `${count}`),
 )
@@ -144,13 +148,6 @@ export const studioSelectionOf = (
       firstCommission: answer(draft, FIELD.firstCommission) === 'yes',
     })),
   )
-
-const SINGER_LABELS: Readonly<Record<string, string>> = {
-  '1': 'Solo (1)',
-  '2': 'Duet (2)',
-  '3': 'Group (3)',
-  '4': 'Group (4+)',
-}
 
 const addOnLabels = (draft: Draft): string =>
   Array.map(
@@ -205,9 +202,9 @@ export const spec: FormSpec = {
     vocal_link: answer(draft, FIELD.vocalLink).trim(),
     deadline:
       answer(draft, FIELD.deadline) === 'rush'
-        ? '1-3 days (rush)'
+        ? DEADLINE_LABELS.rush
         : answer(draft, FIELD.deadline) === 'regular'
-          ? '4-7 days (regular)'
+          ? DEADLINE_LABELS.regular
           : '',
     extra_complexity: answer(draft, FIELD.complexity) === 'yes' ? 'yes' : 'no',
     first_commission:

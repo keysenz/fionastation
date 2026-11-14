@@ -1,6 +1,6 @@
 import { Array, Option, Schema } from 'effect'
 
-import { type Quote } from './pricing'
+import type { Quote } from './pricing.ts'
 
 export const INQUIRY_ROUTE = '/api/inquiry'
 

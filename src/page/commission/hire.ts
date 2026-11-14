@@ -15,6 +15,7 @@ import {
   init as initInquiry,
   makeUpdate,
 } from './inquiry'
+import { USAGE_LABELS } from './inquiryContract'
 import {
   type Usage,
   VOICE_PRICES,
@@ -76,11 +77,6 @@ export const voiceSelectionOf = (draft: Draft): Option.Option<VoiceSelection> =>
       answer(draft, FIELD.length),
     ),
   })
-
-const USAGE_LABELS: Readonly<Record<Usage, string>> = {
-  Personal: 'Personal (non-exclusive)',
-  Commercial: 'Commercial (exclusive)',
-}
 
 export const spec: FormSpec = {
   steps: STEPS,
