@@ -26,6 +26,25 @@ export const STAT_ORIGINS = ['Visitor', 'Autoplay'] as const
 export type CountedKind = (typeof COUNTED_KINDS)[number]
 export type StatOrigin = (typeof STAT_ORIGINS)[number]
 
+export const MOODS = [
+  'ceria',
+  'galau',
+  'hype',
+  'chill',
+  'romantis',
+  'sendu',
+] as const
+export type Mood = (typeof MOODS)[number]
+export const MAX_MOODS_PER_VOTE = 2
+
+export type MoodVote = Readonly<{
+  kind: 'Mood'
+  songId: string
+  moods: readonly Mood[]
+}>
+
+type CountedEvent = Exclude<StatEvent, Decision | MoodVote>
+
 export type StatEvent =
   | Readonly<{
       kind: CountedKind
@@ -41,6 +60,7 @@ export type StatEvent =
       trail?: TrailTag
     }>
   | Decision
+  | MoodVote
 
 export type StatTotal = Readonly<{
   songId: string
@@ -62,6 +82,8 @@ export type DayTotal = Readonly<{
   count: number
 }>
 
+export type MoodCount = Readonly<{ songId: string; mood: Mood; count: number }>
+
 export type ExportCursor = Readonly<{ sessionId: string; seq: number }>
 
 export type StatStore = Readonly<{
@@ -69,6 +91,7 @@ export type StatStore = Readonly<{
   totalsSince: (firstDay: string) => StatTotal[]
   skipsSince: (firstDay: string) => SkipRow[]
   dailySince: (firstDay: string) => DayTotal[]
+  moodsSince: (firstDay: string) => MoodCount[]
   outcomeCountsSince: (firstDay: string) => OutcomeCount[]
   skipSecondsSince: (firstDay: string) => OriginSkip[]
   transitionsSince: (firstDay: string) => TransitionRow[]
@@ -119,7 +142,27 @@ export const openStatStore = ({
     )
   `)
   db.exec('CREATE INDEX IF NOT EXISTS skips_by_day ON skips (day)')
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS mood_votes (
+      day TEXT NOT NULL,
+      song_id TEXT NOT NULL,
+      mood TEXT NOT NULL,
+      count INTEGER NOT NULL,
+      PRIMARY KEY (day, song_id, mood)
+    ) WITHOUT ROWID
+  `)
   const trail = createTrail(db)
+  const bumpMood = db.prepare(`
+    INSERT INTO mood_votes (day, song_id, mood, count)
+    VALUES (?, ?, ?, 1)
+    ON CONFLICT (day, song_id, mood) DO UPDATE SET count = count + 1
+  `)
+  const moods = db.prepare(`
+    SELECT song_id AS songId, mood, SUM(count) AS count
+    FROM mood_votes
+    WHERE day >= ?
+    GROUP BY song_id, mood
+  `)
   const bump = db.prepare(`
     INSERT INTO song_stats (day, song_id, kind, origin, count)
     VALUES (?, ?, ?, ?, 1)
@@ -151,7 +194,7 @@ export const openStatStore = ({
     WHERE day >= ?
     GROUP BY day, origin
   `)
-  const count = (event: Exclude<StatEvent, Decision>) => {
+  const count = (event: CountedEvent) => {
     if (event.kind === 'Skip') {
       addSkip.run(
         dayOf(now()),
@@ -163,7 +206,7 @@ export const openStatStore = ({
     }
     bump.run(dayOf(now()), event.songId, event.kind, event.origin)
   }
-  const countOnce = (event: Exclude<StatEvent, Decision>, tag: TrailTag) => {
+  const countOnce = (event: CountedEvent, tag: TrailTag) => {
     db.exec('BEGIN IMMEDIATE')
     try {
       const isNew = trail.addEventIfNew(
@@ -184,10 +227,22 @@ export const openStatStore = ({
       throw error
     }
   }
+  const countMoods = ({ songId, moods }: MoodVote) => {
+    db.exec('BEGIN IMMEDIATE')
+    try {
+      for (const mood of moods) bumpMood.run(dayOf(now()), songId, mood)
+      db.exec('COMMIT')
+    } catch (error) {
+      db.exec('ROLLBACK')
+      throw error
+    }
+  }
   return {
     record: event => {
       if (event.kind === 'Decision') {
         trail.addDecision(event, minuteOf(now()))
+      } else if (event.kind === 'Mood') {
+        countMoods(event)
       } else if (event.trail) {
         countOnce(event, event.trail)
       } else {
@@ -206,6 +261,7 @@ export const openStatStore = ({
       trail.eventsAfter(firstMinuteOf(firstDay), after),
     decisionsAfter: (firstDay, after) =>
       trail.decisionsAfter(firstMinuteOf(firstDay), after),
+    moodsSince: firstDay => moods.all(firstDay) as unknown as MoodCount[],
     totalsSince: firstDay => totals.all(firstDay) as unknown as StatTotal[],
     skipsSince: firstDay => skips.all(firstDay) as unknown as SkipRow[],
     dailySince: firstDay =>
@@ -228,6 +284,23 @@ const isOneOf = <T extends string>(
   value: unknown,
 ): value is T => options.some(option => option === value)
 
+const parseMoodVote = (fields: Record<string, unknown>): MoodVote | undefined => {
+  const { kind, songId, moods, ...rest } = fields
+  if (
+    Object.keys(rest).length > 0 ||
+    kind !== 'Mood' ||
+    !isSongId(songId) ||
+    !Array.isArray(moods) ||
+    moods.length < 1 ||
+    moods.length > MAX_MOODS_PER_VOTE ||
+    !moods.every(mood => isOneOf(MOODS, mood)) ||
+    new Set(moods).size !== moods.length
+  ) {
+    return undefined
+  }
+  return { kind, songId, moods }
+}
+
 export const parseStatEvent = (body: string): StatEvent | undefined => {
   let parsed: unknown
   try {
@@ -238,6 +311,7 @@ export const parseStatEvent = (body: string): StatEvent | undefined => {
   if (typeof parsed !== 'object' || parsed === null) return undefined
   const fields = parsed as Record<string, unknown>
   if (fields.kind === 'Decision') return parseDecision(fields)
+  if (fields.kind === 'Mood') return parseMoodVote(fields)
   const {
     songId,
     kind,
@@ -381,6 +455,44 @@ const mostPlayedFirst =
     right.plays.Autoplay - left.plays.Autoplay ||
     right.clicks - left.clicks ||
     key(left).localeCompare(key(right))
+
+export type SongMoods = Readonly<{
+  songId: string
+  title: string | null
+  artist: string | null
+  votes: Readonly<Record<Mood, number>>
+}>
+
+const total = (votes: Readonly<Record<Mood, number>>) =>
+  MOODS.reduce((sum, mood) => sum + votes[mood], 0)
+
+export const buildMoodReport = (
+  rows: readonly MoodCount[],
+  songs: readonly SongForStats[],
+): SongMoods[] => {
+  const known = new Map(songs.map(song => [song.songId, song]))
+  const bySong = Map.groupBy(rows, ({ songId }) => songId)
+  return [...bySong]
+    .map(([songId, counts]) => {
+      const votes = Object.fromEntries(
+        MOODS.map(mood => [
+          mood,
+          counts.find(row => row.mood === mood)?.count ?? 0,
+        ]),
+      ) as Record<Mood, number>
+      return {
+        songId,
+        title: known.get(songId)?.title ?? null,
+        artist: known.get(songId)?.artist ?? null,
+        votes,
+      }
+    })
+    .sort(
+      (left, right) =>
+        total(right.votes) - total(left.votes) ||
+        left.songId.localeCompare(right.songId),
+    )
+}
 
 export type DayReport = Tally & Readonly<{ day: string }>
 
@@ -556,9 +668,10 @@ export const createStatReport = ({
       const totals = store.totalsSince(since)
       const skips = store.skipsSince(since)
       const transitions = store.transitionsSince(since)
+      const moods = store.moodsSince(since)
       const ids = [
         ...new Set([
-          ...[...totals, ...skips].map(({ songId }) => songId),
+          ...[...totals, ...skips, ...moods].map(({ songId }) => songId),
           ...transitions.flatMap(row => [row.prevSongId, row.songId]),
         ]),
       ]
@@ -579,6 +692,7 @@ export const createStatReport = ({
           ),
           transitions: buildTransitions(transitions, known),
           transitionMinPlays: MIN_TRANSITION_PLAYS,
+          moods: buildMoodReport(moods, known),
         },
       }
     } catch (error) {

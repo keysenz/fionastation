@@ -6,7 +6,9 @@ import { DatabaseSync } from 'node:sqlite'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
 
 import type { SongForStats } from './db.ts'
+import { MOODS as PAGE_MOODS } from '../src/page/karaoke/moodPrompt.ts'
 import {
+  MOODS,
   type StatEvent,
   type StatStore,
   createStatApi,
@@ -160,6 +162,50 @@ describe('store', () => {
 })
 
 describe('parseStatEvent', () => {
+  test('accepts one or two distinct moods', () => {
+    expect(
+      parseStatEvent(post({ songId: 'a1', kind: 'Mood', moods: ['ceria'] })),
+    ).toEqual({ kind: 'Mood', songId: 'a1', moods: ['ceria'] })
+    expect(
+      parseStatEvent(
+        post({ songId: 'a1', kind: 'Mood', moods: ['sendu', 'galau'] }),
+      ),
+    ).toEqual({ kind: 'Mood', songId: 'a1', moods: ['sendu', 'galau'] })
+  })
+
+  test.each([
+    ['no moods', { songId: 'a1', kind: 'Mood', moods: [] }],
+    [
+      'three moods',
+      { songId: 'a1', kind: 'Mood', moods: ['ceria', 'galau', 'hype'] },
+    ],
+    ['an unknown mood', { songId: 'a1', kind: 'Mood', moods: ['angry'] }],
+    [
+      'a repeated mood',
+      { songId: 'a1', kind: 'Mood', moods: ['ceria', 'ceria'] },
+    ],
+    ['moods that are not a list', { songId: 'a1', kind: 'Mood', moods: 'hype' }],
+    ['a missing song', { kind: 'Mood', moods: ['hype'] }],
+    [
+      'an origin',
+      { songId: 'a1', kind: 'Mood', moods: ['hype'], origin: 'Visitor' },
+    ],
+    [
+      'seconds into the song',
+      { songId: 'a1', kind: 'Mood', moods: ['hype'], secondsIntoSong: 3 },
+    ],
+    [
+      'a session id',
+      { songId: 'a1', kind: 'Mood', moods: ['hype'], sessionId: 'x' },
+    ],
+  ])('rejects a mood vote with %s', (_label, body) => {
+    expect(parseStatEvent(post(body))).toBeUndefined()
+  })
+
+  test('the mood list matches the one the page offers', () => {
+    expect(MOODS).toEqual(PAGE_MOODS)
+  })
+
   test('accepts each kind with its origin', () => {
     expect(parseStatEvent(play('a1', 'Autoplay'))).toEqual({
       kind: 'Play',
@@ -251,6 +297,37 @@ describe('write api', () => {
     ])
   })
 
+  test('records a mood vote as one bump per mood and answers 204', () => {
+    const { store, api } = open()
+    const vote = post({ songId: 'a1', kind: 'Mood', moods: ['ceria', 'hype'] })
+    expect(api({ ip: '1.1.1.1', body: vote }).status).toBe(204)
+    expect(api({ ip: '2.2.2.2', body: vote }).status).toBe(204)
+    expect(store.moodsSince('2026-11-14')).toEqual(
+      expect.arrayContaining([
+        { songId: 'a1', mood: 'ceria', count: 2 },
+        { songId: 'a1', mood: 'hype', count: 2 },
+      ]),
+    )
+    expect(store.moodsSince('2026-11-14')).toHaveLength(2)
+    expect(store.totalsSince('2026-11-14')).toEqual([])
+  })
+
+  test('rejects a mood vote for a song that is not in the archive', () => {
+    const { store, api } = open()
+    const vote = post({ songId: 'ghost', kind: 'Mood', moods: ['ceria'] })
+    expect(api({ ip: '1.1.1.1', body: vote }).status).toBe(404)
+    expect(store.moodsSince('2026-11-14')).toEqual([])
+  })
+
+  test('the mood table holds the day, the song, the mood and a count and nothing that identifies a visitor', () => {
+    openStatStore({ path: dbPath, now })
+    const columns = new DatabaseSync(dbPath)
+      .prepare("SELECT name FROM pragma_table_info('mood_votes')")
+      .all()
+      .map(row => row.name)
+    expect(columns).toEqual(['day', 'song_id', 'mood', 'count'])
+  })
+
   test('rejects a song that is not in the archive and records nothing', () => {
     const { store, api } = open()
     expect(api({ ip: '1.1.1.1', body: play('ghost') }).status).toBe(404)
@@ -294,6 +371,36 @@ describe('write api', () => {
 })
 
 describe('report', () => {
+  test('carries per-song mood counts, most voted first, with titles', () => {
+    const store = openStatStore({ path: dbPath, now })
+    record(
+      store,
+      { kind: 'Mood', songId: 'a1', moods: ['ceria'] },
+      { kind: 'Mood', songId: 'b1', moods: ['sendu', 'galau'] },
+      { kind: 'Mood', songId: 'b1', moods: ['sendu'] },
+    )
+    const answer = createStatReport({ store, findSongs, now })(null)
+    const { moods } = answer.body as { moods: Array<Record<string, any>> }
+    expect(moods.map(song => song.songId)).toEqual(['b1', 'a1'])
+    expect(moods[0]?.votes).toEqual({
+      ceria: 0,
+      galau: 1,
+      hype: 0,
+      chill: 0,
+      romantis: 0,
+      sendu: 2,
+    })
+    expect(moods[1]?.title).toBe(SONGS[0]?.title)
+  })
+
+  test('a window that excludes the day leaves the moods out', () => {
+    const store = openStatStore({ path: dbPath, now })
+    record(store, { kind: 'Mood', songId: 'a1', moods: ['ceria'] })
+    clock = new Date('2026-11-20T10:00:00Z')
+    const answer = createStatReport({ store, findSongs, now })('3')
+    expect((answer.body as { moods: unknown[] }).moods).toEqual([])
+  })
+
   test('sorts songs and videos by visitor plays, then autoplay plays', () => {
     const store = openStatStore({ path: dbPath, now })
     record(
