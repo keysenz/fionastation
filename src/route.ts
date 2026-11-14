@@ -2,7 +2,13 @@ import { Schema, pipe } from 'effect'
 import { Route } from 'foldkit'
 import { defineRouteUnion } from 'foldkit/route'
 
+import { UUID_PATTERN } from './page/commission/inquiryContract.ts'
 import { PlaylistId } from './playlist.ts'
+
+export const CommissionId = Schema.String.check(
+  Schema.isPattern(UUID_PATTERN),
+).pipe(Schema.brand('CommissionId'))
+export type CommissionId = typeof CommissionId.Type
 
 export const AppRoute = defineRouteUnion({
   Radio: {},
@@ -11,6 +17,7 @@ export const AppRoute = defineRouteUnion({
   Endorse: {},
   Studio: {},
   Hire: {},
+  Commission: { id: CommissionId },
   NotFound: { path: Schema.String },
 })
 export type AppRoute = typeof AppRoute.Type
@@ -41,6 +48,12 @@ export const endorseRouter = pipe(
   Route.mapTo(AppRoute.Endorse),
 )
 
+export const commissionRouter = pipe(
+  Route.literal('commission'),
+  Route.slash(Route.schemaSegment('id', CommissionId)),
+  Route.mapTo(AppRoute.Commission),
+)
+
 export const urlToAppRoute = Route.parseUrlWithFallback(
   Route.oneOf(
     radioRouter,
@@ -49,6 +62,7 @@ export const urlToAppRoute = Route.parseUrlWithFallback(
     hireRouter,
     studioRouter,
     endorseRouter,
+    commissionRouter,
   ),
   AppRoute.NotFound,
 )

@@ -150,7 +150,10 @@ test('the review shows the quote with its deposit, then sends it', () => {
       CreateInquiryId,
       Message.CompletedCreateInquiryId({ id: 'id-1' }),
     ),
-    Command.resolve(SubmitInquiry, Message.SucceededSubmitInquiry()),
+    Command.resolve(
+      SubmitInquiry,
+      Message.SucceededSubmitInquiry({ trackingUrl: Option.none() }),
+    ),
     model(current => {
       expect(current.submission._tag).toBe('Sent')
       expect(current.draft['name']).toBe('')
@@ -178,7 +181,10 @@ test('a failed send keeps the draft and the retry succeeds', () => {
       expect(current.draft['tracks']).toBe('4')
     }),
     message(Message.ClickedSend()),
-    Command.resolve(SubmitInquiry, Message.SucceededSubmitInquiry()),
+    Command.resolve(
+      SubmitInquiry,
+      Message.SucceededSubmitInquiry({ trackingUrl: Option.none() }),
+    ),
     model(current => expect(current.submission._tag).toBe('Sent')),
   )
 })

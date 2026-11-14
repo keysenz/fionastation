@@ -1,3 +1,4 @@
+import { Schema } from 'effect'
 // @vitest-environment node
 import { createHmac } from 'node:crypto'
 import { mkdtempSync, rmSync } from 'node:fs'
@@ -7,7 +8,10 @@ import { DatabaseSync } from 'node:sqlite'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
 
 import { REQUIRED_FIELDS } from '../src/page/commission/inquiryContract.ts'
-import type { InquiryKind } from '../src/page/commission/inquiryPayload.ts'
+import {
+  type InquiryKind,
+  InquiryReply,
+} from '../src/page/commission/inquiryPayload.ts'
 import {
   type CommissionStore,
   NEXT_STATUSES,
@@ -338,6 +342,9 @@ describe('POST /api/inquiry', () => {
       trackingUrl: `/commission/${ID_A}?t=${token}`,
     })
     expect(trackingToken(SECRET, ID_A)).toBe(token)
+    expect(() =>
+      Schema.decodeUnknownSync(InquiryReply)(answer.body),
+    ).not.toThrow()
   })
 
   test('the same id with the same payload answers 200 with the same reply', () => {

@@ -4,6 +4,7 @@ import { DatabaseSync } from 'node:sqlite'
 
 import {
   REQUIRED_FIELDS,
+  UUID_PATTERN,
   quoteFromFields,
 } from '../src/page/commission/inquiryContract.ts'
 import {
@@ -25,7 +26,6 @@ const MAX_VALUE_CHARS = 2000
 const MAX_NOTE_CHARS = 1000
 const MAX_UNPOSTED = 100
 const FIELD_KEY = /^[a-z][a-z0-9_]{0,39}$/
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 // STATUS MACHINE
 
@@ -49,7 +49,7 @@ const isStatus = (value: unknown): value is Status =>
 export const nextStatuses = (status: Status): readonly Status[] =>
   NEXT_STATUSES[status]
 
-export const isUuid = (id: string) => UUID.test(id)
+export const isUuid = (id: string) => UUID_PATTERN.test(id)
 
 // STORE
 

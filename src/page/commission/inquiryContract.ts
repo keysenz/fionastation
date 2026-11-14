@@ -22,6 +22,10 @@ import {
 
 export const MAX_TRACKS = 10
 
+/** An inquiry id, as the form makes it with `crypto.randomUUID()`. */
+export const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+
 export const USAGE_LABELS: Readonly<Record<Usage, string>> = {
   Personal: 'Personal (non-exclusive)',
   Commercial: 'Commercial (exclusive)',

@@ -1,4 +1,4 @@
-import { Schema } from 'effect'
+import { Option, Schema } from 'effect'
 import { Command, given, message, model, story } from 'foldkit/story'
 import { expect, test } from 'vitest'
 
@@ -91,7 +91,10 @@ test('the review has no quote and sends an endorse payload without one', () => {
       CreateInquiryId,
       Message.CompletedCreateInquiryId({ id: 'id-1' }),
     ),
-    Command.resolve(SubmitInquiry, Message.SucceededSubmitInquiry()),
+    Command.resolve(
+      SubmitInquiry,
+      Message.SucceededSubmitInquiry({ trackingUrl: Option.none() }),
+    ),
     model(current => expect(current.submission._tag).toBe('Sent')),
   )
 })
@@ -118,7 +121,10 @@ test('a failed send keeps the draft so the retry resends the same answers', () =
       expect(current.draft['details']).toBe('Launch stream in March')
     }),
     message(Message.ClickedSend()),
-    Command.resolve(SubmitInquiry, Message.SucceededSubmitInquiry()),
+    Command.resolve(
+      SubmitInquiry,
+      Message.SucceededSubmitInquiry({ trackingUrl: Option.none() }),
+    ),
     model(current => expect(current.submission._tag).toBe('Sent')),
   )
 })

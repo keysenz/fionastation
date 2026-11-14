@@ -566,7 +566,39 @@ export type WizardView = Readonly<{
   sentNote: string
 }>
 
-const sentView = (props: WizardView, h: HtmlBuilder<Message>): Html =>
+const trackingLink = (
+  trackingUrl: Option.Option<string>,
+  h: HtmlBuilder<Message>,
+): Html =>
+  Option.match(trackingUrl, {
+    onNone: () => h.empty,
+    onSome: url =>
+      h.div(
+        [
+          h.Class(
+            'mx-auto max-w-md space-y-2 rounded-lg border border-white/15 bg-white/5 p-4',
+          ),
+        ],
+        [
+          h.p(
+            [h.Class('text-sm text-gray-100')],
+            [
+              'Follow your commission here. Save this link, because it is the only way back to your status.',
+            ],
+          ),
+          h.a(
+            [h.Href(url), h.Class(`${buttonClass(true)} mx-auto w-fit`)],
+            ['Track your commission'],
+          ),
+        ],
+      ),
+  })
+
+const sentView = (
+  props: WizardView,
+  trackingUrl: Option.Option<string>,
+  h: HtmlBuilder<Message>,
+): Html =>
   h.div(
     [h.Class('space-y-4 py-6 text-center'), h.Role('status')],
     [
@@ -575,6 +607,7 @@ const sentView = (props: WizardView, h: HtmlBuilder<Message>): Html =>
         ['Sent! Talk soon.'],
       ),
       h.p([h.Class('text-sm text-gray-100')], [props.sentNote]),
+      trackingLink(trackingUrl, h),
       h.div(
         [h.Class('flex flex-wrap justify-center gap-3')],
         [
@@ -660,7 +693,7 @@ export const wizardView = (props: WizardView, h: HtmlBuilder<Message>): Html =>
           commissionNav(props.page, h),
           h.div([h.Class('space-y-2 text-sm text-gray-100')], props.blurb),
           props.model.submission._tag === 'Sent'
-            ? sentView(props, h)
+            ? sentView(props, props.model.submission.trackingUrl, h)
             : h.div(
                 [h.Class('space-y-4')],
                 [
