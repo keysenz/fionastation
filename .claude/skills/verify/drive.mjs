@@ -1370,6 +1370,184 @@ const journeys = {
     }, page);
     console.log(JSON.stringify(await report(), null, 2));
   },
+  async listeningTrail(page) {
+    const statsPath = readFileSync(join(RUN_DIR, 'stats.path'), 'utf8').trim();
+    const rows = (table) => {
+      const db = new DatabaseSync(statsPath, { readOnly: true });
+      try {
+        return db.prepare(`SELECT * FROM ${table} ORDER BY minute, session_id, seq`).all();
+      } finally {
+        db.close();
+      }
+    };
+    const until = async (what, ready) => {
+      for (let i = 0; i < 40; i++) {
+        const seen = ready();
+        if (seen) return seen;
+        await page.waitForTimeout(500);
+      }
+      throw new Error(`never saw ${what}: ${JSON.stringify(rows('listen_events'))}`);
+    };
+    const { body: videos } = await pageVideos();
+    const live = videos.filter((v) => !v.is_gone);
+    const video = live.find((v) => v.karaoke_song.length >= 3 && secondsOf(v.karaoke_song[1].timestamp) - secondsOf(v.karaoke_song[0].timestamp) > 20);
+    if (!video) throw new Error('no live video with three songs and a long first song');
+    const sorted = songRows([video]).toSorted((a, b) => secondsOf(a.timestamp) - secondsOf(b.timestamp));
+    const [first, second, third] = sorted;
+    const last = sorted.at(-1);
+    const seekTo = (seconds) =>
+      page.evaluate((to) => window.YT.get(document.querySelector('iframe[src*="youtube"]').id).seekTo(to, true), seconds);
+    const playheadPast = (seconds) =>
+      page.waitForFunction((want) => window.YT.get(document.querySelector('iframe[src*="youtube"]').id).getCurrentTime() >= want, seconds, { timeout: 30000 });
+    const playFirstSong = async () => {
+      await page.goto(BASE + '/');
+      await videoRows(page).first().waitFor();
+      await (await songRowOf(page, videos, first)).click();
+      await playerReady(page);
+      await playVideo(page);
+      await videoLoads(page, [video.video_url], { startSeconds: secondsOf(first.timestamp), isPlaying: true });
+    };
+    const trailOf = (events) => events.map((r) => `${r.seq} ${r.kind} ${r.song_id} <- ${r.prev_song_id}`);
+    const sessionIds = () => [...new Set(rows('listen_events').map((r) => r.session_id))];
+    const f = 'listeningTrail';
+
+    await step(f, 'a visit records its clicks, plays, finishes and skips in order, with the song before each play', async () => {
+      await playFirstSong();
+      await until('the first play', () => rows('listen_events').some((r) => r.kind === 'Play' && r.song_id === first.id));
+      await seekTo(secondsOf(second.timestamp) - 4);
+      await playheadPast(secondsOf(second.timestamp) + 1);
+      await until('the second play', () => rows('listen_events').some((r) => r.kind === 'Play' && r.song_id === second.id));
+      await page.waitForTimeout(3000);
+      await barButton(page, 'fa-step-forward').click();
+      await until('the skip', () => rows('listen_events').some((r) => r.kind === 'Skip' && r.song_id === second.id));
+      await until('the third song', () => rows('listen_events').some((r) => r.kind === 'Play' && r.song_id === third.id));
+      const events = rows('listen_events');
+      const want = [
+        `1 Click ${first.id} <- null`,
+        `2 Play ${first.id} <- null`,
+        `3 Finish ${first.id} <- null`,
+        `4 Play ${second.id} <- ${first.id}`,
+        `5 Skip ${second.id} <- ${first.id}`,
+        `6 Play ${third.id} <- ${second.id}`,
+      ];
+      if (JSON.stringify(trailOf(events)) !== JSON.stringify(want)) throw new Error(`got ${JSON.stringify(trailOf(events), null, 1)}`);
+      if (new Set(events.map((r) => r.minute)).size < 1 || !events.every((r) => /^\d{4}-\d\d-\d\dT\d\d:\d\d$/.test(r.minute))) throw new Error('minute precision');
+      if (sessionIds().length !== 1) throw new Error(`session ids ${sessionIds()}`);
+    }, page);
+
+    await step(f, 'the session id lives only in memory', async () => {
+      const stored = await page.evaluate(() => JSON.stringify([document.cookie, { ...localStorage }, { ...sessionStorage }]));
+      if (stored.includes(sessionIds()[0])) throw new Error(`the session id is stored in the browser: ${stored}`);
+      if (/session/i.test(await page.evaluate(() => document.cookie))) throw new Error('a session cookie was set');
+    }, page);
+
+    await step(f, 'an autoplay pick is logged before the play it causes, with the pool size and 1/pool propensity', async () => {
+      await (await songRowOf(page, videos, last)).click();
+      await page.locator('[data-player-bar]').getByRole('heading', { name: last.song_title }).first().waitFor({ timeout: 10000 });
+      await playerReady(page);
+      await playVideo(page);
+      await videoLoads(page, [video.video_url], { startSeconds: secondsOf(last.timestamp), isPlaying: true });
+      await page.waitForTimeout(2000);
+      await barButton(page, 'fa-step-forward').click();
+      const others = live.filter((v) => v.video_url !== video.video_url).map((v) => v.video_url);
+      await videoLoads(page, others, { isPlaying: true, timeout: 40000 });
+      const decision = await until('a decision', () => rows('autoplay_decisions')[0]);
+      const play = await until('the autoplay play', () => rows('listen_events').find((r) => r.kind === 'Play' && r.origin === 'Autoplay'));
+      if (decision.policy !== 'uniform-v1') throw new Error(decision.policy);
+      if (Math.abs(decision.propensity - 1 / decision.pool_size) > 1e-12) throw new Error(`propensity ${decision.propensity} for pool ${decision.pool_size}`);
+      if (decision.pool_size < 1) throw new Error('empty pool');
+      if (decision.picked_song_id !== play.song_id) throw new Error(`picked ${decision.picked_song_id} but played ${play.song_id}`);
+      if (!(decision.seq < play.seq)) throw new Error(`decision seq ${decision.seq} is not before play seq ${play.seq}`);
+      if (decision.prev_song_id !== last.id) throw new Error(`decision prev ${decision.prev_song_id}, expected ${last.id}`);
+      if (play.prev_song_id !== last.id) throw new Error(`play prev ${play.prev_song_id}`);
+      const skip = rows('listen_events').find((r) => r.kind === 'Skip' && r.song_id === last.id);
+      if (!skip || !(skip.seq < decision.seq)) throw new Error('the skip of the last song does not sort before the decision');
+    }, page);
+
+    await step(f, 'a reload starts a new session that shares nothing with the first', async () => {
+      const before = sessionIds();
+      await playFirstSong();
+      await until('the second session', () => sessionIds().length === 2);
+      await until('its play', () => rows('listen_events').some((r) => r.session_id !== before[0] && r.kind === 'Play'));
+      await seekTo(secondsOf(second.timestamp) - 4);
+      await playheadPast(secondsOf(second.timestamp) + 1);
+      await until('its second song', () => rows('listen_events').some((r) => r.session_id !== before[0] && r.kind === 'Play' && r.song_id === second.id));
+      const mine = rows('listen_events').filter((r) => r.session_id !== before[0]);
+      if (mine[0].seq !== 1) throw new Error(`the new session starts at seq ${mine[0].seq}`);
+      if (mine.some((r) => before.includes(r.session_id))) throw new Error('sessions mixed');
+      if (!mine.every((r) => /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(r.session_id))) throw new Error('not a UUID v4');
+      const first1 = mine.find((r) => r.kind === 'Play' && r.song_id === first.id);
+      if (first1.prev_song_id !== null) throw new Error('a new session must not know the last visit');
+    }, page);
+
+    console.log(JSON.stringify({ listen_events: rows('listen_events'), autoplay_decisions: rows('autoplay_decisions') }, null, 2));
+
+    const stack = await startDiscordStack({ STATS_DB_PATH: statsPath, STATS_USER_IDS: `${STATS_MOD.id},${STATS_FIONA.id}` });
+    try {
+      await page.setViewportSize({ width: 1280, height: 900 });
+      await step(f, 'the export is closed to a signed-out visitor and to an unlisted user', async () => {
+        await page.goto(stack.base + '/stats');
+        await page.locator('[data-action="sign-in"]').waitFor();
+        const status = (table) => page.evaluate((t) => fetch(`/api/stats-page/export?days=7&table=${t}`).then((r) => r.status), table);
+        if ((await status('events')) !== 401) throw new Error('signed-out export is open');
+        await stack.actAs(STATS_STRANGER);
+        await page.locator('[data-action="sign-in"]').click();
+        await page.waitForFunction(() => location.pathname === '/stats');
+        await page.getByRole('heading', { name: 'No access' }).waitFor();
+        if ((await status('decisions')) !== 403) throw new Error('unlisted export is open');
+        await page.locator('[data-action="logout"]').click();
+        await page.locator('[data-action="sign-in"]').waitFor();
+      }, page);
+
+      await step(f, 'the outcome and transition panels show the trail, and the first to second transition has two plays', async () => {
+        await stack.actAs(STATS_MOD);
+        await page.locator('[data-action="sign-in"]').click();
+        await page.waitForFunction(() => location.pathname === '/stats');
+        await page.locator('[data-panel="origin-outcomes"]').waitFor();
+        const visitor = await page.locator('[data-table="outcomes"] [data-origin="Visitor"]').innerText();
+        const autoplay = await page.locator('[data-table="outcomes"] [data-origin="Autoplay"]').innerText();
+        if (!/Visitor\s+\d+/.test(visitor) || !/Autoplay\s+\d+/.test(autoplay)) throw new Error(`${visitor} | ${autoplay}`);
+        const row = page.locator(`[data-table="transitions"] [data-transition="${first.id}>${second.id}"]`);
+        await row.waitFor();
+        const cells = await row.locator('td').evaluateAll((tds) => tds.map((td) => td.textContent.trim()));
+        if (cells[1] !== '2' || cells[3] !== '50%') throw new Error(`transition row: ${JSON.stringify(cells)}`);
+        await page.locator('[data-min-plays="5"]').click();
+        await page.waitForFunction(() => document.querySelectorAll('[data-table="transitions"] tbody tr').length === 0);
+        await page.locator('[data-min-plays="2"]').click();
+        await row.waitFor();
+        await page.locator('[data-sort-transition="skipRate"]').click();
+        await page.screenshot({ path: join(out, 'trail-panels-desktop.png'), fullPage: true });
+      }, page);
+
+      await step(f, 'each export link downloads valid NDJSON for the range, with titles joined', async () => {
+        for (const table of ['events', 'decisions']) {
+          const href = await page.locator(`[data-export="${table}"]`).getAttribute('href');
+          if (href !== `/api/stats-page/export?days=7&table=${table}`) throw new Error(href);
+          const result = await page.evaluate((url) => fetch(url).then(async (r) => ({ status: r.status, type: r.headers.get('content-type'), disposition: r.headers.get('content-disposition'), body: await r.text() })), href);
+          if (result.status !== 200 || !result.type.includes('x-ndjson') || !result.disposition.includes('attachment')) throw new Error(JSON.stringify({ ...result, body: '' }));
+          const lines = result.body.trimEnd().split('\n').map((line) => JSON.parse(line));
+          const want = rows(table === 'events' ? 'listen_events' : 'autoplay_decisions').length;
+          if (lines.length !== want || want === 0) throw new Error(`${table}: ${lines.length} lines for ${want} rows`);
+          if (!result.body.endsWith('\n')) throw new Error('the last line is not terminated');
+          const titled = table === 'events' ? lines.find((l) => l.songId === first.id) : lines[0];
+          if (!(titled.title ?? titled.pickedTitle)) throw new Error(`no title: ${JSON.stringify(titled)}`);
+          console.log(`${table} sample: ${JSON.stringify(lines[0])}`);
+        }
+        const bad = await page.evaluate(() => fetch('/api/stats-page/export?days=7&table=sessions').then((r) => r.status));
+        if (bad !== 400) throw new Error(`unknown table answered ${bad}`);
+      }, page);
+
+      await step(f, 'the panels fit a phone', async () => {
+        await page.setViewportSize({ width: 375, height: 667 });
+        await page.locator('[data-panel="transitions"]').waitFor();
+        if (!(await noSidewaysScroll(page))) throw new Error('the page scrolls sideways');
+        await page.screenshot({ path: join(out, 'trail-panels-phone.png'), fullPage: true });
+        await page.setViewportSize({ width: 1280, height: 800 });
+      }, page);
+    } finally {
+      stack.close();
+    }
+  },
   async coverEnd(page) {
     const { body: videos } = await pageVideos();
     const live = displayOrder(videos).filter((v) => !v.is_gone);

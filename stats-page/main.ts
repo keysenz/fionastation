@@ -1,17 +1,24 @@
 import { histogram, timeSeries } from './charts.ts'
 import {
+  EXPORT_TABLES,
+  MIN_PLAYS_CHOICES,
   RANGES,
   SONG_COLUMNS,
+  TRANSITION_COLUMNS,
   type Report,
   type SongColumn,
   type SortDirection,
+  type TransitionColumn,
   type VideoRow,
+  exportUrl,
   formatCount,
   formatPercent,
   formatSeconds,
   histogramOf,
   parseReport,
+  ratio,
   sortSongs,
+  sortTransitions,
   totalsOf,
 } from './report.ts'
 
@@ -32,6 +39,9 @@ type View = {
   sortColumn: SongColumn
   sortDirection: SortDirection
   selectedSongId: string | null
+  transitionColumn: TransitionColumn
+  transitionDirection: SortDirection
+  minTransitionPlays: number
 }
 
 const view: View = {
@@ -40,6 +50,9 @@ const view: View = {
   sortColumn: 'visitorPlays',
   sortDirection: 'desc',
   selectedSongId: null,
+  transitionColumn: 'plays',
+  transitionDirection: 'desc',
+  minTransitionPlays: MIN_PLAYS_CHOICES[0],
 }
 
 const NOTICES: Readonly<Record<string, string>> = {
@@ -295,6 +308,139 @@ const videoTable = (videos: readonly VideoRow[]) =>
     ]),
   ])
 
+const outcomesTable = (report: Report) =>
+  h('div', { class: 'scroll' }, [
+    h('table', { 'data-table': 'outcomes' }, [
+      h('thead', {}, [
+        h('tr', {}, [
+          h('th', { class: 'text', scope: 'col' }, ['Picked by']),
+          ...['Plays', 'Finish rate', 'Skip rate', 'Median skip'].map(label =>
+            h('th', { class: 'num', scope: 'col' }, [label]),
+          ),
+        ]),
+      ]),
+      h(
+        'tbody',
+        {},
+        report.outcomes.map(row =>
+          h('tr', { 'data-origin': row.origin }, [
+            h('td', { class: 'text' }, [
+              row.origin === 'Visitor' ? 'Visitor' : 'Autoplay',
+            ]),
+            num(formatCount(row.plays)),
+            num(formatPercent(ratio(row.finishes, row.plays))),
+            num(formatPercent(ratio(row.skips, row.plays))),
+            num(formatSeconds(row.medianSecondsIntoSkip)),
+          ]),
+        ),
+      ),
+    ]),
+  ])
+
+const transitionHeader = (column: TransitionColumn, label: string) => {
+  const active = view.transitionColumn === column
+  return h(
+    'th',
+    {
+      scope: 'col',
+      class: column === 'transition' ? 'text' : 'num',
+      'aria-sort': active
+        ? view.transitionDirection === 'asc'
+          ? 'ascending'
+          : 'descending'
+        : 'none',
+    },
+    [
+      h(
+        'button',
+        { type: 'button', class: 'sort', 'data-sort-transition': column },
+        [
+          label,
+          active ? (view.transitionDirection === 'asc' ? ' ▲' : ' ▼') : '',
+        ],
+      ),
+    ],
+  )
+}
+
+const transitionTable = (report: Report) => {
+  const rows = sortTransitions(
+    report.transitions,
+    view.minTransitionPlays,
+    view.transitionColumn,
+    view.transitionDirection,
+  ).slice(0, 100)
+  const labels: Readonly<Record<TransitionColumn, string>> = {
+    transition: 'From song, to song',
+    plays: 'Plays',
+    finishRate: 'Finish rate',
+    skipRate: 'Skip rate',
+  }
+  return h('div', { class: 'scroll' }, [
+    h('table', { 'data-table': 'transitions' }, [
+      h('thead', {}, [
+        h(
+          'tr',
+          {},
+          TRANSITION_COLUMNS.map(column =>
+            transitionHeader(column, labels[column]),
+          ),
+        ),
+      ]),
+      h(
+        'tbody',
+        {},
+        rows.map(row =>
+          h('tr', { 'data-transition': `${row.prevSongId}>${row.songId}` }, [
+            h('td', { class: 'text' }, [
+              `${row.prevTitle ?? row.prevSongId} → ${row.title ?? row.songId}`,
+            ]),
+            num(row.plays),
+            num(formatPercent(ratio(row.finishes, row.plays))),
+            num(formatPercent(ratio(row.skips, row.plays))),
+          ]),
+        ),
+      ),
+    ]),
+  ])
+}
+
+const minPlaysButtons = () =>
+  h(
+    'div',
+    { class: 'ranges', role: 'group', 'aria-label': 'Minimum plays' },
+    MIN_PLAYS_CHOICES.map(choice =>
+      h(
+        'button',
+        {
+          type: 'button',
+          class: choice === view.minTransitionPlays ? 'btn on' : 'btn',
+          'aria-pressed': choice === view.minTransitionPlays,
+          'data-min-plays': choice,
+        },
+        [`${choice}+ plays`],
+      ),
+    ),
+  )
+
+const exportLinks = () =>
+  h(
+    'div',
+    { class: 'ranges' },
+    EXPORT_TABLES.map(({ table, label }) =>
+      h(
+        'a',
+        {
+          class: 'btn',
+          href: exportUrl(table, view.days),
+          download: `fio-radio-${table}-${view.days}d.ndjson`,
+          'data-export': table,
+        },
+        [label],
+      ),
+    ),
+  )
+
 const dashboard = (report: Report, name: string | undefined) => {
   const totals = totalsOf(report.daily)
   const picked = report.songs.find(song => song.songId === view.selectedSongId)
@@ -365,6 +511,28 @@ const dashboard = (report: Report, name: string | undefined) => {
           ]),
       histogram(bars, report.skipBucketSeconds),
     ]),
+    h('section', { class: 'panel wide', 'data-panel': 'origin-outcomes' }, [
+      h('h2', {}, ['Autoplay vs visitor outcome']),
+      h('p', { class: 'note' }, [
+        'How plays end, by who picked the song. Counts only visits that recorded a listening trail.',
+      ]),
+      outcomesTable(report),
+    ]),
+    h('section', { class: 'panel wide', 'data-panel': 'transitions' }, [
+      h('h2', {}, ['Top transitions']),
+      h('p', { class: 'note' }, [
+        'Song to the next song in the same visit, with how the second play ended.',
+      ]),
+      minPlaysButtons(),
+      transitionTable(report),
+    ]),
+    h('section', { class: 'panel wide', 'data-panel': 'export' }, [
+      h('h2', {}, ['Export for offline modeling']),
+      h('p', { class: 'note' }, [
+        `One JSON object per line, UTC days from ${report.since}.`,
+      ]),
+      exportLinks(),
+    ]),
     h('section', { class: 'panel wide', 'data-panel': 'songs' }, [
       h('h2', {}, ['Top songs']),
       songTable(report),
@@ -424,13 +592,18 @@ const render = () => {
   }
 }
 
+const isTransitionColumn = (
+  value: string | undefined,
+): value is TransitionColumn =>
+  TRANSITION_COLUMNS.some(column => column === value)
+
 const isSortColumn = (value: string | undefined): value is SongColumn =>
   SONG_COLUMNS.some(column => column === value)
 
 root.addEventListener('click', event => {
   const target = event.target instanceof Element ? event.target : null
   const action = target?.closest<HTMLElement>(
-    '[data-action], [data-range], [data-sort], [data-pick]',
+    '[data-action], [data-range], [data-sort], [data-pick], [data-sort-transition], [data-min-plays]',
   )
   if (!action) return
   if (action.dataset.action === 'logout') {
@@ -450,6 +623,22 @@ root.addEventListener('click', event => {
           ? 'asc'
           : 'desc'
     view.sortColumn = column
+    render()
+  } else if (
+    action.dataset.sortTransition !== undefined &&
+    isTransitionColumn(action.dataset.sortTransition)
+  ) {
+    const column = action.dataset.sortTransition
+    view.transitionDirection =
+      view.transitionColumn === column && view.transitionDirection === 'desc'
+        ? 'asc'
+        : column === 'transition'
+          ? 'asc'
+          : 'desc'
+    view.transitionColumn = column
+    render()
+  } else if (action.dataset.minPlays !== undefined) {
+    view.minTransitionPlays = Number(action.dataset.minPlays)
     render()
   } else if (action.dataset.pick !== undefined) {
     view.selectedSongId =

@@ -106,6 +106,16 @@ import {
   stepStats,
 } from './playStats.ts'
 import {
+  TrailDecision,
+  TrailSession,
+  TrailTag,
+  decidedPick,
+  newSessionId,
+  startedTrail,
+  tagStats,
+  trailFields,
+} from './trail.ts'
+import {
   type OpenedPlaylist,
   PlaylistFailure,
   PlaylistOpen,
@@ -264,6 +274,7 @@ export const Model = Schema.Struct({
   maybeQueueDrag: Schema.Option(QueueDrag),
   maybePlayhead: Schema.Option(Playhead),
   listens: Schema.Array(Listen),
+  maybeTrail: Schema.Option(TrailSession),
   lyricsBySongId: Schema.Record(Schema.String, LyricsFetch),
   lyricsWaitCount: Schema.Number,
   lyricNudges: Nudges,
@@ -410,7 +421,10 @@ export const Message = defineMessageUnion({
   CompletedPickRandomVideo: {
     playId: Schema.Number,
     song: PlayableSong,
+    poolSize: Schema.Number,
   },
+  CompletedCreateSessionId: { sessionId: Schema.String },
+  CompletedRecordDecision: {},
   CompletedWaitBeforeDismissToast: { dismissId: Schema.Number },
   CompletedWaitBeforeLoadTimeout: { playId: Schema.Number },
   CompletedWaitBeforeRetryLoad: { playId: Schema.Number },
@@ -1011,17 +1025,42 @@ export const PickRandomVideo = Command.define('PickRandomVideo', {
   messages: [Message.CompletedPickRandomVideo],
   execute: ({ playId, candidates }) =>
     Random.choice(candidates).pipe(
-      Effect.map(song => Message.CompletedPickRandomVideo({ playId, song })),
+      Effect.map(song =>
+        Message.CompletedPickRandomVideo({
+          playId,
+          song,
+          poolSize: candidates.length,
+        }),
+      ),
     ),
 })
 
+export const CreateSessionId = Command.define('CreateSessionId', {
+  messages: [Message.CompletedCreateSessionId],
+  execute: Effect.map(newSessionId, sessionId =>
+    Message.CompletedCreateSessionId({ sessionId }),
+  ),
+})
+
+export const RecordDecision = Command.define('RecordDecision', {
+  args: { decision: TrailDecision },
+  messages: [Message.CompletedRecordDecision],
+  execute: ({ decision: { tag, songId, policy, poolSize } }) =>
+    postWithoutReply('/api/stats', {
+      kind: 'Decision',
+      songId,
+      policy,
+      poolSize,
+      ...trailFields(Option.some(tag)),
+    }).pipe(Effect.ignore, Effect.as(Message.CompletedRecordDecision())),
+})
+
 export const RecordStat = Command.define('RecordStat', {
-  args: { stat: PlayStat },
+  args: { stat: PlayStat, maybeTag: Schema.Option(TrailTag) },
   messages: [Message.CompletedRecordStat],
-  execute: ({ stat }) =>
-    postWithoutReply(
-      '/api/stats',
-      PlayStat.match(stat, {
+  execute: ({ stat, maybeTag }) =>
+    postWithoutReply('/api/stats', {
+      ...PlayStat.match(stat, {
         Clicked: ({ songId }) => ({
           songId,
           kind: 'Click',
@@ -1036,7 +1075,8 @@ export const RecordStat = Command.define('RecordStat', {
           secondsIntoSong,
         }),
       }),
-    ).pipe(Effect.ignore, Effect.as(Message.CompletedRecordStat())),
+      ...trailFields(maybeTag),
+    }).pipe(Effect.ignore, Effect.as(Message.CompletedRecordStat())),
 })
 
 const TOAST_SECONDS = 6
@@ -1236,6 +1276,7 @@ export const init = (): Model => ({
   maybeQueueDrag: Option.none(),
   maybePlayhead: Option.none(),
   listens: [],
+  maybeTrail: Option.none(),
   lyricsBySongId: {},
   lyricsWaitCount: 0,
   lyricNudges: {},
@@ -1295,6 +1336,7 @@ export const entered = (model: Model): UpdateReturn => {
       LoadRepeat(),
       LoadVolume(),
       LoadLyricNudges(),
+      ...(Option.isNone(model.maybeTrail) ? [CreateSessionId()] : []),
       ...(fetched.commands ?? []),
     ],
   }
@@ -2580,7 +2622,7 @@ const updateModel = (model: Model, message: Message) =>
 
     // NOTE: a click while the pick was pending changed the playId, and the visitor's choice wins.
     // A refetch can report the picked video gone after the pick was asked for, so it is drawn again.
-    CompletedPickRandomVideo: ({ playId, song }) =>
+    CompletedPickRandomVideo: ({ playId, song, poolSize }) =>
       Option.match(
         Option.filter(
           model.setlist.maybeNowPlaying,
@@ -2599,21 +2641,31 @@ const updateModel = (model: Model, message: Message) =>
             const setlist = play(model.setlist, song, 'Autoplay')
             const saveSetlist = SaveSetlist({ json: toPersistedJson(setlist) })
             const dismissId = setlist.playCount
+            const decided = decidedPick(model.maybeTrail, song.id, poolSize)
+            const logDecision = Option.match(decided.maybeDecision, {
+              onNone: () => [],
+              onSome: decision => [RecordDecision({ decision })],
+            })
+            const picked = modifyFields(model, {
+              setlist: () => setlist,
+              maybeTrail: () => decided.maybeTrail,
+            })
             return phase._tag === 'MovingOn'
               ? {
                   model: withSkipToast(
-                    modifyFields(model, { setlist: () => setlist }),
+                    picked,
                     songLabel(previousSong),
                     dismissId,
                   ),
                   commands: [
+                    ...logDecision,
                     saveSetlist,
                     WaitBeforeDismissToast({ dismissId }),
                   ],
                 }
               : {
-                  model: modifyFields(model, { setlist: () => setlist }),
-                  commands: [saveSetlist],
+                  model: picked,
+                  commands: [...logDecision, saveSetlist],
                 }
           },
         },
@@ -3142,6 +3194,13 @@ const updateModel = (model: Model, message: Message) =>
     CompletedFocusPlaylistDialog: () => ({ model }),
 
     CompletedRecordStat: () => ({ model }),
+    CompletedRecordDecision: () => ({ model }),
+    CompletedCreateSessionId: ({ sessionId }) => ({
+      model: modifyFields(model, {
+        maybeTrail: trail =>
+          Option.orElse(trail, () => Option.some(startedTrail(sessionId))),
+      }),
+    }),
   })
 
 const standingOf = (model: Model): Option.Option<Standing> =>
@@ -3213,13 +3272,19 @@ const withPlayStats = (
       )
     : { listens: [], stats: [] }
   const stats = [...clickedStatOf(message), ...step.stats]
+  const trailed = tagStats(result.model.maybeTrail, stats)
   return {
-    model: modifyFields(result.model, { listens: () => step.listens }),
+    model: modifyFields(result.model, {
+      listens: () => step.listens,
+      maybeTrail: () => trailed.maybeTrail,
+    }),
     ...(Array.isReadonlyArrayNonEmpty(stats) || result.commands
       ? {
           commands: [
             ...(result.commands ?? []),
-            ...stats.map(stat => RecordStat({ stat })),
+            ...trailed.tagged.map(({ stat, maybeTag }) =>
+              RecordStat({ stat, maybeTag }),
+            ),
           ],
         }
       : {}),

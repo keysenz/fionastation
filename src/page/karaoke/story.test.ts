@@ -13,6 +13,7 @@ import {
   ApplyVolume,
   CopyLink,
   CreatePlaylist,
+  CreateSessionId,
   FetchLyrics,
   FetchPlaylist,
   FetchSongs,
@@ -121,7 +122,7 @@ const saved = Command.resolve(SaveSetlist, Message.CompletedSaveSetlist())
 const pickedFor = (song: PlayableSong, playId: number) =>
   Command.resolveAll(
     [SaveSetlist, Message.CompletedSaveSetlist()],
-    [PickRandomVideo, Message.CompletedPickRandomVideo({ playId, song })],
+    [PickRandomVideo, Message.CompletedPickRandomVideo({ playId, song, poolSize: 1 })],
   )
 
 const failVideo = (playId: number) =>
@@ -337,6 +338,7 @@ test('opening the page rereads saved data and fetches, and does not fetch twice'
     LoadRepeat.name,
     LoadVolume.name,
     LoadLyricNudges.name,
+    CreateSessionId.name,
     FetchSongs.name,
   ])
   const known = update(
@@ -350,6 +352,7 @@ test('opening the page rereads saved data and fetches, and does not fetch twice'
     LoadRepeat.name,
     LoadVolume.name,
     LoadLyricNudges.name,
+    CreateSessionId.name,
   ])
 })
 
@@ -764,7 +767,7 @@ test('the end of a stream clicked on its first song asks for another video, and 
     ),
     Command.resolve(
       PickRandomVideo,
-      Message.CompletedPickRandomVideo({ playId: 1, song: b }),
+      Message.CompletedPickRandomVideo({ playId: 1, song: b, poolSize: 1 }),
     ),
     saved,
     model(current => {
@@ -857,7 +860,7 @@ test('a pick that finishes after the visitor chose another song is ignored', () 
   )
   const late = update(
     chosen.model,
-    Message.CompletedPickRandomVideo({ playId: 1, song: b }),
+    Message.CompletedPickRandomVideo({ playId: 1, song: b, poolSize: 1 }),
   )
   expect(currentIdOf(late.model)).toEqual(Option.some('c'))
   expect(late.model.setlist).toEqual(chosen.model.setlist)
@@ -872,7 +875,7 @@ test('a pick that lands on a video reported gone since it was asked for draws ag
     Message.ClickedSong({ song: a2 }),
     Message.ReceivedPlayerEvent({ playId: 1, event: PlayerEvent.Ended() }),
     refetchGone(b.video_url),
-    Message.CompletedPickRandomVideo({ playId: 1, song: b }),
+    Message.CompletedPickRandomVideo({ playId: 1, song: b, poolSize: 1 }),
   )
   expect(currentIdOf(repicked.model)).toEqual(Option.some('a2'))
   expect(repicked.commands?.map(({ name, args }) => [name, args])).toEqual([
@@ -885,7 +888,7 @@ test('a pick after an end whose videos have all gone since pauses the same song'
     Message.ClickedSong({ song: a2 }),
     Message.ReceivedPlayerEvent({ playId: 1, event: PlayerEvent.Ended() }),
     refetchGone(b.video_url, c.video_url),
-    Message.CompletedPickRandomVideo({ playId: 1, song: b }),
+    Message.CompletedPickRandomVideo({ playId: 1, song: b, poolSize: 1 }),
   )
   expect(currentIdOf(stopped.model)).toEqual(Option.some('a2'))
   expect(statusOf(stopped.model)).toEqual(Option.some('Paused'))
@@ -899,7 +902,7 @@ test('a pick after a gone video whose videos have all gone since leaves the gone
     Message.ClickedSong({ song: a }),
     failVideo(1),
     refetchGone(b.video_url, c.video_url),
-    Message.CompletedPickRandomVideo({ playId: 1, song: b }),
+    Message.CompletedPickRandomVideo({ playId: 1, song: b, poolSize: 1 }),
   )
   expect(currentIdOf(stopped.model)).toEqual(Option.some('a'))
   expect(phaseOf(stopped.model)).toEqual(Option.some('Gone'))
@@ -2271,7 +2274,7 @@ test('every new play starts its own load timeout, and a seek or a pause starts n
     Message.SucceededFetchSongs({ songs: [a, b], goneVideoIds: [] }),
     Message.ClickedSong({ song: a }),
     failVideo(1),
-    Message.CompletedPickRandomVideo({ playId: 1, song: b }),
+    Message.CompletedPickRandomVideo({ playId: 1, song: b, poolSize: 1 }),
   )
   expect(loadTimeoutsOf(picked)).toEqual([{ playId: 2 }])
 })

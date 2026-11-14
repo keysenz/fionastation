@@ -2,6 +2,24 @@ import { DatabaseSync } from 'node:sqlite'
 
 import type { SongForStats } from './db.ts'
 import { windowLimiter } from './playlists.ts'
+import {
+  DEFAULT_TRAIL_DAYS,
+  EXPORT_TABLES,
+  type Decision,
+  type DecisionRow,
+  type EventRow,
+  type ExportTable,
+  type OriginSkip,
+  type OutcomeCount,
+  type TrailTag,
+  type TransitionRow,
+  MIN_TRANSITION_PLAYS,
+  createTrail,
+  isSongId,
+  minuteOf,
+  parseDecision,
+  parseTrailTag,
+} from './trail.ts'
 
 export const COUNTED_KINDS = ['Click', 'Play', 'Finish'] as const
 export const STAT_ORIGINS = ['Visitor', 'Autoplay'] as const
@@ -13,13 +31,16 @@ export type StatEvent =
       kind: CountedKind
       songId: string
       origin: StatOrigin
+      trail?: TrailTag
     }>
   | Readonly<{
       kind: 'Skip'
       songId: string
       origin: StatOrigin
       secondsIntoSong: number
+      trail?: TrailTag
     }>
+  | Decision
 
 export type StatTotal = Readonly<{
   songId: string
@@ -41,26 +62,40 @@ export type DayTotal = Readonly<{
   count: number
 }>
 
+export type ExportCursor = Readonly<{ sessionId: string; seq: number }>
+
 export type StatStore = Readonly<{
   record: (event: StatEvent) => void
   totalsSince: (firstDay: string) => StatTotal[]
   skipsSince: (firstDay: string) => SkipRow[]
   dailySince: (firstDay: string) => DayTotal[]
+  outcomeCountsSince: (firstDay: string) => OutcomeCount[]
+  skipSecondsSince: (firstDay: string) => OriginSkip[]
+  transitionsSince: (firstDay: string) => TransitionRow[]
+  eventsAfter: (firstDay: string, after: ExportCursor) => EventRow[]
+  decisionsAfter: (firstDay: string, after: ExportCursor) => DecisionRow[]
+  prune: () => number
 }>
 
 const HOUR_MS = 60 * 60 * 1000
 const DAY_MS = 24 * HOUR_MS
 export const MAX_REPORT_DAYS = 3650
 export const DEFAULT_REPORT_DAYS = 30
-const MAX_SONG_ID_LENGTH = 100
 const MAX_SECONDS_INTO_SONG = 24 * 60 * 60
 
 const dayOf = (date: Date) => date.toISOString().slice(0, 10)
 
+const firstMinuteOf = (firstDay: string) => `${firstDay}T00:00`
+
 export const openStatStore = ({
   path,
   now = () => new Date(),
-}: Readonly<{ path: string; now?: () => Date }>): StatStore => {
+  trailDays = DEFAULT_TRAIL_DAYS,
+}: Readonly<{
+  path: string
+  now?: () => Date
+  trailDays?: number
+}>): StatStore => {
   const db = new DatabaseSync(path)
   db.exec('PRAGMA journal_mode = WAL')
   db.exec('PRAGMA synchronous = NORMAL')
@@ -84,6 +119,7 @@ export const openStatStore = ({
     )
   `)
   db.exec('CREATE INDEX IF NOT EXISTS skips_by_day ON skips (day)')
+  const trail = createTrail(db)
   const bump = db.prepare(`
     INSERT INTO song_stats (day, song_id, kind, origin, count)
     VALUES (?, ?, ?, ?, 1)
@@ -115,19 +151,61 @@ export const openStatStore = ({
     WHERE day >= ?
     GROUP BY day, origin
   `)
+  const count = (event: Exclude<StatEvent, Decision>) => {
+    if (event.kind === 'Skip') {
+      addSkip.run(
+        dayOf(now()),
+        event.songId,
+        event.origin,
+        event.secondsIntoSong,
+      )
+      return
+    }
+    bump.run(dayOf(now()), event.songId, event.kind, event.origin)
+  }
+  const countOnce = (event: Exclude<StatEvent, Decision>, tag: TrailTag) => {
+    db.exec('BEGIN IMMEDIATE')
+    try {
+      const isNew = trail.addEventIfNew(
+        {
+          trail: tag,
+          kind: event.kind,
+          songId: event.songId,
+          origin: event.origin,
+          secondsIntoSong:
+            event.kind === 'Skip' ? event.secondsIntoSong : null,
+        },
+        minuteOf(now()),
+      )
+      if (isNew) count(event)
+      db.exec('COMMIT')
+    } catch (error) {
+      db.exec('ROLLBACK')
+      throw error
+    }
+  }
   return {
     record: event => {
-      if (event.kind === 'Skip') {
-        addSkip.run(
-          dayOf(now()),
-          event.songId,
-          event.origin,
-          event.secondsIntoSong,
-        )
-        return
+      if (event.kind === 'Decision') {
+        trail.addDecision(event, minuteOf(now()))
+      } else if (event.trail) {
+        countOnce(event, event.trail)
+      } else {
+        count(event)
       }
-      bump.run(dayOf(now()), event.songId, event.kind, event.origin)
     },
+    prune: () =>
+      trail.prune(minuteOf(new Date(now().getTime() - trailDays * DAY_MS))),
+    outcomeCountsSince: firstDay =>
+      trail.outcomeCountsSince(firstMinuteOf(firstDay)),
+    skipSecondsSince: firstDay =>
+      trail.skipSecondsSince(firstMinuteOf(firstDay)),
+    transitionsSince: firstDay =>
+      trail.transitionsSince(firstMinuteOf(firstDay)),
+    eventsAfter: (firstDay, after) =>
+      trail.eventsAfter(firstMinuteOf(firstDay), after),
+    decisionsAfter: (firstDay, after) =>
+      trail.decisionsAfter(firstMinuteOf(firstDay), after),
     totalsSince: firstDay => totals.all(firstDay) as unknown as StatTotal[],
     skipsSince: firstDay => skips.all(firstDay) as unknown as SkipRow[],
     dailySince: firstDay =>
@@ -158,25 +236,34 @@ export const parseStatEvent = (body: string): StatEvent | undefined => {
     return undefined
   }
   if (typeof parsed !== 'object' || parsed === null) return undefined
-  const { songId, kind, origin, secondsIntoSong, ...rest } = parsed as Record<
-    string,
-    unknown
-  >
+  const fields = parsed as Record<string, unknown>
+  if (fields.kind === 'Decision') return parseDecision(fields)
+  const {
+    songId,
+    kind,
+    origin,
+    secondsIntoSong,
+    sessionId,
+    seq,
+    prevSongId,
+    ...rest
+  } = fields
+  const tagged = parseTrailTag({ sessionId, seq, prevSongId })
   if (
     Object.keys(rest).length > 0 ||
-    typeof songId !== 'string' ||
-    songId === '' ||
-    songId.length > MAX_SONG_ID_LENGTH ||
+    !tagged ||
+    !isSongId(songId) ||
     !isOneOf(STAT_ORIGINS, origin)
   ) {
     return undefined
   }
+  const trail = tagged.trail ? { trail: tagged.trail } : {}
   if (kind === 'Skip') {
     return typeof secondsIntoSong === 'number' &&
       Number.isInteger(secondsIntoSong) &&
       secondsIntoSong >= 0 &&
       secondsIntoSong <= MAX_SECONDS_INTO_SONG
-      ? { kind, songId, origin, secondsIntoSong }
+      ? { kind, songId, origin, secondsIntoSong, ...trail }
       : undefined
   }
   if (
@@ -186,7 +273,7 @@ export const parseStatEvent = (body: string): StatEvent | undefined => {
   ) {
     return undefined
   }
-  return { kind, songId, origin }
+  return { kind, songId, origin, ...trail }
 }
 
 export const createStatApi = ({
@@ -348,6 +435,49 @@ export const buildSkipBuckets = (skips: readonly SkipRow[]): SkipBucket[] => {
   })
 }
 
+export type OriginOutcome = Readonly<{
+  origin: StatOrigin
+  plays: number
+  finishes: number
+  skips: number
+  medianSecondsIntoSkip: number | null
+}>
+
+export const buildOriginOutcomes = (
+  counts: readonly OutcomeCount[],
+  skipSeconds: readonly OriginSkip[],
+): OriginOutcome[] =>
+  STAT_ORIGINS.map(origin => {
+    const countOf = (kind: OutcomeCount['kind']) =>
+      counts.find(row => row.origin === origin && row.kind === kind)?.count ?? 0
+    return {
+      origin,
+      plays: countOf('Play'),
+      finishes: countOf('Finish'),
+      skips: countOf('Skip'),
+      medianSecondsIntoSkip: medianOf(
+        skipSeconds
+          .filter(row => row.origin === origin)
+          .map(({ secondsIntoSong }) => secondsIntoSong),
+      ),
+    }
+  })
+
+export type TransitionReport = TransitionRow &
+  Readonly<{ prevTitle: string | null; title: string | null }>
+
+export const buildTransitions = (
+  rows: readonly TransitionRow[],
+  songs: readonly SongForStats[],
+): TransitionReport[] => {
+  const known = new Map(songs.map(song => [song.songId, song]))
+  return rows.map(row => ({
+    ...row,
+    prevTitle: known.get(row.prevSongId)?.title ?? null,
+    title: known.get(row.songId)?.title ?? null,
+  }))
+}
+
 export const parseReportDays = (raw: string | null): number | undefined => {
   if (raw === null) return DEFAULT_REPORT_DAYS
   if (!/^\d{1,4}$/.test(raw)) return undefined
@@ -425,24 +555,120 @@ export const createStatReport = ({
     try {
       const totals = store.totalsSince(since)
       const skips = store.skipsSince(since)
+      const transitions = store.transitionsSince(since)
       const ids = [
-        ...new Set([...totals, ...skips].map(({ songId }) => songId)),
+        ...new Set([
+          ...[...totals, ...skips].map(({ songId }) => songId),
+          ...transitions.flatMap(row => [row.prevSongId, row.songId]),
+        ]),
       ]
+      const known = findSongs(ids)
       return {
         status: 200,
         body: {
           days,
           since,
-          ...buildStatReport(totals, skips, findSongs(ids)),
+          ...buildStatReport(totals, skips, known),
           daily: buildDailySeries(store.dailySince(since), since, today),
           skipBuckets: buildSkipBuckets(skips),
           skipBucketSeconds: SKIP_BUCKET_SECONDS,
           skipBucketCount: SKIP_BUCKET_COUNT,
+          outcomes: buildOriginOutcomes(
+            store.outcomeCountsSince(since),
+            store.skipSecondsSince(since),
+          ),
+          transitions: buildTransitions(transitions, known),
+          transitionMinPlays: MIN_TRANSITION_PLAYS,
         },
       }
     } catch (error) {
       console.error('Stats report error:', error)
       return failure(500, 'Could not read the statistics')
+    }
+  }
+}
+
+export type NdjsonReply = Readonly<{ status: 200; lines: Iterable<string> }>
+
+const PAGE_START: ExportCursor = { sessionId: '', seq: -1 }
+
+function* pagesOf<Row extends ExportCursor>(
+  nextPage: (after: ExportCursor) => Row[],
+): Generator<Row[]> {
+  for (
+    let page = nextPage(PAGE_START);
+    page.length > 0;
+    page = nextPage(page.at(-1) as Row)
+  ) {
+    yield page
+  }
+}
+
+export const createStatExport = ({
+  store,
+  findSongs,
+  now = () => new Date(),
+}: Readonly<{
+  store: StatStore
+  findSongs: (ids: readonly string[]) => readonly SongForStats[]
+  now?: () => Date
+}>) => {
+  return (
+    rawDays: string | null,
+    rawTable: string | null,
+  ): StatReply | NdjsonReply => {
+    const days = parseReportDays(rawDays)
+    if (days === undefined) {
+      return failure(400, `days is a whole number from 1 to ${MAX_REPORT_DAYS}`)
+    }
+    if (!isOneOf(EXPORT_TABLES, rawTable)) {
+      return failure(400, `table is one of ${EXPORT_TABLES.join(', ')}`)
+    }
+    const since = dayOf(new Date(now().getTime() - (days - 1) * DAY_MS))
+    return { status: 200, lines: exportLines(store, findSongs, since, rawTable) }
+  }
+}
+
+const exportLines = function* (
+  store: StatStore,
+  findSongs: (ids: readonly string[]) => readonly SongForStats[],
+  since: string,
+  table: ExportTable,
+): Generator<string> {
+  const lineOf = (row: object) => `${JSON.stringify(row)}\n`
+  const joined = <Row extends Readonly<{ prevSongId: string | null }>>(
+    page: readonly Row[],
+    songIdOf: (row: Row) => string,
+  ) => {
+    const ids = page.flatMap(row =>
+      row.prevSongId ? [songIdOf(row), row.prevSongId] : [songIdOf(row)],
+    )
+    const songs = new Map(
+      findSongs([...new Set(ids)]).map(song => [song.songId, song]),
+    )
+    return (row: Row) => {
+      const song = songs.get(songIdOf(row))
+      return {
+        title: song?.title ?? null,
+        artist: song?.artist ?? null,
+        videoId: song?.videoId ?? null,
+        videoTitle: song?.videoTitle ?? null,
+        prevTitle: (row.prevSongId && songs.get(row.prevSongId)?.title) || null,
+      }
+    }
+  }
+  if (table === 'events') {
+    for (const page of pagesOf(after => store.eventsAfter(since, after))) {
+      const details = joined(page, row => row.songId)
+      for (const row of page) yield lineOf({ ...row, ...details(row) })
+    }
+    return
+  }
+  for (const page of pagesOf(after => store.decisionsAfter(since, after))) {
+    const details = joined(page, row => row.pickedSongId)
+    for (const row of page) {
+      const { title, artist, ...rest } = details(row)
+      yield lineOf({ ...row, pickedTitle: title, pickedArtist: artist, ...rest })
     }
   }
 }
