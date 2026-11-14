@@ -28,6 +28,22 @@ afterEach(() => {
   vi.unstubAllEnvs()
 })
 
+describe('statistics', () => {
+  it('forwards a stat post and passes the empty 204 back', async () => {
+    const sent = stubUpstream(() => new Response(null, { status: 204 }))
+    const response = await POST(
+      new Request('https://site.test/api/proxy?path=stats', {
+        method: 'POST',
+        body: '{"songId":"a","kind":"Play","origin":"Visitor"}',
+        headers: { 'content-type': 'application/json' },
+      }),
+    )
+    expect(sent[0]?.url).toBe('http://upstream.test/api/stats')
+    expect(response.status).toBe(204)
+    expect(await response.text()).toBe('')
+  })
+})
+
 describe('writes', () => {
   it('forwards method, body, content-type, authorization and the visitor IP', async () => {
     const sent = stubUpstream(ok)

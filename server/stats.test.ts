@@ -1,0 +1,402 @@
+// @vitest-environment node
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { DatabaseSync } from 'node:sqlite'
+import { afterEach, beforeEach, describe, expect, test } from 'vitest'
+
+import type { SongForStats } from './db.ts'
+import {
+  type StatEvent,
+  type StatStore,
+  createStatApi,
+  createStatReport,
+  openStatStore,
+  parseStatEvent,
+} from './stats.ts'
+
+let dir: string
+let dbPath: string
+let clock: Date
+const now = () => clock
+
+beforeEach(() => {
+  dir = mkdtempSync(join(tmpdir(), 'stats-test-'))
+  dbPath = join(dir, 'stats.db')
+  clock = new Date('2026-11-14T10:00:00Z')
+})
+
+afterEach(() => {
+  rmSync(dir, { recursive: true, force: true })
+})
+
+const SONGS: readonly SongForStats[] = [
+  {
+    songId: 'a1',
+    title: 'Alpha',
+    artist: 'Artist A',
+    videoId: 'v1',
+    videoTitle: 'Stream one',
+    videoUrl: 'https://youtu.be/v1',
+  },
+  {
+    songId: 'a2',
+    title: 'Beta',
+    artist: 'Artist B',
+    videoId: 'v1',
+    videoTitle: 'Stream one',
+    videoUrl: 'https://youtu.be/v1',
+  },
+  {
+    songId: 'b1',
+    title: 'Gamma',
+    artist: 'Artist C',
+    videoId: 'v2',
+    videoTitle: 'Stream two',
+    videoUrl: 'https://youtu.be/v2',
+  },
+]
+
+const findSongs = (ids: readonly string[]) =>
+  SONGS.filter(song => ids.includes(song.songId))
+const songExists = (id: string) => SONGS.some(song => song.songId === id)
+
+const post = (body: unknown) => JSON.stringify(body)
+const play = (songId: string, origin = 'Visitor') =>
+  post({ songId, kind: 'Play', origin })
+
+const record = (store: StatStore, ...events: StatEvent[]) =>
+  events.forEach(event => store.record(event))
+
+const counted = (
+  kind: 'Click' | 'Play' | 'Finish',
+  songId: string,
+  origin: 'Visitor' | 'Autoplay' = 'Visitor',
+): StatEvent => ({ kind, songId, origin })
+
+const skip = (
+  songId: string,
+  secondsIntoSong: number,
+  origin: 'Visitor' | 'Autoplay' = 'Visitor',
+): StatEvent => ({ kind: 'Skip', songId, origin, secondsIntoSong })
+
+const reportOf = (store: StatStore, days: string | null = null) => {
+  const answer = createStatReport({ store, findSongs, now })(days)
+  expect(answer.status).toBe(200)
+  return answer.body as {
+    days: number
+    since: string
+    songs: Array<Record<string, any>>
+    videos: Array<Record<string, any>>
+  }
+}
+
+describe('store', () => {
+  test('counts add up for each song, kind and origin, and stay apart', () => {
+    const store = openStatStore({ path: dbPath, now })
+    record(
+      store,
+      counted('Play', 'a1'),
+      counted('Play', 'a1'),
+      counted('Play', 'a1', 'Autoplay'),
+      counted('Finish', 'a1'),
+      counted('Click', 'a1'),
+      counted('Play', 'a2'),
+    )
+    const totals = store.totalsSince('2026-11-14')
+    const countOf = (songId: string, kind: string, origin: string) =>
+      totals.find(
+        total =>
+          total.songId === songId &&
+          total.kind === kind &&
+          total.origin === origin,
+      )?.count
+    expect(countOf('a1', 'Play', 'Visitor')).toBe(2)
+    expect(countOf('a1', 'Play', 'Autoplay')).toBe(1)
+    expect(countOf('a1', 'Finish', 'Visitor')).toBe(1)
+    expect(countOf('a1', 'Click', 'Visitor')).toBe(1)
+    expect(countOf('a2', 'Play', 'Visitor')).toBe(1)
+  })
+
+  test('counts persist across a reopen and split by UTC day', () => {
+    const first = openStatStore({ path: dbPath, now })
+    record(first, counted('Play', 'a1'))
+    clock = new Date('2026-11-15T00:00:01Z')
+    const reopened = openStatStore({ path: dbPath, now })
+    record(reopened, counted('Play', 'a1'), counted('Play', 'a1'))
+    const sum = (firstDay: string) =>
+      reopened
+        .totalsSince(firstDay)
+        .reduce((total, { count }) => total + count, 0)
+    expect(sum('2026-11-14')).toBe(3)
+    expect(sum('2026-11-15')).toBe(2)
+  })
+
+  test('a skip is its own row and never a counter', () => {
+    const store = openStatStore({ path: dbPath, now })
+    record(store, skip('a1', 42), skip('a1', 7, 'Autoplay'))
+    expect(store.totalsSince('2026-11-14')).toEqual([])
+    expect(store.skipsSince('2026-11-14')).toEqual([
+      { songId: 'a1', origin: 'Visitor', secondsIntoSong: 42 },
+      { songId: 'a1', origin: 'Autoplay', secondsIntoSong: 7 },
+    ])
+  })
+
+  test('the skip table holds the day and the seconds and nothing that identifies a visitor', () => {
+    const store = openStatStore({ path: dbPath, now })
+    record(store, skip('a1', 42))
+    const check = new DatabaseSync(dbPath, { readOnly: true })
+    const columns = check
+      .prepare('SELECT name FROM pragma_table_info(?)')
+      .all('skips')
+      .map(({ name }) => name)
+    expect(columns).toEqual(['day', 'song_id', 'origin', 'seconds_into_song'])
+    expect(check.prepare('SELECT day FROM skips').get()).toEqual({
+      day: '2026-11-14',
+    })
+  })
+})
+
+describe('parseStatEvent', () => {
+  test('accepts each kind with its origin', () => {
+    expect(parseStatEvent(play('a1', 'Autoplay'))).toEqual({
+      kind: 'Play',
+      songId: 'a1',
+      origin: 'Autoplay',
+    })
+    expect(
+      parseStatEvent(
+        post({
+          songId: 'a1',
+          kind: 'Skip',
+          origin: 'Visitor',
+          secondsIntoSong: 12,
+        }),
+      ),
+    ).toEqual({
+      kind: 'Skip',
+      songId: 'a1',
+      origin: 'Visitor',
+      secondsIntoSong: 12,
+    })
+  })
+
+  test.each([
+    ['not json', 'nope'],
+    ['not an object', '3'],
+    ['unknown kind', post({ songId: 'a1', kind: 'Hover', origin: 'Visitor' })],
+    ['unknown origin', post({ songId: 'a1', kind: 'Play', origin: 'Bot' })],
+    ['missing song', post({ kind: 'Play', origin: 'Visitor' })],
+    ['empty song', post({ songId: '', kind: 'Play', origin: 'Visitor' })],
+    [
+      'an autoplay click',
+      post({ songId: 'a1', kind: 'Click', origin: 'Autoplay' }),
+    ],
+    [
+      'a skip without seconds',
+      post({ songId: 'a1', kind: 'Skip', origin: 'Visitor' }),
+    ],
+    [
+      'a skip with fractional seconds',
+      post({
+        songId: 'a1',
+        kind: 'Skip',
+        origin: 'Visitor',
+        secondsIntoSong: 1.5,
+      }),
+    ],
+    [
+      'a skip with negative seconds',
+      post({
+        songId: 'a1',
+        kind: 'Skip',
+        origin: 'Visitor',
+        secondsIntoSong: -1,
+      }),
+    ],
+    [
+      'seconds on another kind',
+      post({
+        songId: 'a1',
+        kind: 'Play',
+        origin: 'Visitor',
+        secondsIntoSong: 3,
+      }),
+    ],
+    [
+      'an extra field',
+      post({ songId: 'a1', kind: 'Play', origin: 'Visitor', visitor: 'x' }),
+    ],
+  ])('rejects %s', (_label, body) => {
+    expect(parseStatEvent(body)).toBeUndefined()
+  })
+})
+
+describe('write api', () => {
+  const open = (options: { perIpPerHour?: number } = {}) => {
+    const store = openStatStore({ path: dbPath, now })
+    return {
+      store,
+      api: createStatApi({ store, songExists, now, ...options }),
+    }
+  }
+
+  test('records a known song and answers 204', () => {
+    const { store, api } = open()
+    expect(api({ ip: '1.1.1.1', body: play('a1') }).status).toBe(204)
+    expect(store.totalsSince('2026-11-14')).toEqual([
+      { songId: 'a1', kind: 'Play', origin: 'Visitor', count: 1 },
+    ])
+  })
+
+  test('rejects a song that is not in the archive and records nothing', () => {
+    const { store, api } = open()
+    expect(api({ ip: '1.1.1.1', body: play('ghost') }).status).toBe(404)
+    expect(store.totalsSince('2026-11-14')).toEqual([])
+  })
+
+  test('rejects a malformed body with 400 and records nothing', () => {
+    const { store, api } = open()
+    expect(
+      api({
+        ip: '1.1.1.1',
+        body: post({ songId: 'a1', kind: 'Play', origin: 'Bot' }),
+      }).status,
+    ).toBe(400)
+    expect(store.totalsSince('2026-11-14')).toEqual([])
+  })
+
+  test('limits each address per hour and lets it back in after the hour', () => {
+    const { api } = open({ perIpPerHour: 2 })
+    const statuses = () =>
+      ['1.1.1.1', '1.1.1.1', '1.1.1.1', '2.2.2.2'].map(
+        ip => api({ ip, body: play('a1') }).status,
+      )
+    expect(statuses()).toEqual([204, 204, 429, 204])
+    clock = new Date(clock.getTime() + 61 * 60 * 1000)
+    expect(api({ ip: '1.1.1.1', body: play('a1') }).status).toBe(204)
+  })
+
+  test('a store that fails answers 500 and leaks nothing', () => {
+    const broken: StatStore = {
+      record: () => {
+        throw new Error('disk is gone')
+      },
+      totalsSince: () => [],
+      skipsSince: () => [],
+    }
+    const api = createStatApi({ store: broken, songExists, now })
+    const answer = api({ ip: '1.1.1.1', body: play('a1') })
+    expect(answer.status).toBe(500)
+    expect(JSON.stringify(answer.body)).not.toContain('disk')
+  })
+})
+
+describe('report', () => {
+  test('sorts songs and videos by visitor plays, then autoplay plays', () => {
+    const store = openStatStore({ path: dbPath, now })
+    record(
+      store,
+      counted('Play', 'a1'),
+      counted('Play', 'a2'),
+      counted('Play', 'a2'),
+      counted('Play', 'b1'),
+      counted('Play', 'b1', 'Autoplay'),
+      counted('Play', 'b1', 'Autoplay'),
+      counted('Click', 'a1'),
+    )
+    const report = reportOf(store)
+    expect(report.songs.map(song => song.songId)).toEqual(['a2', 'b1', 'a1'])
+    const [stream] = report.videos
+    expect(report.videos.map(video => video.videoId)).toEqual(['v1', 'v2'])
+    expect(stream?.plays).toEqual({ Visitor: 3, Autoplay: 0 })
+    expect(stream?.clicks).toBe(1)
+  })
+
+  test('breaks a tie of plays by autoplay plays, then clicks', () => {
+    const store = openStatStore({ path: dbPath, now })
+    record(
+      store,
+      counted('Play', 'a1'),
+      counted('Play', 'a2'),
+      counted('Play', 'a2', 'Autoplay'),
+      counted('Play', 'b1'),
+      counted('Click', 'b1'),
+    )
+    expect(reportOf(store).songs.map(song => song.songId)).toEqual([
+      'a2',
+      'b1',
+      'a1',
+    ])
+  })
+
+  test('carries song and video titles from the archive', () => {
+    const store = openStatStore({ path: dbPath, now })
+    record(store, counted('Play', 'a1'))
+    const [song] = reportOf(store).songs
+    expect(song).toMatchObject({
+      title: 'Alpha',
+      artist: 'Artist A',
+      videoId: 'v1',
+    })
+    expect(reportOf(store).videos[0]).toMatchObject({
+      videoTitle: 'Stream one',
+    })
+  })
+
+  test('a song gone from the archive stays in the songs and out of the videos', () => {
+    const store = openStatStore({ path: dbPath, now })
+    record(store, counted('Play', 'removed'))
+    const report = reportOf(store)
+    expect(report.songs).toHaveLength(1)
+    expect(report.songs[0]).toMatchObject({ songId: 'removed', title: null })
+    expect(report.videos).toEqual([])
+  })
+
+  test('lists skips by origin with the median seconds into the song', () => {
+    const store = openStatStore({ path: dbPath, now })
+    record(
+      store,
+      skip('a1', 10),
+      skip('a1', 50),
+      skip('a1', 30, 'Autoplay'),
+      skip('a2', 40),
+      skip('a2', 20),
+      counted('Play', 'a1'),
+    )
+    const report = reportOf(store)
+    const a1 = report.songs.find(song => song.songId === 'a1')
+    const a2 = report.songs.find(song => song.songId === 'a2')
+    expect(a1?.skips).toEqual({ Visitor: 2, Autoplay: 1 })
+    expect(a1?.medianSecondsIntoSkip).toBe(30)
+    expect(a2?.skips).toEqual({ Visitor: 2, Autoplay: 0 })
+    expect(a2?.medianSecondsIntoSkip).toBe(30)
+    expect(report.videos[0]?.skips).toEqual({ Visitor: 4, Autoplay: 1 })
+  })
+
+  test('a song with plays and no skips has no median', () => {
+    const store = openStatStore({ path: dbPath, now })
+    record(store, counted('Play', 'a1'))
+    expect(reportOf(store).songs[0]?.medianSecondsIntoSkip).toBeNull()
+  })
+
+  test('days limits the window to today and the days before it', () => {
+    const store = openStatStore({ path: dbPath, now })
+    record(store, counted('Play', 'a1'), skip('a1', 5))
+    clock = new Date('2026-11-16T10:00:00Z')
+    record(store, counted('Play', 'a2'))
+    expect(reportOf(store, '1').songs.map(song => song.songId)).toEqual(['a2'])
+    expect(
+      reportOf(store, '3')
+        .songs.map(song => song.songId)
+        .sort(),
+    ).toEqual(['a1', 'a2'])
+    expect(reportOf(store, '3').since).toBe('2026-11-14')
+    expect(reportOf(store).days).toBe(30)
+  })
+
+  test.each(['0', '-1', 'x', '1.5', '99999'])('rejects days=%s', days => {
+    const store = openStatStore({ path: dbPath, now })
+    expect(createStatReport({ store, findSongs, now })(days).status).toBe(400)
+  })
+})
