@@ -65,8 +65,17 @@ def songs_from(videos: list[dict]) -> list[dict]:
     return songs
 
 
-def load_output() -> dict:
-    return json.loads(OUTPUT.read_text()) if OUTPUT.exists() else {}
+def load_output(path: Path = OUTPUT) -> dict:
+    return json.loads(path.read_text()) if path.exists() else {}
+
+
+def shard_of(songs: list[dict], index: int, count: int) -> list[dict]:
+    """The songs one worker of `count` takes.
+
+    Positions in the catalog decide the split, so two workers never take the
+    same song and together they take them all.
+    """
+    return [song for position, song in enumerate(songs) if position % count == index]
 
 
 def load_local() -> dict:
@@ -74,10 +83,10 @@ def load_local() -> dict:
     return json.loads(LOCAL.read_text()) if LOCAL.exists() else {}
 
 
-def save_output(entries: dict) -> None:
-    temporary = OUTPUT.with_suffix(".json.tmp")
+def save_output(entries: dict, path: Path = OUTPUT) -> None:
+    temporary = path.with_suffix(".json.tmp")
     temporary.write_text(json.dumps(entries, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
-    os.replace(temporary, OUTPUT)
+    temporary.replace(path)
 
 
 def isolate_vocals(song: dict, work: Path) -> Path:
@@ -153,15 +162,25 @@ def main() -> None:
     parser.add_argument("--only", nargs="+", metavar="SONG_ID", help="align only these songs")
     parser.add_argument("--limit", type=int, help="align at most this many songs")
     parser.add_argument("--cache", type=Path, default=DEFAULT_CACHE, help="work dir for audio, outside the repo")
+    parser.add_argument("--out", type=Path, default=OUTPUT, help="where to write the timed lyrics")
+    parser.add_argument("--shard", metavar="INDEX/COUNT", help="process only one worker's share of the catalog")
     args = parser.parse_args()
 
     import static_ffmpeg
     static_ffmpeg.add_paths()
 
     songs = songs_from(fetch_json(f"{args.base}/api/get-karaoke"))
+    if args.shard is not None:
+        try:
+            index, count = (int(part) for part in args.shard.split("/"))
+        except ValueError:
+            raise SystemExit("--shard takes INDEX/COUNT, such as 0/2")
+        if count < 1 or not 0 <= index < count:
+            raise SystemExit(f"--shard {args.shard}: index must be 0 to {count - 1}")
+        songs = shard_of(songs, index, count)
     if args.only:
         songs = [song for song in songs if song["id"] in set(args.only)]
-    entries = load_output()
+    entries = load_output(args.out)
     local = load_local()
     model = None
     aligned = 0
@@ -191,7 +210,7 @@ def main() -> None:
         except (subprocess.CalledProcessError, OSError) as error:
             print(f"  skipped: {error}", flush=True)
             continue
-        save_output(entries)
+        save_output(entries, args.out)
         aligned += 1
 
 
