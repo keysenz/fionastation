@@ -22,6 +22,14 @@ const server = createServer(async (req, res) => {
   const incoming = new URL(req.url, 'http://harness')
   const rewritten = /^\/api\/(.+)$/.exec(incoming.pathname)
   const handler = handlers[req.method]
+  if (!rewritten && req.method === 'GET') {
+    const page = await fetch(new URL(req.url, process.env.API_ORIGIN))
+    res.writeHead(page.status, {
+      'content-type': page.headers.get('content-type') ?? 'text/plain',
+    })
+    res.end(Buffer.from(await page.arrayBuffer()))
+    return
+  }
   if (!rewritten || !handler) {
     res.writeHead(rewritten ? 405 : 404).end()
     return
@@ -37,10 +45,17 @@ const server = createServer(async (req, res) => {
       body: hasBody ? await chunksOf(req) : undefined,
     }),
   )
-  res.writeHead(response.status, Object.fromEntries(response.headers))
+  const headers = Object.fromEntries(response.headers)
+  const cookies = response.headers.getSetCookie()
+  if (cookies.length > 0) {
+    headers['set-cookie'] = cookies
+  }
+  res.writeHead(response.status, headers)
   res.end(Buffer.from(await response.arrayBuffer()))
 })
 
 server.listen(port, '127.0.0.1', () => {
-  console.log(`proxy harness on http://127.0.0.1:${port} -> ${process.env.API_ORIGIN}`)
+  console.log(
+    `proxy harness on http://127.0.0.1:${port} -> ${process.env.API_ORIGIN}`,
+  )
 })

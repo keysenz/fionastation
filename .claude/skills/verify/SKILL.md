@@ -32,6 +32,25 @@ ssh -fN -M -S /tmp/fio-tunnel -L 13100:127.0.0.1:3100 devbox
 export BASE_URL=http://localhost:13100
 ```
 
+## Discord login
+
+Login never talks to the real Discord in a proof. `fake-discord.mjs` stands in for it. It approves every login at once as its current user, and `GET /fake/as?id=<17 to 20 digits>&name=<name>` changes that user for the next login.
+
+Start the fake, then launch the server with the same throwaway client values. `SITE_ORIGIN` is the origin the browser or `curl` uses, so set it to the proxy harness when you drive through the harness.
+
+```sh
+export DISCORD_CLIENT_ID=fake-client DISCORD_CLIENT_SECRET=fake-secret
+FAKE_DISCORD_PORT=4457 node .claude/skills/verify/fake-discord.mjs &
+DISCORD_API_BASE=http://127.0.0.1:4457 SITE_ORIGIN=http://127.0.0.1:3456 \
+  VERIFY_PORT=3456 .claude/skills/verify/launch.sh
+curl -sL -c jar -b jar http://127.0.0.1:3456/api/auth/discord/start -o /dev/null
+curl -s -b jar http://127.0.0.1:3456/api/auth/me
+```
+
+A write that uses the session cookie needs `-H "Origin: $SITE_ORIGIN"`. The session cookie carries `Secure` only when `SITE_ORIGIN` is https, so a local `curl` jar sends it back over http.
+
+To drive the Vercel proxy, start `proxy-harness.mjs` with `HARNESS_PORT`, `API_ORIGIN` set to the server and the same `PROXY_SECRET` as the server, and set `SITE_ORIGIN` to the harness origin. The owner routes for the bot live on the admin listener. Set `ADMIN_SECRET` and `ADMIN_PORT`, then call `/admin/owner/playlists` with `Authorization: Bearer $ADMIN_SECRET` and `X-Acting-Discord-Id`.
+
 ## Doctor
 
 Run this first whenever something looks wrong. It only reads.

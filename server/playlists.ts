@@ -21,6 +21,8 @@ export type PlaylistWrite = Readonly<{
 
 export type Account = Readonly<{ discordId: string; name: string }>
 
+export const isDiscordId = (id: string) => /^\d{17,20}$/.test(id)
+
 export type Creator =
   | Readonly<{ kind: 'Site'; ownerDiscordId: string | undefined }>
   | Readonly<{ kind: 'Discord'; discordId: string }>
@@ -464,12 +466,11 @@ const checkWrite = (
   const parsed = parseObject(body)
   if (parsed.kind === 'Refused') return parsed
   const { name, songIds, version } = parsed.value
-  if (typeof name !== 'string') return refuse(400, 'The name must be text')
+  const cleaned = checkName(name)
+  if (cleaned.kind === 'Refused') return cleaned
   if (!Array.isArray(songIds) || !songIds.every(isSongId)) {
     return refuse(400, 'songIds must be a list of song ids')
   }
-  const cleaned = checkName(name)
-  if (cleaned.kind === 'Refused') return cleaned
   if (songIds.length < 1 || songIds.length > MAX_ENTRIES) {
     return refuse(400, songCountError)
   }
@@ -678,8 +679,6 @@ export type AdminRequest = Readonly<{
 const MOD_ROUTE = /^\/admin\/playlists(?:\/([^/]+))?$/
 const OWNER_ROUTE =
   /^\/admin\/owner\/playlists(?:\/([^/]+)(?:\/(name|songs)(?:\/([^/]+))?)?)?$/
-const DISCORD_ID = /^\d{17,20}$/
-
 const digest = (value: string) => createHash('sha256').update(value).digest()
 
 export const createAdminApi = ({
@@ -814,7 +813,7 @@ export const createAdminApi = ({
     { method, actingDiscordId, body }: AdminRequest,
     [id, part, songId]: readonly (string | undefined)[],
   ) => {
-    if (actingDiscordId === undefined || !DISCORD_ID.test(actingDiscordId)) {
+    if (actingDiscordId === undefined || !isDiscordId(actingDiscordId)) {
       return failure(400, 'X-Acting-Discord-Id must be a Discord user id')
     }
     const owned = (

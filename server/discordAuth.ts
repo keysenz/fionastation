@@ -1,5 +1,6 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
 
+import { isDiscordId } from './playlists.ts'
 import type { Account, SessionStore, Viewer } from './playlists.ts'
 
 export const SESSION_COOKIE = 'fs_session'
@@ -8,7 +9,6 @@ const SESSION_SECONDS = 30 * 24 * 60 * 60
 const STATE_SECONDS = 10 * 60
 const DISCORD_TIMEOUT_MS = 10_000
 const MAX_NAME_LENGTH = 64
-const DISCORD_ID = /^\d{17,20}$/
 
 export type DiscordApp = Readonly<{
   clientId: string
@@ -64,7 +64,7 @@ const asObject = (value: unknown) =>
 
 const parseAccount = (user: Record<string, unknown>): Account | undefined => {
   const { id, username, global_name: globalName } = user
-  if (typeof id !== 'string' || !DISCORD_ID.test(id)) return undefined
+  if (typeof id !== 'string' || !isDiscordId(id)) return undefined
   const name =
     typeof globalName === 'string' && globalName !== '' ? globalName : username
   return typeof name === 'string' && name !== ''
