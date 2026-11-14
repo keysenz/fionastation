@@ -143,14 +143,20 @@ export const update = (model: Model, message: Message) =>
         Karaoke.changedLayers(model, searchOf(url)),
       )
       const isStaying = isSameRoute(model.route, nextRoute)
-      return isRadioRoute(nextRoute)
-        ? Update.combine(nextModel, [
-            isStaying ? (next: Model) => ({ model: next }) : enterRoute,
-            layers,
-          ])
-        : isStaying
-          ? { model: nextModel }
-          : enterRoute(nextModel)
+      const leftPlaylist =
+        model.route._tag === 'Playlist' && nextRoute._tag !== 'Playlist'
+          ? foldKaraokeStep(Karaoke.leftPlaylist)
+          : (next: Model) => ({ model: next })
+      const enter = (next: Model): UpdateReturn =>
+        isRadioRoute(nextRoute)
+          ? Update.combine(next, [
+              isStaying ? (staying: Model) => ({ model: staying }) : enterRoute,
+              layers,
+            ])
+          : isStaying
+            ? { model: next }
+            : enterRoute(next)
+      return Update.combine(nextModel, [leftPlaylist, enter])
     },
 
     GotKaraokeMessage: ({ message }) => foldKaraoke(model, message),

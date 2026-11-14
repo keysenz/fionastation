@@ -3,7 +3,7 @@ import { defineTaggedUnion } from 'foldkit/schema'
 import { modifyFields } from 'foldkit/struct'
 
 import { PlayableSong } from '../../domain.ts'
-import type { PlaylistEntry } from '../../playlist.ts'
+import { type PlaylistEntry, PlaylistId } from '../../playlist.ts'
 import { LoadFailure } from '../../youtube.ts'
 
 const HISTORY_LIMIT = 50
@@ -68,6 +68,7 @@ export const Setlist = Schema.Struct({
   history: Schema.Array(PlayableSong),
   maybeNowPlaying: Schema.Option(NowPlaying),
   playCount: Schema.Number,
+  maybeOpenedPlaylistId: Schema.Option(PlaylistId),
 })
 export type Setlist = typeof Setlist.Type
 
@@ -76,6 +77,7 @@ const PersistedSetlist = Schema.Struct({
   state: Schema.Struct({
     queue: Schema.Array(PlayableSong),
     history: Schema.Array(PlayableSong),
+    openedPlaylistId: Schema.optional(PlaylistId),
   }),
   version: Schema.Number,
 })
@@ -87,6 +89,7 @@ export const emptySetlist: Setlist = {
   history: [],
   maybeNowPlaying: Option.none(),
   playCount: 0,
+  maybeOpenedPlaylistId: Option.none(),
 }
 
 const startPlay = (setlist: Setlist, song: PlayableSong): Setlist =>
@@ -184,19 +187,23 @@ export const loadPlaylist = (
   setlist: Setlist,
   songs: ReadonlyArray<PlayableSong>,
   mode: PlaylistLoadMode,
+  id: PlaylistId,
 ): Setlist => {
   if (!Array.isReadonlyArrayNonEmpty(songs)) {
     return setlist
   }
+  const opened = modifyFields(setlist, {
+    maybeOpenedPlaylistId: () => Option.some(id),
+  })
   if (mode === 'Replace') {
-    return playNext(modifyFields(setlist, { queue: () => songs }))
+    return playNext(modifyFields(opened, { queue: () => songs }))
   }
   const heldIds = new Set([
     ...setlist.queue.map(song => song.id),
     ...Option.toArray(setlist.maybeNowPlaying).map(({ song }) => song.id),
   ])
   return enqueueAll(
-    setlist,
+    opened,
     Array.filter(songs, song => !heldIds.has(song.id)),
   )
 }
@@ -518,11 +525,15 @@ export const applySkip = (cleaned: Setlist, advance: Advance): Setlist =>
 
 export const toPersistedJson = (setlist: Setlist): string =>
   Schema.encodeSync(PersistedSetlistJson)({
-    state: { queue: setlist.queue, history: setlist.history },
+    state: {
+      queue: setlist.queue,
+      history: setlist.history,
+      openedPlaylistId: Option.getOrUndefined(setlist.maybeOpenedPlaylistId),
+    },
     version: 0,
   })
 
-/** Takes the saved queue and history, and keeps what is playing. With nothing
+/** Takes the saved queue, history and opened playlist, and keeps what is playing. With nothing
  *  usable saved, it changes nothing, because storage can be blocked or corrupt. */
 export const restoreSaved = (
   setlist: Setlist,
@@ -536,6 +547,8 @@ export const restoreSaved = (
         modifyFields(setlist, {
           queue: () => state.queue,
           history: () => state.history,
+          maybeOpenedPlaylistId: () =>
+            Option.fromUndefinedOr(state.openedPlaylistId),
         }),
     },
   )

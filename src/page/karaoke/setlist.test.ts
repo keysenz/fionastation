@@ -1,15 +1,19 @@
-import { DateTime, Option } from 'effect'
+import { DateTime, Option, Schema } from 'effect'
 import { expect, test } from 'vitest'
 
 import type { PlayableSong } from '../../domain.ts'
-import type { PlaylistEntry } from '../../playlist.ts'
+import { type PlaylistEntry, PlaylistId } from '../../playlist.ts'
 import {
   emptySetlist,
   enqueueAll,
   loadPlaylist,
   play,
   resolvePlaylist,
+  restoreSaved,
+  toPersistedJson,
 } from './setlist.ts'
+
+const listId = Schema.decodeSync(PlaylistId)('Ab3dE5gH')
 
 const makeSong = (
   id: string,
@@ -106,7 +110,7 @@ test('two entries that resolve to one song queue it once and count nothing', () 
 
 test('replacing the queue holds only the playlist and starts its first song', () => {
   const queued = enqueueAll(emptySetlist, [a!, b!])
-  const loaded = loadPlaylist(queued, [c!, d!], 'Replace')
+  const loaded = loadPlaylist(queued, [c!, d!], 'Replace', listId)
   expect(idsOf(loaded.queue)).toEqual(['d'])
   expect(Option.map(loaded.maybeNowPlaying, ({ song }) => song.id)).toEqual(
     Option.some('c'),
@@ -115,25 +119,55 @@ test('replacing the queue holds only the playlist and starts its first song', ()
 
 test('replacing keeps the song that was playing in history', () => {
   const playing = play(emptySetlist, a!)
-  const loaded = loadPlaylist(playing, [c!, d!], 'Replace')
+  const loaded = loadPlaylist(playing, [c!, d!], 'Replace', listId)
   expect(idsOf(loaded.history)).toEqual(['a'])
 })
 
 test('adding keeps the queue first, then the playlist in order, and starts nothing', () => {
   const queued = enqueueAll(emptySetlist, [a!, b!])
-  const loaded = loadPlaylist(queued, [c!, d!], 'Append')
+  const loaded = loadPlaylist(queued, [c!, d!], 'Append', listId)
   expect(idsOf(loaded.queue)).toEqual(['a', 'b', 'c', 'd'])
   expect(loaded.maybeNowPlaying).toEqual(queued.maybeNowPlaying)
 })
 
 test('adding drops songs already queued or playing', () => {
   const queued = play(enqueueAll(emptySetlist, [a!, b!]), c!)
-  const loaded = loadPlaylist(queued, [b!, c!, d!], 'Append')
+  const loaded = loadPlaylist(queued, [b!, c!, d!], 'Append', listId)
   expect(idsOf(loaded.queue)).toEqual(['a', 'b', 'd'])
 })
 
 test('loading no songs changes nothing in either mode', () => {
   const queued = enqueueAll(emptySetlist, [a!])
-  expect(loadPlaylist(queued, [], 'Replace')).toBe(queued)
-  expect(loadPlaylist(queued, [], 'Append')).toBe(queued)
+  expect(loadPlaylist(queued, [], 'Replace', listId)).toBe(queued)
+  expect(loadPlaylist(queued, [], 'Append', listId)).toBe(queued)
+})
+
+test('loading a playlist in either mode remembers which one was opened', () => {
+  for (const mode of ['Replace', 'Append'] as const) {
+    expect(
+      loadPlaylist(emptySetlist, [c!], mode, listId).maybeOpenedPlaylistId,
+    ).toEqual(Option.some(listId))
+  }
+})
+
+test('the opened playlist is saved with the queue and restored on reload', () => {
+  const loaded = loadPlaylist(
+    enqueueAll(emptySetlist, [a!]),
+    [c!, d!],
+    'Append',
+    listId,
+  )
+  const restored = restoreSaved(
+    emptySetlist,
+    Option.some(toPersistedJson(loaded)),
+  )
+  expect(restored.maybeOpenedPlaylistId).toEqual(Option.some(listId))
+  expect(idsOf(restored.queue)).toEqual(['a', 'c', 'd'])
+})
+
+test('a queue saved before playlists existed restores with no opened playlist', () => {
+  const old = JSON.stringify({ state: { queue: [], history: [] }, version: 0 })
+  expect(
+    restoreSaved(emptySetlist, Option.some(old)).maybeOpenedPlaylistId,
+  ).toEqual(Option.none())
 })

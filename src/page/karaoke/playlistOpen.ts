@@ -1,4 +1,4 @@
-import { Schema } from 'effect'
+import { Option, Schema } from 'effect'
 import { defineTaggedUnion } from 'foldkit/schema'
 
 import type { FetchFailure } from '../../api.ts'
@@ -25,10 +25,21 @@ export const PlaylistOpen = defineTaggedUnion({
   Fetching: { id: PlaylistId },
   Fetched: { playlist: Playlist },
   Asking: {
+    id: PlaylistId,
     name: PlaylistName,
     songs: Schema.NonEmptyArray(PlayableSong),
     unavailableCount: Schema.Number,
   },
-  Opened: { name: PlaylistName },
+  Opened: { id: PlaylistId, name: PlaylistName },
 })
 export type PlaylistOpen = typeof PlaylistOpen.Type
+
+export const playlistIdOf = (open: PlaylistOpen): Option.Option<PlaylistId> =>
+  PlaylistOpen.match(open, {
+    Idle: () => Option.none(),
+    AwaitingSavedSetlist: ({ id }) => Option.some(id),
+    Fetching: ({ id }) => Option.some(id),
+    Fetched: ({ playlist }) => Option.some(playlist.id),
+    Asking: ({ id }) => Option.some(id),
+    Opened: ({ id }) => Option.some(id),
+  })

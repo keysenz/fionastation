@@ -6,6 +6,9 @@ A visitor who opens `/p/<id>` gets that playlist on the Fio Radio page. With an 
 
 - `playlistOpen` seeds a playlist through `POST /api/playlists`, opens its link, and expects the first song in the player bar, the rest in `karaoke-storage` in order, the link kept in the address bar, and the name in the page title.
 - `playlistChoice` saves a two-song queue, opens a link, and expects the question (`role=dialog`, buttons by `data-playlist-choice`). Replace leaves only the playlist, Append keeps the queue first and starts nothing, Cancel and Escape change nothing.
+- `playlistNavigation` opens a link, goes to the song list and Back, reloads, and expects no question and an unchanged queue each time. A different link still asks.
+- `playlistSlowFetch` holds the playlist response in the page (an init script on `fetch`) and releases it later. It expects a question when the visitor started a song meanwhile, and nothing loaded when the visitor left for `/songs` first.
+- `playlistFocus` opens the question, cycles Tab and Shift+Tab through its three choices, and expects Escape to cancel and return focus to the info button.
 - `playlistGone` deletes a playlist, then opens its link and `/p/zzzzzzzz`. Each lands on `/` with `data-toast` `PlaylistDeleted` or `PlaylistNotFound`. `/p/short` answers 404.
 - `playlistUnavailable` queues a playlist that holds a gone song and expects it left out, with `data-toast` `PlaylistSongsUnavailable`.
 - `playlistFallback` rewrites one stored entry's song id in `PLAYLISTS_DB_PATH` and expects it to resolve by video and timestamp.

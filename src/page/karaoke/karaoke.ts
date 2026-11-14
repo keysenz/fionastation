@@ -70,6 +70,7 @@ import {
   PlaylistFailure,
   PlaylistOpen,
   playlistFailureOf,
+  playlistIdOf,
 } from './playlistOpen.ts'
 import {
   Advance,
@@ -126,6 +127,8 @@ export const SETLIST_PANE_ID = 'karaoke-setlist-pane'
 export const INFO_PANEL_ID = 'karaoke-info-panel'
 export const INFO_BUTTON_ID = 'karaoke-info-button'
 export const PLAYLIST_PROMPT_ID = 'karaoke-playlist-prompt'
+export const REPLACE_CHOICE = '[data-playlist-choice="Replace"]'
+export const CANCEL_CHOICE = '[data-playlist-choice="Cancel"]'
 
 // MODEL
 
@@ -194,8 +197,9 @@ export const Message = defineMessageUnion({
   },
   FailedFetchSongs: { error: Schema.String },
   SucceededFetchPlaylist: { playlist: Playlist },
-  FailedFetchPlaylist: { failure: PlaylistFailure },
+  FailedFetchPlaylist: { id: PlaylistId, failure: PlaylistFailure },
   OpenedPlaylist: { id: PlaylistId },
+  LeftPlaylist: {},
   ClickedReplaceQueueWithPlaylist: {},
   ClickedAddPlaylistToQueue: {},
   ClickedCancelPlaylist: {},
@@ -296,7 +300,10 @@ export const FetchPlaylist = Command.define('FetchPlaylist', {
     fetchJsonOrFailure(`/api/playlists/${id}`, Playlist).pipe(
       Effect.match({
         onFailure: failure =>
-          Message.FailedFetchPlaylist({ failure: playlistFailureOf(failure) }),
+          Message.FailedFetchPlaylist({
+            id,
+            failure: playlistFailureOf(failure),
+          }),
         onSuccess: playlist => Message.SucceededFetchPlaylist({ playlist }),
       }),
     ),
@@ -436,7 +443,7 @@ export const FocusInfoButton = Command.define('FocusInfoButton', {
 
 export const FocusPlaylistPrompt = Command.define('FocusPlaylistPrompt', {
   messages: [Message.CompletedFocusPlaylistPrompt],
-  execute: Dom.focus(`#${PLAYLIST_PROMPT_ID}`).pipe(
+  execute: Dom.focus(REPLACE_CHOICE).pipe(
     Effect.ignore,
     Effect.as(Message.CompletedFocusPlaylistPrompt()),
   ),
@@ -741,6 +748,9 @@ export const openedPlaylistNameOf = (model: Model): Option.Option<string> =>
 
 export const openedPlaylist = (model: Model, id: PlaylistId): UpdateReturn =>
   update(model, Message.OpenedPlaylist({ id }))
+
+export const leftPlaylist = (model: Model): UpdateReturn =>
+  update(model, Message.LeftPlaylist())
 
 /** Rereads saved data on every visit, because another tab may have changed the queue. */
 export const entered = (model: Model): UpdateReturn => {
@@ -1217,11 +1227,11 @@ const startPlaylist = (
   mode: PlaylistLoadMode,
 ): UpdateReturn => {
   const opened = modifyFields(model, {
-    playlistOpen: () => PlaylistOpen.Opened({ name: open.name }),
+    playlistOpen: () => PlaylistOpen.Opened({ id: open.id, name: open.name }),
   })
   const loaded = changeSetlist(
     opened,
-    loadPlaylist(opened.setlist, open.songs, mode),
+    loadPlaylist(opened.setlist, open.songs, mode, open.id),
   )
   return open.unavailableCount > 0
     ? withToast(loaded, dismissId =>
@@ -1232,6 +1242,14 @@ const startPlaylist = (
       )
     : loaded
 }
+
+const isBusy = (setlist: Setlist): boolean =>
+  setlist.queue.length > 0 || Option.isSome(setlist.maybeNowPlaying)
+
+const closePlaylistQuestion = (result: UpdateReturn): UpdateReturn => ({
+  model: result.model,
+  commands: [...(result.commands ?? []), FocusInfoButton()],
+})
 
 const settlePlaylist = (model: Model): UpdateReturn =>
   PlaylistOpen.matchOrElse(
@@ -1262,12 +1280,27 @@ const settlePlaylist = (model: Model): UpdateReturn =>
                 ),
               onNonEmpty: nonEmptySongs => {
                 const asking = PlaylistOpen.Asking({
+                  id: playlist.id,
                   name: playlist.name,
                   songs: nonEmptySongs,
                   unavailableCount,
                 })
-                return Array.isReadonlyArrayEmpty(model.setlist.queue)
-                  ? startPlaylist(model, asking, 'Replace')
+                if (!isBusy(model.setlist)) {
+                  return startPlaylist(model, asking, 'Replace')
+                }
+                return Option.contains(
+                  model.setlist.maybeOpenedPlaylistId,
+                  playlist.id,
+                )
+                  ? {
+                      model: modifyFields(model, {
+                        playlistOpen: () =>
+                          PlaylistOpen.Opened({
+                            id: playlist.id,
+                            name: playlist.name,
+                          }),
+                      }),
+                    }
                   : {
                       model: modifyFields(model, {
                         playlistOpen: () => asking,
@@ -1285,7 +1318,10 @@ const settlePlaylist = (model: Model): UpdateReturn =>
 const answerPlaylist = (model: Model, mode: PlaylistLoadMode): UpdateReturn =>
   PlaylistOpen.matchOrElse(
     model.playlistOpen,
-    { Asking: asking => startPlaylist(model, asking, mode) },
+    {
+      Asking: asking =>
+        closePlaylistQuestion(startPlaylist(model, asking, mode)),
+    },
     () => ({ model }),
   )
 
@@ -1305,11 +1341,23 @@ const updateModel = (model: Model, message: Message) =>
       }),
     }),
 
-    OpenedPlaylist: ({ id }) => ({
-      model: modifyFields(model, {
-        playlistOpen: () => PlaylistOpen.AwaitingSavedSetlist({ id }),
-      }),
-    }),
+    OpenedPlaylist: ({ id }) =>
+      Option.contains(playlistIdOf(model.playlistOpen), id)
+        ? { model }
+        : {
+            model: modifyFields(model, {
+              playlistOpen: () => PlaylistOpen.AwaitingSavedSetlist({ id }),
+            }),
+          },
+
+    LeftPlaylist: () =>
+      PlaylistOpen.guards.Opened(model.playlistOpen)
+        ? { model }
+        : {
+            model: modifyFields(model, {
+              playlistOpen: () => PlaylistOpen.Idle(),
+            }),
+          },
 
     SucceededFetchPlaylist: ({ playlist }) =>
       PlaylistOpen.matchOrElse(
@@ -1327,10 +1375,15 @@ const updateModel = (model: Model, message: Message) =>
         () => ({ model }),
       ),
 
-    FailedFetchPlaylist: ({ failure }) =>
-      PlaylistOpen.guards.Fetching(model.playlistOpen)
-        ? failPlaylist(model, failure)
-        : { model },
+    FailedFetchPlaylist: ({ id, failure }) =>
+      PlaylistOpen.matchOrElse(
+        model.playlistOpen,
+        {
+          Fetching: fetching =>
+            fetching.id === id ? failPlaylist(model, failure) : { model },
+        },
+        () => ({ model }),
+      ),
 
     ClickedReplaceQueueWithPlaylist: () => answerPlaylist(model, 'Replace'),
 
@@ -1338,11 +1391,11 @@ const updateModel = (model: Model, message: Message) =>
 
     ClickedCancelPlaylist: () =>
       PlaylistOpen.guards.Asking(model.playlistOpen)
-        ? {
+        ? closePlaylistQuestion({
             model: modifyFields(model, {
               playlistOpen: () => PlaylistOpen.Idle(),
             }),
-          }
+          })
         : { model },
 
     ClickedRetryFetch: () => fetchIfNeeded(model),

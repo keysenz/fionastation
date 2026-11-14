@@ -16,7 +16,9 @@ import {
   Message,
   type Model,
   MountPlayer,
+  CANCEL_CHOICE,
   PLAYLIST_PROMPT_ID,
+  REPLACE_CHOICE,
   SETLIST_PANE_ID,
   SONG_LIST_ID,
   Toast,
@@ -1866,6 +1868,14 @@ const toastView = (toast: Toast, h: HtmlBuilder<Message>): Html =>
     ],
   )
 
+const wrapFocus = (
+  from: 'Replace' | 'Cancel',
+): Option.Option<{ focusSelector: string; message: Message }> =>
+  Option.some({
+    focusSelector: from === 'Cancel' ? REPLACE_CHOICE : CANCEL_CHOICE,
+    message: Message.CompletedFocusPlaylistPrompt(),
+  })
+
 const promptButtonClass =
   'flex items-center justify-center gap-2 min-h-11 px-4 rounded-full border border-white/15 text-sm font-semibold transition'
 
@@ -1894,7 +1904,6 @@ const playlistPromptView = (
           h.Role('dialog'),
           h.AriaModal(true),
           h.AriaLabelledBy(`${PLAYLIST_PROMPT_ID}-title`),
-          h.Tabindex(-1),
           h.Class(
             'relative w-full max-w-md rounded-xl border border-white/10 bg-black/80 backdrop-blur-xl text-white shadow-2xl outline-none p-5 space-y-4',
           ),
@@ -1920,6 +1929,11 @@ const playlistPromptView = (
                 [
                   h.Type('button'),
                   h.DataAttribute('playlist-choice', 'Replace'),
+                  h.OnKeyDownFocus((key, { shiftKey }) =>
+                    key === 'Tab' && shiftKey
+                      ? wrapFocus('Replace')
+                      : Option.none(),
+                  ),
                   h.OnClick(Message.ClickedReplaceQueueWithPlaylist()),
                   h.Class(
                     twMerge(
@@ -1945,6 +1959,11 @@ const playlistPromptView = (
                 [
                   h.Type('button'),
                   h.DataAttribute('playlist-choice', 'Cancel'),
+                  h.OnKeyDownFocus((key, { shiftKey }) =>
+                    key === 'Tab' && !shiftKey
+                      ? wrapFocus('Cancel')
+                      : Option.none(),
+                  ),
                   h.OnClick(Message.ClickedCancelPlaylist()),
                   h.Class(
                     twMerge(

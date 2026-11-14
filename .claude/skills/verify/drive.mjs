@@ -24,6 +24,32 @@ const blockedStorageScript = join(mkdtempSync(join(tmpdir(), 'verify-')), 'block
 writeFileSync(blockedStorageScript, `Object.defineProperty(window, 'localStorage', { get() { throw new DOMException('blocked', 'SecurityError'); } });`);
 const blockedStoragePage = (label) => makeSession(`${label}-blocked`, { launchArgs: ['--init-script', blockedStorageScript] }).page();
 
+const heldPlaylistScript = join(mkdtempSync(join(tmpdir(), 'verify-')), 'held-playlist.js');
+writeFileSync(
+  heldPlaylistScript,
+  `(() => {
+  const real = window.fetch.bind(window);
+  let open;
+  const gate = new Promise((resolve) => (open = resolve));
+  window.__releasePlaylists = () => open();
+  window.__heldPlaylists = 0;
+  window.__arrivedPlaylists = 0;
+  window.fetch = async (input, init) => {
+    const url = typeof input === 'string' ? input : input.url;
+    if (!/\\/api\\/playlists\\/[A-Za-z0-9]{8}/.test(url)) return real(input, init);
+    window.__heldPlaylists++;
+    await gate;
+    try {
+      return await real(input, init);
+    } finally {
+      window.__arrivedPlaylists++;
+    }
+  };
+})();`,
+);
+
+const sleepMs = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 const holdYoutubeApi = async (page) => {
   const real = await (await fetch('https://www.youtube.com/iframe_api')).text();
   await page.routeBody('**/iframe_api*', `(function () { var run = function () { (0, eval)(${JSON.stringify(real)}); }; if (window.__youtubeApiReleased) run(); else window.__releaseYoutubeApi = run; })();`);
@@ -2090,6 +2116,112 @@ const journeys = {
     await step('playlist-choice', 'Escape answers like Cancel', async () => {
       await choiceButton(page, 'Replace').waitFor({ state: 'hidden' });
       if ((await savedQueueIds(page)).join() !== queued.map((s) => s.id).join()) throw new Error('the queue changed');
+    }, page);
+  },
+
+  async playlistNavigation(page) {
+    const songs = distinctByTitle(await livePlayables(), 5);
+    const first = await createPlaylist('Verify navigation', songs.slice(0, 3));
+    const second = await createPlaylist('Verify other', songs.slice(3, 5));
+    const dialogOpen = () => page.locator('[role="dialog"]').isVisible();
+    const queueNow = async () => (await savedQueueIds(page)).join();
+    const wantQueue = songs.slice(1, 3).map((s) => s.id).join();
+    await page.goto(`${BASE}/p/${first.id}`);
+    await waitForBarSong(page, songs[0]);
+    await page.waitForFunction((want) => JSON.parse(localStorage.getItem('karaoke-storage') ?? '{"state":{"queue":[]}}').state.queue.map((s) => s.id).join() === want, wantQueue);
+    await page.getByRole('link', { name: 'Song list' }).click();
+    await page.waitForFunction(() => location.pathname === '/songs');
+    await page.goBack();
+    await page.waitForFunction((id) => location.pathname === `/p/${id}` && document.title.includes('Verify navigation'), first.id);
+    await step('playlist-navigation', 'Back to the opened link from the song list asks nothing and changes nothing', async () => {
+      if (await dialogOpen()) throw new Error('the question came back');
+      if ((await queueNow()) !== wantQueue) throw new Error(`queue ${await queueNow()}`);
+      await page.waitForFunction((title) => document.querySelector('[data-player-bar] h3')?.textContent?.includes(title), songs[0].song_title);
+    }, page);
+    await page.reload();
+    await page.waitForFunction(() => document.title.includes('Verify navigation'));
+    await step('playlist-navigation', 'a reload of the opened link asks nothing and keeps the queue', async () => {
+      if (await dialogOpen()) throw new Error('the question came back after a reload');
+      if ((await queueNow()) !== wantQueue) throw new Error(`queue ${await queueNow()}`);
+    }, page);
+    await page.goto(`${BASE}/p/${second.id}`);
+    await step('playlist-navigation', 'a different link still asks', () => choiceButton(page, 'Replace').waitFor({ state: 'visible' }), page);
+  },
+
+  async playlistSlowFetch() {
+    const songs = distinctByTitle(await livePlayables(), 4);
+    const { id } = await createPlaylist('Verify slow', songs.slice(0, 2));
+    const slow = makeSession('slow', { launchArgs: ['--init-script', heldPlaylistScript] });
+    const page = slow.page();
+    const arrive = async () => {
+      await page.evaluate(() => window.__releasePlaylists());
+      await page.waitForFunction(() => window.__arrivedPlaylists >= 1);
+    };
+    const barSongIs = (song) => page.evaluate((title) => document.querySelector('[data-player-bar] h3')?.textContent?.includes(title) ?? false, song.song_title);
+    await page.goto(`${BASE}/p/${id}`);
+    await videoRows(page).first().waitFor();
+    await page.waitForFunction(() => window.__heldPlaylists >= 1);
+    await (await songRowOf(page, (await pageVideos()).body, songs[3])).click();
+    await waitForBarSong(page, songs[3]);
+    await arrive();
+    await step('playlist-slow-fetch', 'a playlist that arrives after the visitor started a song asks first', () => choiceButton(page, 'Replace').waitFor({ state: 'visible' }), page);
+    await step('playlist-slow-fetch', 'the song the visitor started keeps playing until they answer', async () => {
+      if (!(await barSongIs(songs[3]))) throw new Error('the bar changed');
+      if ((await savedQueueIds(page)).length !== 0) throw new Error('the queue changed');
+    }, page);
+
+    await page.goto(BASE + '/');
+    await page.evaluate(() => localStorage.clear());
+    await page.goto(`${BASE}/p/${id}`);
+    await videoRows(page).first().waitFor();
+    await page.waitForFunction(() => window.__heldPlaylists >= 1);
+    await page.getByRole('link', { name: 'Song list' }).click();
+    await page.waitForFunction(() => location.pathname === '/songs');
+    await arrive();
+    await sleepMs(500);
+    await step('playlist-slow-fetch', 'a playlist that arrives after the visitor left the link loads nothing', async () => {
+      if ((await savedQueueIds(page)).length !== 0) throw new Error('the playlist loaded into the queue');
+      if (await page.locator('[data-player-bar]').isVisible()) throw new Error('a song started');
+      if (await page.locator('[role="dialog"]').isVisible()) throw new Error('a question appeared on the song list');
+    }, page);
+  },
+
+  async playlistFocus(page) {
+    const live = distinctByTitle(await livePlayables(), 5);
+    const { id } = await createPlaylist('Verify focus', live.slice(2, 5));
+    await page.goto(BASE + '/');
+    await setSavedQueue(page, live.slice(0, 2));
+    await page.goto(`${BASE}/p/${id}`);
+    await choiceButton(page, 'Replace').waitFor({ state: 'visible' });
+    const focusedChoice = () => page.evaluate(() => document.activeElement?.getAttribute('data-playlist-choice') ?? `outside:${document.activeElement?.id || document.activeElement?.tagName}`);
+    const cycle = async (key, want) => {
+      const seen = [await focusedChoice()];
+      for (let i = 0; i < want.length; i++) {
+        await page.keyboard.press(key);
+        seen.push(await focusedChoice());
+      }
+      return seen;
+    };
+    await step('playlist-focus', 'the question takes focus on its first choice', async () => {
+      const at = await focusedChoice();
+      if (at !== 'Replace') throw new Error(at);
+    }, page);
+    await step('playlist-focus', 'Tab cycles through the three choices and never leaves the question', async () => {
+      const seen = await cycle('Tab', [1, 2, 3, 4]);
+      if (seen.join() !== 'Replace,Append,Cancel,Replace,Append') throw new Error(seen.join());
+    }, page);
+    await step('playlist-focus', 'Shift+Tab cycles backward and wraps from the first choice to the last', async () => {
+      await page.keyboard.press('Shift+Tab');
+      const atFirst = await focusedChoice();
+      await page.keyboard.press('Shift+Tab');
+      const wrapped = await focusedChoice();
+      if (atFirst !== 'Replace' || wrapped !== 'Cancel') throw new Error(`${atFirst} then ${wrapped}`);
+    }, page);
+    await page.keyboard.press('Escape');
+    await step('playlist-focus', 'Escape cancels, leaves the queue alone and returns focus to the page', async () => {
+      await choiceButton(page, 'Replace').waitFor({ state: 'hidden' });
+      if ((await savedQueueIds(page)).join() !== live.slice(0, 2).map((s) => s.id).join()) throw new Error('the queue changed');
+      await page.waitForFunction(() => document.activeElement?.id === 'karaoke-info-button');
     }, page);
   },
 
