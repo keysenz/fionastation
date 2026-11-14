@@ -8,9 +8,6 @@ services:
       DATABASE_PATH: /data/karaoke.db
       # Set in .env next to this file. Vercel sends the same value with every /api request.
       PROXY_SECRET: ${PROXY_SECRET:?set PROXY_SECRET in .env}
-      # Commissions. Both stay empty to switch them off, and then POST /api/inquiry answers 503. The
-      # database needs a writable volume, which belongs in docker-compose.override.yml like the
-      # playlists one. COMMISSIONS_SECRET keys the tracking links, so changing it breaks sent links.
       COMMISSIONS_DB_PATH: ${COMMISSIONS_DB_PATH:-}
       COMMISSIONS_SECRET: ${COMMISSIONS_SECRET:-}
       COMMISSIONS_IP_LIMIT_PER_HOUR: ${COMMISSIONS_IP_LIMIT_PER_HOUR:-5}

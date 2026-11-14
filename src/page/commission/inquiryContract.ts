@@ -18,11 +18,8 @@ import {
   quoteVoice,
 } from './pricing.ts'
 
-// NOTE: server/ imports this file at runtime, so keep it free of Foldkit and use `.ts` in relative imports.
-
 export const MAX_TRACKS = 10
 
-/** An inquiry id, as the form makes it with `crypto.randomUUID()`. */
 export const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
@@ -43,7 +40,6 @@ export const DEADLINE_LABELS = {
   regular: '4-7 days (regular)',
 } as const
 
-/** The answer keys each form must send non-empty, as `spec.answers` names them. */
 export const REQUIRED_FIELDS: Readonly<
   Record<InquiryKind, ReadonlyArray<string>>
 > = {
@@ -148,11 +144,6 @@ const studioSelection = (fields: Fields): Option.Option<StudioSelection> =>
     firstCommission: yesNo(fields['first_commission']),
   })
 
-/**
- * Reads the form's answers back into a selection and prices it, so a stored quote never rests
- * on the client's own snapshot. `none` means the answers are not a selection the form can send.
- * `some(null)` means the kind has no price list.
- */
 export const quoteFromFields = (
   kind: InquiryKind,
   fields: Fields,

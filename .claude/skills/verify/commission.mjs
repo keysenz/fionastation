@@ -12,15 +12,13 @@ const sentQuote = c => c.quote;
 const check = (name, ok, detail = '') => { results.push({ name, ok, detail }); console.log(ok ? 'PASS' : 'FAIL', name, detail); };
 
 const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH });
-// NOTE: `failures` makes that many first posts answer 500 from the browser side, to prove the retry
-// reuses the inquiry id. Every other post reaches the real server.
-const newPage = async (failures = 0) => {
+const newPage = async (failFirstPosts = 0) => {
   const ctx = await browser.newContext({ viewport: { width: 1100, height: 900 } });
   const page = await ctx.newPage();
   const sent = [];
   const replies = [];
   let external = 0;
-  let left = failures;
+  let left = failFirstPosts;
   page.on('request', r => { if (r.method() === 'POST' && !r.url().startsWith(BASE)) external++; });
   page.on('response', async r => {
     if (r.url().endsWith('/api/inquiry') && r.request().method() === 'POST') replies.push({ status: r.status(), body: await r.text().catch(() => '') });

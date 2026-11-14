@@ -17,7 +17,6 @@ const TrackedEvent = Schema.Struct({
   at: Schema.String,
 })
 
-/** Read from GET /api/commission/:id. It carries no name or contact, by the route's contract. */
 export const Tracked = Schema.Struct({
   id: Schema.String,
   kind: InquiryKind,
@@ -97,7 +96,6 @@ export const FetchCommission = Command.define('FetchCommission', {
 
 export type UpdateReturn = Update.Return<Model, Message>
 
-/** A link without its token cannot be looked up, so it shows the same screen as an unknown one. */
 export const entered = (
   model: Model,
   id: string,
@@ -173,7 +171,6 @@ export const statusLabel = (status: string): string =>
 
 export const statusHint = (status: string): string => STATUS_HINTS[status] ?? ''
 
-/** `2026-11-14T10:00:00.000Z` reads as `2026-11-14 10:00 UTC`, the same for everyone. */
 export const whenLabel = (at: string): string =>
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(at)
     ? `${at.slice(0, 10)} ${at.slice(11, 16)} UTC`

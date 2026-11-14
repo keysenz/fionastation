@@ -33,15 +33,13 @@ export const InquiryPayload = Schema.Struct({
 })
 export type InquiryPayload = typeof InquiryPayload.Type
 
-/** A same-site path, so a reply can never point the Sent screen's link off the site. */
-export const TrackingUrl = Schema.String.check(
+export const SameSiteTrackingPath = Schema.String.check(
   Schema.isPattern(/^\/commission\/[0-9a-f-]{36}\?t=[A-Za-z0-9_-]+$/),
 )
 
-/** Body of a success reply from POST /api/inquiry. */
 export const InquiryReply = Schema.Struct({
   id: Schema.String,
-  trackingUrl: TrackingUrl,
+  trackingUrl: SameSiteTrackingPath,
 })
 
 export const snapshotOf = (quote: Quote): QuoteSnapshot =>

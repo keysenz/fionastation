@@ -139,7 +139,6 @@ export const CreateInquiryId = Command.define('CreateInquiryId', {
   ),
 })
 
-/** A sent inquiry stays sent when the reply is not the one we expect, only the link is missing. */
 export const trackingUrlOf = (body: unknown): Option.Option<string> =>
   Option.map(
     Schema.decodeUnknownOption(InquiryReply)(body),
