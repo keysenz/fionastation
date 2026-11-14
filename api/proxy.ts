@@ -53,7 +53,6 @@ async function forward(request: Request): Promise<Response> {
   for (const name of DROPPED_HEADERS) {
     responseHeaders.delete(name)
   }
-  // NOTE: the hop to devbox takes 1-3 s, so Vercel's CDN answers from cache and refreshes in the background; browsers still revalidate every load. Playlists change on every write and login answers differ per visitor, so they and every write skip it.
   if (request.method === 'GET' && upstream.ok && !UNCACHED_PATH.test(path)) {
     responseHeaders.set(
       'Vercel-CDN-Cache-Control',
