@@ -1657,7 +1657,6 @@ type OwnedOpened = Readonly<{
   maybeEditToken: Option.Option<EditToken>
 }>
 
-/** The visitor may edit the open playlist when this browser holds its edit token or the connected account owns it. */
 export const ownedOpenedOf = (model: Model): Option.Option<OwnedOpened> =>
   Option.flatMap(openedOf(model), opened => {
     const maybeEditToken = editTokenOf(model.mine, opened.id)

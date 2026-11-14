@@ -21,8 +21,6 @@ export type Account = typeof Account.Type
 export const NoAccount = Schema.Literals(['SignedOut', 'Unavailable'])
 export type NoAccount = typeof NoAccount.Type
 
-/** Only a 401 means "no account here". Every other answer, including the 503 of an
- *  unconfigured server and the 404 of a server without login, means login is not offered. */
 export const noAccountOf = (failure: FetchFailure): NoAccount =>
   failure._tag === 'Rejected' && failure.status === 401
     ? 'SignedOut'
@@ -110,7 +108,6 @@ export const withPlaylists = (
   playlists: ReadonlyArray<Listed>,
 ): Account => modifyPlaylists(account, () => playlists)
 
-/** Every playlist this browser can reach, the account's first. */
 export const reachablePlaylists = (
   account: Account,
   mine: ReadonlyArray<Owned>,
@@ -129,7 +126,6 @@ export const reachablePlaylists = (
   ]
 }
 
-/** Edit tokens the account does not own yet. Asking again changes nothing, so no page load needs to remember that it already did. */
 export const unclaimedTokens = (
   mine: ReadonlyArray<Owned>,
   listed: ReadonlyArray<Listed>,

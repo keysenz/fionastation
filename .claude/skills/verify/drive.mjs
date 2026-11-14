@@ -521,7 +521,6 @@ const waitUntilUp = async (url, ok) => {
   throw new Error(`${url} did not come up`);
 };
 
-// A second server wired to fake-discord.mjs, because the default server has no Discord login.
 const startDiscordStack = async () => {
   const first = Number(process.env.VERIFY_PORT ?? 3456) + 1;
   const [serverPort, fakePort, adminPort] = [first, first + 1, first + 2];
