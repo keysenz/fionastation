@@ -54,7 +54,14 @@ const json = (
 ): AuthReply => ({ kind: 'Json', status, body, cookies })
 const failure = (status: number, error: string) => json(status, { error })
 
-const tooManyLogins = failure(429, 'Too many login attempts. Try later.')
+const landOnPage = (
+  reason: 'state' | 'limit' | 'refused',
+  cookies: readonly string[] = [],
+): AuthReply => ({
+  kind: 'Redirect',
+  location: `/?login=${reason}`,
+  cookies,
+})
 
 const sha256 = (value: string) => createHash('sha256').update(value)
 
@@ -199,9 +206,7 @@ export const createDiscordAuth = ({
       returned === null ||
       !timingSafeEqual(sha256(sent).digest(), sha256(returned).digest())
     ) {
-      return json(400, { error: 'This login did not start in this browser' }, [
-        forgetState,
-      ])
+      return landOnPage('state', [forgetState])
     }
     const code = query.get('code')
     if (!code) {
@@ -209,9 +214,7 @@ export const createDiscordAuth = ({
     }
     const member = await signIn(app, code)
     if (!member) {
-      return json(502, { error: 'Discord login failed. Try again.' }, [
-        forgetState,
-      ])
+      return landOnPage('refused', [forgetState])
     }
     const previous = sessionHash(cookieHeader)
     if (previous !== undefined) sessions.end(previous)
@@ -246,11 +249,11 @@ export const createDiscordAuth = ({
     }
     switch (request.route) {
       case 'discord/start':
-        return allowLogin(request.ip) ? start(discord) : tooManyLogins
+        return allowLogin(request.ip) ? start(discord) : landOnPage('limit')
       case 'discord/callback':
         return allowLogin(request.ip)
           ? callback(discord, request)
-          : tooManyLogins
+          : landOnPage('limit', [stateCookie('', 0)])
       case 'me': {
         const member = account(request.cookie)
         return member ? json(200, member) : failure(401, 'Not connected')
