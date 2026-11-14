@@ -99,6 +99,13 @@ import {
   parseLayers,
 } from './layers.ts'
 import {
+  MAX_PICKED_MOODS,
+  Mood,
+  MoodPrompt,
+  initialMoodPrompt,
+  stepMoodPrompt,
+} from './moodPrompt.ts'
+import {
   Listen,
   PlayStat,
   type Standing,
@@ -275,6 +282,7 @@ export const Model = Schema.Struct({
   maybePlayhead: Schema.Option(Playhead),
   listens: Schema.Array(Listen),
   maybeTrail: Schema.Option(TrailSession),
+  moodPrompt: MoodPrompt,
   lyricsBySongId: Schema.Record(Schema.String, LyricsFetch),
   lyricsWaitCount: Schema.Number,
   lyricNudges: Nudges,
@@ -373,6 +381,9 @@ export const Message = defineMessageUnion({
   ClickedToggleInfo: {},
   ClickedCloseInfo: {},
   ClickedDismissToast: {},
+  ToggledMood: { mood: Mood },
+  SubmittedMoods: {},
+  DismissedMoodPrompt: {},
   ClickedToggleAutoplay: {},
   ClickedCycleRepeat: {},
   ChangedVolume: { level: Schema.Number },
@@ -429,6 +440,7 @@ export const Message = defineMessageUnion({
   CompletedWaitBeforeLoadTimeout: { playId: Schema.Number },
   CompletedWaitBeforeRetryLoad: { playId: Schema.Number },
   CompletedRecordStat: {},
+  CompletedRecordMoodVote: {},
 })
 export type Message = typeof Message.Type
 
@@ -1079,6 +1091,16 @@ export const RecordStat = Command.define('RecordStat', {
     }).pipe(Effect.ignore, Effect.as(Message.CompletedRecordStat())),
 })
 
+export const RecordMoodVote = Command.define('RecordMoodVote', {
+  args: { songId: Schema.String, moods: Schema.Array(Mood) },
+  messages: [Message.CompletedRecordMoodVote],
+  execute: ({ songId, moods }) =>
+    postWithoutReply('/api/stats', { songId, kind: 'Mood', moods }).pipe(
+      Effect.ignore,
+      Effect.as(Message.CompletedRecordMoodVote()),
+    ),
+})
+
 const TOAST_SECONDS = 6
 
 export const WaitBeforeDismissToast = Command.define('WaitBeforeDismissToast', {
@@ -1277,6 +1299,7 @@ export const init = (): Model => ({
   maybePlayhead: Option.none(),
   listens: [],
   maybeTrail: Option.none(),
+  moodPrompt: initialMoodPrompt(),
   lyricsBySongId: {},
   lyricsWaitCount: 0,
   lyricNudges: {},
@@ -2819,6 +2842,50 @@ const updateModel = (model: Model, message: Message) =>
       model: modifyFields(model, { maybeSkipToast: () => Option.none() }),
     }),
 
+    ToggledMood: ({ mood }) => ({
+      model: modifyFields(model, {
+        moodPrompt: prompt =>
+          MoodPrompt.matchOrElse(
+            prompt,
+            {
+              Asking: asking =>
+                MoodPrompt.Asking({
+                  ...asking,
+                  picked: Array.contains(asking.picked, mood)
+                    ? Array.filter(asking.picked, picked => picked !== mood)
+                    : asking.picked.length < MAX_PICKED_MOODS
+                      ? [...asking.picked, mood]
+                      : asking.picked,
+                }),
+            },
+            () => prompt,
+          ),
+      }),
+    }),
+
+    SubmittedMoods: () =>
+      MoodPrompt.matchOrElse(
+        model.moodPrompt,
+        {
+          Asking: ({ songId, picked }) =>
+            Array.isReadonlyArrayNonEmpty(picked)
+              ? {
+                  model: modifyFields(model, {
+                    moodPrompt: () => MoodPrompt.Done(),
+                  }),
+                  commands: [RecordMoodVote({ songId, moods: picked })],
+                }
+              : { model },
+        },
+        () => ({ model }),
+      ),
+
+    DismissedMoodPrompt: () => ({
+      model: modifyFields(model, { moodPrompt: () => MoodPrompt.Done() }),
+    }),
+
+    CompletedRecordMoodVote: () => ({ model }),
+
     CompletedWaitBeforeDismissToast: ({ dismissId }) => ({
       model: modifyFields(model, {
         maybeSkipToast: maybeToast =>
@@ -3278,6 +3345,8 @@ const withPlayStats = (
   return {
     model: modifyFields(result.model, {
       listens: () => step.listens,
+      moodPrompt: prompt =>
+        stepMoodPrompt(prompt, step.stats, standingOf(result.model)),
       maybeTrail: () => trailed.maybeTrail,
     }),
     ...(Array.isReadonlyArrayNonEmpty(stats) ||
