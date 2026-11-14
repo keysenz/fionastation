@@ -1163,6 +1163,78 @@ const journeys = {
       await timeNear(secondsOf(last.timestamp));
     }, page);
   },
+  async playStats(page) {
+    const adminPort = process.env.ADMIN_PORT ?? '3911';
+    const adminSecret = process.env.ADMIN_SECRET ?? 'verify-admin-secret';
+    const report = async () => (await fetch(`http://127.0.0.1:${adminPort}/stats?days=1`, { headers: { authorization: `Bearer ${adminSecret}` } })).json();
+    const songStat = async (song) => (await report()).songs.find((s) => s.songId === song.id);
+    const until = async (what, ready) => {
+      for (let i = 0; i < 40; i++) {
+        const seen = await ready();
+        if (seen) return seen;
+        await page.waitForTimeout(500);
+      }
+      throw new Error(`never saw ${what}: ${JSON.stringify((await report()).songs)}`);
+    };
+    const { body: videos } = await pageVideos();
+    const live = videos.filter((v) => !v.is_gone);
+    const video = live.find((v) => v.karaoke_song.length >= 3 && secondsOf(v.karaoke_song[1].timestamp) - secondsOf(v.karaoke_song[0].timestamp) > 20);
+    if (!video) throw new Error('no live video with three songs and a long first song');
+    const sorted = songRows([video]).toSorted((a, b) => secondsOf(a.timestamp) - secondsOf(b.timestamp));
+    const [first, second, third] = sorted;
+    const last = sorted.at(-1);
+    const seekTo = (seconds) =>
+      page.evaluate((to) => window.YT.get(document.querySelector('iframe[src*="youtube"]').id).seekTo(to, true), seconds);
+    const playheadPast = (seconds) =>
+      page.waitForFunction((want) => window.YT.get(document.querySelector('iframe[src*="youtube"]').id).getCurrentTime() >= want, seconds, { timeout: 30000 });
+    await page.goto(BASE + '/');
+    await videoRows(page).first().waitFor();
+
+    await step('playStats', 'a clicked song counts one click and, once it plays, one visitor play', async () => {
+      await (await songRowOf(page, videos, first)).click();
+      await playerReady(page);
+      await playVideo(page);
+      await videoLoads(page, [video.video_url], { startSeconds: secondsOf(first.timestamp), isPlaying: true });
+      const stat = await until('the first play', async () => (await songStat(first))?.plays.Visitor === 1 && (await songStat(first)));
+      if (stat.clicks !== 1 || stat.plays.Autoplay !== 0) throw new Error(JSON.stringify(stat));
+    }, page);
+
+    await step('playStats', 'a stream playing into its second song by itself finishes the first and plays the second', async () => {
+      await seekTo(secondsOf(second.timestamp) - 4);
+      await playheadPast(secondsOf(second.timestamp) + 1);
+      const stat = await until('the second play', async () => (await songStat(second))?.plays.Visitor === 1 && (await songStat(second)));
+      const before = await songStat(first);
+      if (before.finishes.Visitor !== 1 || before.plays.Visitor !== 1) throw new Error(JSON.stringify(before));
+      if (stat.clicks !== 0) throw new Error(`a play by itself counted a click: ${JSON.stringify(stat)}`);
+    }, page);
+
+    await step('playStats', 'Next partway through a song records one skip with the seconds into that song', async () => {
+      await page.waitForTimeout(3000);
+      await barButton(page, 'fa-step-forward').click();
+      const stat = await until('the skip', async () => (await songStat(second))?.skips.Visitor === 1 && (await songStat(second)));
+      const seconds = stat.medianSecondsIntoSkip;
+      if (!(seconds >= 3 && seconds <= 20)) throw new Error(`seconds into the song: ${seconds}`);
+      if (stat.finishes.Visitor !== 0) throw new Error('a skipped song counted as finished');
+      await until('the third song playing', async () => (await songStat(third))?.plays.Visitor === 1);
+    }, page);
+
+    await step('playStats', 'Next on the last song lets the radio pick the next video, which counts as an autoplay play', async () => {
+      await (await songRowOf(page, videos, last)).click();
+      await page.locator('[data-player-bar]').getByRole('heading', { name: last.song_title }).first().waitFor({ timeout: 10000 });
+      await playerReady(page);
+      await playVideo(page);
+      await videoLoads(page, [video.video_url], { startSeconds: secondsOf(last.timestamp), isPlaying: true });
+      await page.waitForTimeout(2000);
+      await barButton(page, 'fa-step-forward').click();
+      const others = live.filter((v) => v.video_url !== video.video_url).map((v) => v.video_url);
+      await videoLoads(page, others, { isPlaying: true, timeout: 40000 });
+      const autoplayed = await until('an autoplay play', async () => (await report()).songs.find((s) => s.plays.Autoplay === 1));
+      if (autoplayed.plays.Visitor !== 0) throw new Error(JSON.stringify(autoplayed));
+      const lastStat = await songStat(last);
+      if (lastStat.skips.Visitor !== 1) throw new Error(JSON.stringify(lastStat));
+    }, page);
+    console.log(JSON.stringify(await report(), null, 2));
+  },
   async coverEnd(page) {
     const { body: videos } = await pageVideos();
     const live = displayOrder(videos).filter((v) => !v.is_gone);

@@ -270,10 +270,15 @@ function transitions(state) {
   return out;
 }
 
+function withoutPlayStats(updated) {
+  return {
+    model: { ...updated.model, listens: [] },
+    commands: (updated.commands ?? []).filter((command) => command.name !== 'RecordStat'),
+  };
+}
+
 function step(state, transition) {
-  const result = K.update(state.model, transition.message);
-  const model = result.model;
-  const commands = result.commands ?? [];
+  const { model, commands } = withoutPlayStats(K.update(state.model, transition.message));
   const isNewTimer = commands.some((command) => command.name === 'WaitBeforeDismissToast');
   let pending = state.pending
     .filter((_, index) => index !== transition.consumes)
@@ -864,11 +869,17 @@ if (!isMainThread) {
   const started = Date.now();
   // One worker per autoplay and repeat setting, because no step changes either.
   const indexes = CONFIGS.flatMap((config, index) => (names.some((name) => belongsTo(name, config)) ? [index] : []));
-  const results = await Promise.all(indexes.map((index) => new Promise((resolve, reject) => {
+  const JOBS = Number(flag('--jobs') ?? indexes.length);
+  const runWorker = (index) => new Promise((resolve, reject) => {
     const worker = new Worker(new URL(import.meta.url), { workerData: index, argv: args });
     worker.once('message', resolve);
     worker.once('error', reject);
-  })));
+  });
+  const results = [];
+  const queue = [...indexes];
+  await Promise.all(Array.from({ length: Math.max(1, JOBS) }, async () => {
+    for (let index = queue.shift(); index !== undefined; index = queue.shift()) results.push(await runWorker(index));
+  }));
   const total = (key) => results.reduce((sum, result) => sum + result[key], 0);
   console.log(`explored ${total('states')} states and ${total('steps')} steps to depth ${DEPTH} (lyrics scope ${LYRIC_DEPTH}), then ${total('walkSteps')} steps of random walks, in ${((Date.now() - started) / 1000).toFixed(1)}s`);
   const shortest = (key, name) => results.map((result) => new Map(result[key]).get(name)).filter(Boolean).sort((a, b) => a.steps.length - b.steps.length)[0];

@@ -21,6 +21,11 @@ export PLAYLISTS_DB_PATH
 echo "$PLAYLISTS_DB_PATH" >"$RUN/playlists.path"
 echo "playlists db $PLAYLISTS_DB_PATH"
 
+export STATS_DB_PATH="${STATS_DB_PATH:-$(mktemp -d /tmp/fio-stats-XXXXXX)/stats.db}"
+echo "$STATS_DB_PATH" >"$RUN/stats.path"
+echo "stats db $STATS_DB_PATH"
+export ADMIN_PORT="${ADMIN_PORT:-3911}" ADMIN_SECRET="${ADMIN_SECRET:-verify-admin-secret}"
+
 PLAYLISTS_IP_LIMIT_PER_HOUR="${PLAYLISTS_IP_LIMIT_PER_HOUR:-1000}" DATABASE_PATH="$PWD/$RUN/karaoke.db" PORT="$PORT" HOSTNAME=127.0.0.1 \
   setsid node --disable-warning=ExperimentalWarning server/main.ts >"$RUN/dev.log" 2>&1 &
 echo $! >"$RUN/pid"
