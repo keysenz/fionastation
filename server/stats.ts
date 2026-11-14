@@ -248,16 +248,16 @@ export const parseStatEvent = (body: string): StatEvent | undefined => {
     prevSongId,
     ...rest
   } = fields
-  const tagged = parseTrailTag({ sessionId, seq, prevSongId })
+  const tagParse = parseTrailTag({ sessionId, seq, prevSongId })
   if (
     Object.keys(rest).length > 0 ||
-    !tagged ||
+    tagParse._tag === 'Invalid' ||
     !isSongId(songId) ||
     !isOneOf(STAT_ORIGINS, origin)
   ) {
     return undefined
   }
-  const trail = tagged.trail ? { trail: tagged.trail } : {}
+  const trail = tagParse._tag === 'Tagged' ? { trail: tagParse.trail } : {}
   if (kind === 'Skip') {
     return typeof secondsIntoSong === 'number' &&
       Number.isInteger(secondsIntoSong) &&

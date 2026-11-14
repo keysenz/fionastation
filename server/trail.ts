@@ -108,21 +108,29 @@ type TrailFields = Readonly<{
   prevSongId?: unknown
 }>
 
+export type TrailParse =
+  | Readonly<{ _tag: 'Invalid' }>
+  | Readonly<{ _tag: 'Untagged' }>
+  | Readonly<{ _tag: 'Tagged'; trail: TrailTag }>
+
 export const parseTrailTag = ({
   sessionId,
   seq,
   prevSongId,
-}: TrailFields): Readonly<{ trail: TrailTag | undefined }> | undefined => {
+}: TrailFields): TrailParse => {
   if (
     sessionId === undefined &&
     seq === undefined &&
     prevSongId === undefined
   ) {
-    return { trail: undefined }
+    return { _tag: 'Untagged' }
   }
-  if (!isSessionId(sessionId) || !isSeq(seq)) return undefined
-  if (prevSongId !== undefined && !isSongId(prevSongId)) return undefined
+  if (!isSessionId(sessionId) || !isSeq(seq)) return { _tag: 'Invalid' }
+  if (prevSongId !== undefined && !isSongId(prevSongId)) {
+    return { _tag: 'Invalid' }
+  }
   return {
+    _tag: 'Tagged',
     trail: {
       sessionId: sessionId.toLowerCase(),
       seq,
@@ -140,7 +148,7 @@ export const parseDecision = (
   if (
     kind !== 'Decision' ||
     Object.keys(rest).length > 0 ||
-    !parsed?.trail ||
+    parsed._tag !== 'Tagged' ||
     !isSongId(songId) ||
     typeof policy !== 'string' ||
     !Object.hasOwn(POLICY_PROPENSITY, policy) ||
