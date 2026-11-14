@@ -29,6 +29,11 @@ const stubServer = (answer: (call: Call) => Response): ReadonlyArray<Call> => {
   return calls
 }
 
+const editTokensOf = (body: unknown): ReadonlyArray<string> =>
+  Schema.decodeUnknownSync(
+    Schema.Struct({ editTokens: Schema.Array(Schema.String) }),
+  )(body).editTokens
+
 const run = <A, E>(command: { effect: Effect.Effect<A, E> }) =>
   Effect.runPromise(command.effect)
 
@@ -45,8 +50,7 @@ test('claims go out in batches of at most 100 tokens, then the account list is r
   const calls = stubServer(({ method, body }) => {
     if (method === 'POST') {
       claimed = true
-      const tokens = (body as { editTokens: ReadonlyArray<string> }).editTokens
-      return Response.json({ claimed: tokens })
+      return Response.json({ claimed: editTokensOf(body) })
     }
     return Response.json({
       playlists: claimed ? [summary(0), summary(1), summary(2)] : [summary(0)],
@@ -55,11 +59,9 @@ test('claims go out in batches of at most 100 tokens, then the account list is r
   const owned = Array.from({ length: 250 }, (_, index) => ownedAt(index))
   const message = await run(LoadAccountPlaylists({ owned }))
   const posts = calls.filter(({ method }) => method === 'POST')
-  expect(
-    posts.map(
-      ({ body }) => (body as { editTokens: unknown[] }).editTokens.length,
-    ),
-  ).toEqual([100, 100, 49])
+  expect(posts.map(({ body }) => editTokensOf(body).length)).toEqual([
+    100, 100, 49,
+  ])
   expect(calls.map(({ method }) => method)).toEqual([
     'GET',
     'POST',
