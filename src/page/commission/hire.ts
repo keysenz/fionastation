@@ -25,7 +25,9 @@ import {
 } from './pricing'
 import {
   type Choice,
+  type StepBody,
   agreeBox,
+  fieldOf,
   quoteCard,
   radioPills,
   reviewList,
@@ -201,17 +203,6 @@ const priceTable = (h: HtmlBuilder<Message>): Html =>
       ),
     ),
   )
-
-type StepBody = (model: Model, h: HtmlBuilder<Message>) => ReadonlyArray<Html>
-
-const fieldOf =
-  (model: Model) =>
-  (field: string, label: string, required: boolean = false) => ({
-    field,
-    label,
-    model,
-    required,
-  })
 
 const STEP_BODIES: Readonly<Record<string, StepBody>> = {
   you: (model, h) => {

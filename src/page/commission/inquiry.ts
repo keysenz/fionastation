@@ -58,6 +58,10 @@ export const OptionalLink = Schema.Union([
   Schema.String.check(Schema.isPattern(/^https?:\/\/\S+\.\S+$/)),
 ])
 
+export const Link = Schema.String.check(
+  Schema.isPattern(/^https?:\/\/\S+\.\S+$/),
+)
+
 export const Agreed = Schema.Literal('yes')
 
 const stepAt = (spec: FormSpec, index: number): Step | undefined =>

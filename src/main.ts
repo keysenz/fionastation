@@ -7,6 +7,7 @@ import { modifyFields } from 'foldkit/struct'
 import { Url, toString as urlToString } from 'foldkit/url'
 
 import * as Hire from './page/commission/hire'
+import * as Studio from './page/commission/studio'
 import * as Karaoke from './page/karaoke/karaoke'
 import { editTokenOfHash } from './page/karaoke/playlists'
 import { view as karaokeView } from './page/karaoke/view'
@@ -21,6 +22,7 @@ export const Model = Schema.Struct({
   route: AppRoute,
   karaoke: Karaoke.Model,
   songs: Songs.Model,
+  studio: Studio.Model,
   hire: Hire.Model,
 })
 export type Model = typeof Model.Type
@@ -34,6 +36,7 @@ export const Message = defineMessageUnion({
   ChangedUrl: { url: Url },
   GotKaraokeMessage: { message: Karaoke.Message },
   GotSongsMessage: { message: Songs.Message },
+  GotStudioMessage: { message: Studio.Message },
   GotHireMessage: { message: Hire.Message },
 })
 export type Message = typeof Message.Type
@@ -107,6 +110,16 @@ const hireChild = {
 
 const foldHire = Update.foldChild({ update: Hire.update, ...hireChild })
 
+const studioChild = {
+  read: (model: Model) => Option.some(model.studio),
+  write: (model: Model, nextStudio: Studio.Model) =>
+    modifyFields(model, { studio: () => nextStudio }),
+  toParentMessage: (message: Studio.Message): Message =>
+    Message.GotStudioMessage({ message }),
+}
+
+const foldStudio = Update.foldChild({ update: Studio.update, ...studioChild })
+
 export const subscriptions = Subscription.lift(Karaoke.subscriptions)<
   Model,
   Message
@@ -135,6 +148,7 @@ const enterRoute =
           foldKaraokeEntered,
         ]),
       Songs: () => foldSongsEntered(model),
+      Studio: () => ({ model }),
       Hire: () => ({ model }),
     })
 
@@ -152,6 +166,7 @@ const pickUpEditToken =
         }),
       Radio: () => ({ model }),
       Songs: () => ({ model }),
+      Studio: () => ({ model }),
       Hire: () => ({ model }),
       NotFound: () => ({ model }),
     })
@@ -198,6 +213,7 @@ export const update = (model: Model, message: Message) =>
 
     GotKaraokeMessage: ({ message }) => foldKaraoke(model, message),
     GotSongsMessage: ({ message }) => foldSongs(model, message),
+    GotStudioMessage: ({ message }) => foldStudio(model, message),
     GotHireMessage: ({ message }) => foldHire(model, message),
   })
 
@@ -208,6 +224,7 @@ export const init: Runtime.RoutingApplicationInit<Model, Message> = url => {
     route: urlToAppRoute(url),
     karaoke: Karaoke.init(),
     songs: Songs.init(),
+    studio: Studio.init(),
     hire: Hire.init(),
   }
   return isRadioRoute(start.route)
@@ -244,6 +261,14 @@ const routeView = (
         toParentMessage: message => Message.GotSongsMessage({ message }),
       }),
     ],
+    Studio: () => [
+      h.submodel({
+        slotId: 'studio',
+        model: model.studio,
+        view: Studio.view,
+        toParentMessage: message => Message.GotStudioMessage({ message }),
+      }),
+    ],
     Hire: () => [
       h.submodel({
         slotId: 'hire',
@@ -257,6 +282,7 @@ const routeView = (
 const titleOf = (model: Model): string =>
   AppRoute.match<string>(model.route, {
     Songs: () => 'Songs | Fio Radio',
+    Studio: () => 'Paopoa Studio | Fio Radio',
     Hire: () => "Hire Fio's voice | Fio Radio",
     Playlist: () =>
       Option.match(Karaoke.openedPlaylistNameOf(model.karaoke), {

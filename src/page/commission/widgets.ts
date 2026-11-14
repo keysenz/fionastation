@@ -1,7 +1,7 @@
 import { Array, Match, Option } from 'effect'
 import { type Html, type HtmlBuilder } from 'foldkit/html'
 
-import { hireRouter, radioRouter } from '../../route'
+import { hireRouter, radioRouter, studioRouter } from '../../route'
 import {
   type FormSpec,
   Message,
@@ -279,6 +279,20 @@ export const agreeBox = (
   )
 }
 
+export type StepBody = (
+  model: Model,
+  h: HtmlBuilder<Message>,
+) => ReadonlyArray<Html>
+
+export const fieldOf =
+  (model: Model) =>
+  (field: string, label: string, required: boolean = false) => ({
+    field,
+    label,
+    model,
+    required,
+  })
+
 // QUOTE
 
 export const quoteCard = (
@@ -397,11 +411,14 @@ export const reviewList = (
 
 // WIZARD
 
-type CommissionPage = 'hire'
+type CommissionPage = 'hire' | 'studio'
 
 const NAV_LINKS: ReadonlyArray<
   Readonly<{ page: CommissionPage; label: string; href: string }>
-> = [{ page: 'hire', label: "Hire Fio's voice", href: hireRouter() }]
+> = [
+  { page: 'hire', label: "Hire Fio's voice", href: hireRouter() },
+  { page: 'studio', label: 'Paopoa Studio', href: studioRouter() },
+]
 
 const commissionNav = (
   current: CommissionPage,
