@@ -271,11 +271,12 @@ function transitions(state) {
 }
 
 const NO_TRAIL = K.init().maybeTrail;
+const NO_MOOD_PROMPT = K.init().moodPrompt;
 
 function withoutPlayStats(updated) {
   return {
-    model: { ...updated.model, listens: [], maybeTrail: NO_TRAIL },
-    commands: (updated.commands ?? []).filter((command) => !['RecordStat', 'RecordDecision'].includes(command.name)),
+    model: { ...updated.model, listens: [], maybeTrail: NO_TRAIL, moodPrompt: NO_MOOD_PROMPT },
+    commands: (updated.commands ?? []).filter((command) => !['RecordStat', 'RecordDecision', 'RecordMoodVote'].includes(command.name)),
   };
 }
 

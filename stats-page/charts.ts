@@ -1,4 +1,4 @@
-import type { DayRow } from './report.ts'
+import type { DayRow, MoodDayRow } from './report.ts'
 
 const SVG_NS = 'http://www.w3.org/2000/svg'
 
@@ -143,6 +143,107 @@ export const timeSeries = (daily: readonly DayRow[]) => {
       line(skips, 'line-skips'),
       ...dots(skips, 'dot-skips'),
       ...labels,
+    ],
+  )
+}
+
+export const moodTimeSeries = (daily: readonly MoodDayRow[]) => {
+  const max = niceMax(Math.max(1, ...daily.map(day => day.votes)))
+  const slot = innerW / Math.max(daily.length, 1)
+  const barW = Math.max(Math.min(slot * 0.7, 36), 1)
+  const labelEvery = Math.max(1, Math.ceil(daily.length / 8))
+  const bars = daily.map((day, index) => {
+    const height = (day.votes / max) * innerH
+    const x = PAD.left + slot * index + slot / 2
+    return svgEl('g', { class: 'bars', 'data-day': day.day }, [
+      svgEl('rect', {
+        x: x - barW / 2,
+        y: PAD.top + innerH - height,
+        width: barW,
+        height,
+        class: 'bar-mood',
+      }),
+      svgEl('rect', {
+        x: x - slot / 2,
+        y: PAD.top,
+        width: slot,
+        height: innerH,
+        class: 'hit',
+      }),
+      title(`${day.day}: ${day.votes} mood votes`),
+    ])
+  })
+  const labels = daily.flatMap((day, index) =>
+    index % labelEvery === 0
+      ? [
+          svgEl(
+            'text',
+            {
+              x: PAD.left + slot * index + slot / 2,
+              y: H - 8,
+              class: 'axis middle',
+            },
+            [day.day.slice(5)],
+          ),
+        ]
+      : [],
+  )
+  return svgEl(
+    'svg',
+    {
+      viewBox: `0 0 ${W} ${H}`,
+      role: 'img',
+      'aria-label': 'Mood votes per day',
+      class: 'chart',
+      'data-chart': 'mood-daily',
+    },
+    [...frame(max, 'Mood votes per day'), ...bars, ...labels],
+  )
+}
+
+export const stackedBar = (
+  shares: ReadonlyArray<Readonly<{ mood: string; votes: number }>>,
+  label: string,
+  className: string,
+) => {
+  const total = shares.reduce((sum, share) => sum + share.votes, 0)
+  let offset = 0
+  const segments = shares.flatMap(({ mood, votes }) => {
+    if (votes === 0 || total === 0) return []
+    const width = (votes / total) * 100
+    const segment = svgEl(
+      'rect',
+      {
+        x: offset,
+        y: 0,
+        width,
+        height: 10,
+        class: `mood-${mood}`,
+        'data-mood-segment': mood,
+      },
+      [title(`${mood}: ${votes} (${Math.round((votes / total) * 100)}%)`)],
+    )
+    offset += width
+    return [segment]
+  })
+  return svgEl(
+    'svg',
+    {
+      viewBox: '0 0 100 10',
+      preserveAspectRatio: 'none',
+      role: 'img',
+      'aria-label': label,
+      class: className,
+    },
+    [
+      svgEl('rect', {
+        x: 0,
+        y: 0,
+        width: 100,
+        height: 10,
+        class: 'mood-empty',
+      }),
+      ...segments,
     ],
   )
 }
