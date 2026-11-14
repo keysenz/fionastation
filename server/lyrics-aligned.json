@@ -1,179 +1,2359 @@
 {
+  "031b639c-9f5f-5d81-b706-004ab04327bc": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lrclibId": 9812225,
+    "reason": "median probability 0.31 is too low",
+    "songTitle": "Rayuan Perempuan Gila",
+    "status": "Rejected"
+  },
+  "048471b5-188b-4aca-ad32-dc17861fd178": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lrclibId": 7659988,
+    "reason": "3 weak lines in a row, a section was probably skipped",
+    "songTitle": "Samurai Heart (Some Like It Hot!!)",
+    "status": "Rejected"
+  },
+  "070eff98-a28c-48fc-b567-21daa5994331": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lrclibId": 9051439,
+    "reason": "median probability 0.32 is too low",
+    "songTitle": "Tertawan Hati",
+    "status": "Rejected"
+  },
+  "07323ff7-c64b-4999-8204-b0d9bb6eb507": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lines": [
+      {
+        "atMs": 3100,
+        "text": "Walaupun diri ini menyukaimu"
+      },
+      {
+        "atMs": 6920,
+        "text": "Kamu s'perti tak tertarik kepadaku"
+      },
+      {
+        "atMs": 10860,
+        "text": "Siap patah hati kesekian kalinya (du-du-du)"
+      },
+      {
+        "atMs": 16720,
+        "text": "Yeah, yeah, yeah!"
+      },
+      {
+        "atMs": 18720,
+        "text": "Ketika kulihat di sekelilingku"
+      },
+      {
+        "atMs": 22660,
+        "text": "Ternyata banyak sekali gadis yang cantik"
+      },
+      {
+        "atMs": 26600,
+        "text": "Bunga yang tak menarik tak akan disadari (du-du-du)"
+      },
+      {
+        "atMs": 32760,
+        "text": "Yeah, yeah, yeah!"
+      },
+      {
+        "atMs": 35160,
+        "text": "Saat ku melamun, terdengar musik"
+      },
+      {
+        "atMs": 38880,
+        "text": "Mengalun di kafetaria"
+      },
+      {
+        "atMs": 42360,
+        "text": "Tanpa sadar, kuikuti iramanya"
+      },
+      {
+        "atMs": 46180,
+        "text": "Dan ujung jari pun mulai bergerak"
+      },
+      {
+        "atMs": 50240,
+        "text": "P'rasaanku ini tak dapat berhenti"
+      },
+      {
+        "atMs": 54360,
+        "text": "Come on, come on, come on, come on, baby!"
+      },
+      {
+        "atMs": 57100,
+        "text": "Tolong ramalkanlah"
+      },
+      {
+        "atMs": 58820,
+        "text": "Yang mencinta, Fortune Cookie"
+      },
+      {
+        "atMs": 62700,
+        "text": "Masa depan tidak akan seburuk itu"
+      },
+      {
+        "atMs": 66960,
+        "text": "Hei, hei, hei!"
+      },
+      {
+        "atMs": 69060,
+        "text": "Mengembangkan senyuman"
+      },
+      {
+        "atMs": 71900,
+        "text": "'Kan membawa keberuntungan"
+      },
+      {
+        "atMs": 75540,
+        "text": "Fortune Cookie berbentuk hati"
+      },
+      {
+        "atMs": 78440,
+        "text": "Nasib lebih baiklah dari hari ini"
+      },
+      {
+        "atMs": 82760,
+        "text": "Hei, hei, hei!"
+      },
+      {
+        "atMs": 84760,
+        "text": "Hei, hei, hei!"
+      },
+      {
+        "atMs": 87860,
+        "text": "Janganlah menyerah dalam menjalani hidup"
+      },
+      {
+        "atMs": 91520,
+        "text": "Akan datang keajaiban yang tak terduga"
+      },
+      {
+        "atMs": 95500,
+        "text": "Ku punya firasat 'tuk bisa saling mencinta denganmu"
+      },
+      {
+        "atMs": 101440,
+        "text": "Ingin ungkapkan p'rasaan padamu (p'rasaan padamu)"
+      },
+      {
+        "atMs": 111340,
+        "text": "Tetapi aku tak percaya diri (percaya diri)"
+      },
+      {
+        "atMs": 115420,
+        "text": "Kar'na reaksimu terbayang di benakku (du-du-du)"
+      },
+      {
+        "atMs": 120820,
+        "text": "Yeah, yeah, yeah!"
+      },
+      {
+        "atMs": 127540,
+        "text": "Yang punya kepribadian baik"
+      },
+      {
+        "atMs": 130960,
+        "text": "Penampilan itu menguntungkan"
+      },
+      {
+        "atMs": 135340,
+        "text": "Selalu hanya gadis cantik saja"
+      },
+      {
+        "atMs": 138780,
+        "text": "Yang 'kan dipilih menjadi nomor satu"
+      },
+      {
+        "atMs": 142700,
+        "text": "Please, please, please, oh, baby!"
+      },
+      {
+        "atMs": 145420,
+        "text": "Lihatlah diriku"
+      },
+      {
+        "atMs": 147400,
+        "text": "Yang mencinta, Fortune Cookie"
+      },
+      {
+        "atMs": 151280,
+        "text": "Cangkang itu, ayo coba pecahkan saja"
+      },
+      {
+        "atMs": 155340,
+        "text": "Hei, hei, hei!"
+      },
+      {
+        "atMs": 157700,
+        "text": "Apa yang 'kan terjadi"
+      },
+      {
+        "atMs": 160420,
+        "text": "Siapa pun tak ada yang tahu"
+      },
+      {
+        "atMs": 163120,
+        "text": "Air mata Fortune Cookie"
+      },
+      {
+        "atMs": 167020,
+        "text": "Aku mohon, jangan menjadi hal yang buruk"
+      },
+      {
+        "atMs": 171380,
+        "text": "Hei, hei, hei!"
+      },
+      {
+        "atMs": 173480,
+        "text": "Hei, hei, hei!"
+      },
+      {
+        "atMs": 176120,
+        "text": "Dunia ini 'kan dipenuhi oleh cinta"
+      },
+      {
+        "atMs": 180100,
+        "text": "Esok hari akan berhembus angin yang baru"
+      },
+      {
+        "atMs": 184000,
+        "text": "Yang membuat kita terlupa akan hal yang menyedihkan"
+      },
+      {
+        "atMs": 202160,
+        "text": "Come on, come on, come on, come on, baby!"
+      },
+      {
+        "atMs": 204460,
+        "text": "Tolong ramalkanlah"
+      },
+      {
+        "atMs": 206380,
+        "text": "Yang mencinta, Fortune Cookie"
+      },
+      {
+        "atMs": 210280,
+        "text": "Masa depan tidak akan seburuk itu"
+      },
+      {
+        "atMs": 214720,
+        "text": "Hei, hei, hei!"
+      },
+      {
+        "atMs": 216700,
+        "text": "Mengembangkan senyuman"
+      },
+      {
+        "atMs": 219480,
+        "text": "'Kan membawa keberuntungan"
+      },
+      {
+        "atMs": 222220,
+        "text": "Fortune Cookie berbentuk hati"
+      },
+      {
+        "atMs": 225940,
+        "text": "Nasib lebih baiklah dari hari ini"
+      },
+      {
+        "atMs": 230240,
+        "text": "Hei, hei, hei!"
+      },
+      {
+        "atMs": 232440,
+        "text": "Hei, hei, hei!"
+      },
+      {
+        "atMs": 235220,
+        "text": "Janganlah menyerah dalam menjalani hidup"
+      },
+      {
+        "atMs": 239080,
+        "text": "Akan datang keajaiban yang tak terduga"
+      },
+      {
+        "atMs": 243020,
+        "text": "Ku punya firasat 'tuk bisa saling mencinta denganmu"
+      }
+    ],
+    "lrclibId": 10465968,
+    "songTitle": "Fortune Cookie in Love",
+    "status": "Aligned"
+  },
+  "08ca4dbb-bb28-441e-bd0d-6f16b1be9165": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lines": [
+      {
+        "atMs": 5280,
+        "text": "Dering telfonku membuatku tersenyum di pagi hari"
+      },
+      {
+        "atMs": 14500,
+        "text": "Kau bercerita semalam kita bertemu dalam mimpi"
+      },
+      {
+        "atMs": 18350,
+        "text": ""
+      },
+      {
+        "atMs": 23760,
+        "text": "Entah mengapa aku merasakan hadirmu di sini"
+      },
+      {
+        "atMs": 33000,
+        "text": "Tawa candamu menghibur saat ku sendiri"
+      },
+      {
+        "atMs": 38660,
+        "text": ""
+      },
+      {
+        "atMs": 42560,
+        "text": "Aku di sini dan kau di sana"
+      },
+      {
+        "atMs": 46780,
+        "text": "Hanya berjumpa via suara"
+      },
+      {
+        "atMs": 51440,
+        "text": "Namun ku s'lalu menunggu"
+      },
+      {
+        "atMs": 54360,
+        "text": "Saat kita akan berjumpa"
+      },
+      {
+        "atMs": 57880,
+        "text": ""
+      },
+      {
+        "atMs": 60680,
+        "text": "Meski kau kini jauh di sana"
+      },
+      {
+        "atMs": 65320,
+        "text": "Kita memandang langit yang sama"
+      },
+      {
+        "atMs": 69940,
+        "text": "Jauh di mata"
+      },
+      {
+        "atMs": 71620,
+        "text": "Namun dekat di hati"
+      },
+      {
+        "atMs": 74290,
+        "text": ""
+      },
+      {
+        "atMs": 80360,
+        "text": "Dering telfonku membuatku tersenyum di pagi hari"
+      },
+      {
+        "atMs": 83840,
+        "text": ""
+      },
+      {
+        "atMs": 93040,
+        "text": "Tawa candamu menghibur saat ku sendiri, oh"
+      },
+      {
+        "atMs": 96430,
+        "text": ""
+      },
+      {
+        "atMs": 102700,
+        "text": "Aku di sini dan kau di sana"
+      },
+      {
+        "atMs": 106800,
+        "text": "Hanya berjumpa via suara"
+      },
+      {
+        "atMs": 111400,
+        "text": "Namun ku s'lalu menunggu"
+      },
+      {
+        "atMs": 114340,
+        "text": "Saat kita akan berjumpa"
+      },
+      {
+        "atMs": 117360,
+        "text": ""
+      },
+      {
+        "atMs": 120690,
+        "text": "Meski kau kini jauh di sana"
+      },
+      {
+        "atMs": 125300,
+        "text": "Kita memandang langit yang sama"
+      },
+      {
+        "atMs": 129880,
+        "text": "Jauh di mata"
+      },
+      {
+        "atMs": 131890,
+        "text": "Namun dekat di hati"
+      },
+      {
+        "atMs": 134390,
+        "text": ""
+      },
+      {
+        "atMs": 135570,
+        "text": "Ho-ho, aku di sini dan kau di sana"
+      },
+      {
+        "atMs": 138340,
+        "text": "Hanya berjumpa via suara"
+      },
+      {
+        "atMs": 143260,
+        "text": "Namun ku s'lalu menunggu"
+      },
+      {
+        "atMs": 144410,
+        "text": "Saat kita akan berjumpa"
+      },
+      {
+        "atMs": 147240,
+        "text": ""
+      },
+      {
+        "atMs": 180650,
+        "text": "Meski kau kini jauh di sana"
+      },
+      {
+        "atMs": 185350,
+        "text": "Kita memandang langit yang sama"
+      },
+      {
+        "atMs": 189910,
+        "text": "Jauh di mata"
+      },
+      {
+        "atMs": 191910,
+        "text": "Namun kau dekat di hati"
+      },
+      {
+        "atMs": 196270,
+        "text": "Jarak dan waktu takkan berarti"
+      },
+      {
+        "atMs": 199170,
+        "text": "Kar'na kau akan selalu di hati"
+      },
+      {
+        "atMs": 201660,
+        "text": ""
+      },
+      {
+        "atMs": 206490,
+        "text": "Bagai detak jantung yang kubawa"
+      },
+      {
+        "atMs": 212520,
+        "text": ""
+      },
+      {
+        "atMs": 213170,
+        "text": "Meski kau kini jauh di sana"
+      },
+      {
+        "atMs": 217530,
+        "text": "Kita memandang langit yang sama"
+      },
+      {
+        "atMs": 222250,
+        "text": "Jauh di mata"
+      },
+      {
+        "atMs": 224130,
+        "text": "Namun dekat di hati"
+      },
+      {
+        "atMs": 226940,
+        "text": ""
+      },
+      {
+        "atMs": 229150,
+        "text": "Dekat di hati"
+      },
+      {
+        "atMs": 234550,
+        "text": "Dekat di hati"
+      }
+    ],
+    "lrclibId": 34651718,
+    "songTitle": "Dekat di Hati",
+    "status": "Aligned"
+  },
   "09de370b-fe2f-4753-8634-2d5ddb95eafb": {
     "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
     "lines": [
       {
         "atMs": 2240,
-        "text": "空にある何かを見つめてたら"
+        "text": "Sora ni aru nan ka wo mitsumetetara"
       },
       {
         "atMs": 7660,
-        "text": "それは星だって君がおしえてくれた"
+        "text": "Sore wa hoshi da tte kimi ga oshiete kureta"
       },
       {
         "atMs": 12780,
-        "text": "まるでそれは僕らみたいに 寄り添ってる"
+        "text": "Marude sore wa bokura mitai ni yorisotteru"
       },
       {
         "atMs": 18140,
-        "text": "それを泣いたり笑ったり繋いでいく"
+        "text": "Sore wo nai tari warat tari tsunaide iku"
       },
       {
         "atMs": 23860,
-        "text": "何十回 何百回 ぶつかりあって"
+        "text": "Nanjuu kai nanbyaku kai butsukariatte"
       },
       {
         "atMs": 29100,
-        "text": "何十年 何百年 昔の光が"
+        "text": "Nanjuu nen nanbyaku nen mukashi no hikari ga"
       },
       {
         "atMs": 33880,
-        "text": "星自身も忘れたころに"
+        "text": "Hoshi jishin mo wasureta koro ni"
       },
       {
         "atMs": 39360,
-        "text": "僕らに届いてる"
+        "text": "Bokura ni todoiteru"
       },
       {
         "atMs": 44260,
-        "text": "僕ら見つけあって 手繰りあって 同じ空"
+        "text": "Bokura mitsuke atte teguri atte onaji sora"
       },
       {
         "atMs": 49380,
-        "text": "輝くのだって 二人だって 約束した"
+        "text": "Kagayaku no da tte futari da tte yakusoku shita"
       },
       {
         "atMs": 54780,
-        "text": "遥か遠く終わらないべテルギウス"
+        "text": "Haruka tooku owaranai be terugiusu"
       },
       {
         "atMs": 60120,
-        "text": "誰かに繋ぐ魔法"
+        "text": "Dare ka ni tsunagu mahou"
       },
       {
         "atMs": 65660,
-        "text": "僕ら 肩並べ 手取り合って 進んでく"
+        "text": "Bokura kata narabe te toriatte susundeku"
       },
       {
         "atMs": 70760,
-        "text": "辛い時だって 泣かないって 誓っただろう"
+        "text": "Tsurai toki da tte nakanai tte chikattadarou"
       },
       {
         "atMs": 76100,
-        "text": "遥か遠く終わらないべテルギウス"
+        "text": "Haruka tooku owaranai be terugiusu"
       },
       {
         "atMs": 81440,
-        "text": "君にも見えるだろう 祈りが"
+        "text": "Kimi ni mo mierudarou inori ga"
       },
       {
         "atMs": 88060,
-        "text": "記憶を辿るたび 蘇るよ"
+        "text": "Kioku wo tadoru tabi yomigaeru yo"
       },
       {
         "atMs": 95360,
-        "text": "君がいつだってそこに居てくれること"
+        "text": "Kimi ga itsu da tte soko ni ite kureru koto"
       },
       {
         "atMs": 100120,
-        "text": "まるでそれは星の光と 同じように"
+        "text": "Marude sore wa hoshi no hikari to onaji you ni"
       },
       {
         "atMs": 106060,
-        "text": "今日に泣いたり笑ったり繋いでいく"
+        "text": "Kyou ni nai tari warat tari tsunaide iku"
       },
       {
         "atMs": 111720,
-        "text": "何十回 何百回 ぶつかりあって"
+        "text": "Nanjuu kai nanbyaku kai butsukariatte"
       },
       {
         "atMs": 117040,
-        "text": "何十年 何百年 昔の光が"
+        "text": "Nanjuu nen nanbyaku nen mukashi no hikari ga"
       },
       {
         "atMs": 121940,
-        "text": "僕自身も忘れたころに"
+        "text": "Boku jishin mo wasureta koro ni"
       },
       {
         "atMs": 127360,
-        "text": "僕らを照らしてる"
+        "text": "Bokura wo terashiteru"
       },
       {
         "atMs": 132360,
-        "text": "僕ら見つけあって 手繰りあって 同じ空"
+        "text": "Bokura mitsuke atte teguri atte onaji sora"
       },
       {
         "atMs": 137420,
-        "text": "輝くのだって 二人だって 約束した"
+        "text": "Kagayaku no da tte futari da tte yakusoku shita"
       },
       {
         "atMs": 142820,
-        "text": "遥か遠く終わらないべテルギウス"
+        "text": "Haruka tooku owaranai be terugiusu"
       },
       {
         "atMs": 148140,
-        "text": "誰かに繋ぐ魔法"
+        "text": "Dare ka ni tsunagu mahou"
       },
       {
         "atMs": 154100,
-        "text": "どこまで いつまで 生きられるか"
+        "text": "Doko made itsu made ikirareru ka"
       },
       {
         "atMs": 159420,
-        "text": "君が不安になるたびに強がるんだ"
+        "text": "Kimi ga fuan ni naru tabi ni tsuyogaru n da"
       },
       {
         "atMs": 164060,
-        "text": "大丈夫 僕が横にいるよ"
+        "text": "Daijoubu boku ga yoko ni iru yo"
       },
       {
         "atMs": 169420,
-        "text": "見えない線を繋ごう"
+        "text": "Mienai sen wo tsunagou"
       },
       {
         "atMs": 175740,
-        "text": "僕ら見つけあって 手繰りあって 同じ空"
+        "text": "Bokura mitsuke atte teguri atte onaji sora"
       },
       {
         "atMs": 180420,
-        "text": "輝くのだって 二人だって 約束した"
+        "text": "Kagayaku no da tte futari da tte yakusoku shita"
       },
       {
         "atMs": 185500,
-        "text": "遥か遠く終わらないべテルギウス"
+        "text": "Haruka tooku owaranai be terugiusu"
       },
       {
         "atMs": 190820,
-        "text": "誰かに繋ぐ魔法"
+        "text": "Dare ka ni tsunagu mahou"
       },
       {
         "atMs": 196360,
-        "text": "僕ら 肩並べ 手取り合って 進んでく"
+        "text": "Bokura kata narabe te toriatte susundeku"
       },
       {
         "atMs": 201460,
-        "text": "辛い時だって 二人だって 誓っただろう"
+        "text": "Tsurai toki da tte futari da tte chikattadarou"
       },
       {
         "atMs": 206540,
-        "text": "遥か遠く終わらないべテルギウス"
+        "text": "Haruka tooku owaranai be terugiusu"
       },
       {
         "atMs": 212080,
-        "text": "君にも見えるだろう 祈りが"
+        "text": "Kimi ni mo mierudarou inori ga"
       },
       {
         "atMs": 221860,
-        "text": "空にある何かを見つめてたら"
+        "text": "Sora ni aru nan ka wo mitsumetetara"
       },
       {
         "atMs": 226120,
-        "text": "それは星だって君がおしえてくれた"
+        "text": "Sore wa hoshi da tte kimi ga oshiete kureta"
       }
     ],
     "lrclibId": 36491869,
     "songTitle": "Betelgeuse",
     "status": "Aligned"
+  },
+  "0b21f210-5ddb-4c29-9c5c-41b4f8311d5f": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lines": [
+      {
+        "atMs": 19540,
+        "text": "Otozureru tabidachi"
+      },
+      {
+        "atMs": 24120,
+        "text": "Motomeru mono no na wa"
+      },
+      {
+        "atMs": 29700,
+        "text": "Suimen ni shirusareru"
+      },
+      {
+        "atMs": 35680,
+        "text": "Yuunagi no seijaku ni"
+      },
+      {
+        "atMs": 42040,
+        "text": "Ashioto narihibiki"
+      },
+      {
+        "atMs": 44600,
+        "text": "Samayou mono no na wo"
+      },
+      {
+        "atMs": 60440,
+        "text": "Tsuki no suna ni kizamu"
+      },
+      {
+        "atMs": 77340,
+        "text": "Bokura wa umarete soshite kiete yuku"
+      },
+      {
+        "atMs": 81980,
+        "text": "Haruka ni haruka ni meguru monogatari"
+      },
+      {
+        "atMs": 87240,
+        "text": "Inori wo namida wo iku Sen to tsumuide"
+      },
+      {
+        "atMs": 92480,
+        "text": "Kasanete orinasu"
+      },
+      {
+        "atMs": 95240,
+        "text": "Eiyuu no shihen wo"
+      },
+      {
+        "atMs": 97780,
+        "text": "Eiyuu no shihen wo"
+      },
+      {
+        "atMs": 101260,
+        "text": "Yoiyami no sango shou"
+      },
+      {
+        "atMs": 112660,
+        "text": "Gareki no orugooru"
+      },
+      {
+        "atMs": 120600,
+        "text": "Wasurerareta moji ni"
+      },
+      {
+        "atMs": 126120,
+        "text": "Nemuru otogibanashi"
+      },
+      {
+        "atMs": 132120,
+        "text": "Inochi wa sekai no madoromi no hotori"
+      },
+      {
+        "atMs": 137300,
+        "text": "Hitotoki shibatataku setsuna no kagayaki"
+      },
+      {
+        "atMs": 153040,
+        "text": "Kokyuu wo kodou wo iku oku to atsumete"
+      },
+      {
+        "atMs": 158080,
+        "text": "Tsuranete orinasu"
+      },
+      {
+        "atMs": 160940,
+        "text": "Eiyuu no shihen wo"
+      },
+      {
+        "atMs": 163360,
+        "text": "Eiyuu no shihen wo"
+      },
+      {
+        "atMs": 165740,
+        "text": "Unmei no toki wo koete"
+      },
+      {
+        "atMs": 176000,
+        "text": "Kokoro wo nokosu koto"
+      },
+      {
+        "atMs": 182580,
+        "text": "Moshi yurusarerunaraba"
+      },
+      {
+        "atMs": 187240,
+        "text": "Bokura wa umarete soshite kiete yuku"
+      },
+      {
+        "atMs": 198200,
+        "text": "Haruka ni haruka ni meguru monogatari"
+      },
+      {
+        "atMs": 205280,
+        "text": "Inori wo namida wo iku Sen to tsumuide"
+      },
+      {
+        "atMs": 211200,
+        "text": "Kasanete orinasu"
+      },
+      {
+        "atMs": 228560,
+        "text": "Eiyuu no shihen wo"
+      },
+      {
+        "atMs": 234780,
+        "text": "Hitotoki shibatataku setsuna no kagayaki"
+      },
+      {
+        "atMs": 253440,
+        "text": "Kokyuu wo kodou wo iku oku to atsumete"
+      },
+      {
+        "atMs": 261340,
+        "text": "Tsuranete orinasu"
+      },
+      {
+        "atMs": 264520,
+        "text": "Sore wa uta to nari"
+      },
+      {
+        "atMs": 267240,
+        "text": "Hito wa yobudarou"
+      },
+      {
+        "atMs": 270020,
+        "text": "Eiyuu no shihen to"
+      }
+    ],
+    "lrclibId": 12943406,
+    "songTitle": "Eiyuu no Shihen",
+    "status": "Aligned"
+  },
+  "0d09a3f5-cd6a-495e-90c3-34f0fd18bf5b": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lines": [
+      {
+        "atMs": 3980,
+        "text": "Saatnya 'tuk mengikat janji merangkum indahnya"
+      },
+      {
+        "atMs": 45760,
+        "text": "Laras rasa nihil ragu"
+      },
+      {
+        "atMs": 47460,
+        "text": "Biar, biarlah merayu di ruang biru"
+      },
+      {
+        "atMs": 52480,
+        "text": "Bias kita jadi taksu gairah kalbu mendayu"
+      },
+      {
+        "atMs": 56000,
+        "text": "Sabda diramu"
+      },
+      {
+        "atMs": 59420,
+        "text": "Jadikan hanya aku satu-satunya"
+      },
+      {
+        "atMs": 62880,
+        "text": "Sang garwa pambage, sang pelipur lara"
+      },
+      {
+        "atMs": 66720,
+        "text": "Nyanyikan 'ku kidung setia"
+      },
+      {
+        "atMs": 73180,
+        "text": "Jadikan hanya aku satu-satunya"
+      },
+      {
+        "atMs": 76560,
+        "text": "Sang garwa pambage, sang pelipur lara"
+      },
+      {
+        "atMs": 80440,
+        "text": "Nyanyikan 'ku kidung setia"
+      },
+      {
+        "atMs": 87610,
+        "text": ""
+      },
+      {
+        "atMs": 95660,
+        "text": "Kini saatnya merangkai binar asmara"
+      },
+      {
+        "atMs": 100740,
+        "text": "Melebur 'tuk satukan ego dalam indahnya"
+      },
+      {
+        "atMs": 107420,
+        "text": "Berdansa dalam bahtera mahligai rasa"
+      },
+      {
+        "atMs": 111740,
+        "text": "Merajut ketulusan jiwa"
+      },
+      {
+        "atMs": 114260,
+        "text": "Mengabdi dalam indahnya kalbu"
+      },
+      {
+        "atMs": 116620,
+        "text": "Mengukir ruang renjana selamanya"
+      },
+      {
+        "atMs": 121120,
+        "text": "Jadikan hanya aku satu-satunya"
+      },
+      {
+        "atMs": 124520,
+        "text": "Sang garwa pambage, sang pelipur lara"
+      },
+      {
+        "atMs": 128400,
+        "text": "Nyanyikan 'ku kidung setia"
+      },
+      {
+        "atMs": 134800,
+        "text": "Jadikan hanya aku satu-satunya"
+      },
+      {
+        "atMs": 138320,
+        "text": "Sang garwa pambage, sang pelipur lara"
+      },
+      {
+        "atMs": 142180,
+        "text": "Nyanyikan 'ku kidung setia"
+      },
+      {
+        "atMs": 149580,
+        "text": ""
+      },
+      {
+        "atMs": 176160,
+        "text": "Berdansa dalam bahtera mahligai rasa"
+      },
+      {
+        "atMs": 179140,
+        "text": "Merajut ketulusan jiwa"
+      },
+      {
+        "atMs": 182820,
+        "text": "Mengabdi dalam indahnya kalbu"
+      },
+      {
+        "atMs": 185180,
+        "text": "Mengukir ruang renjana selamanya"
+      },
+      {
+        "atMs": 189720,
+        "text": "Jadikan hanya aku satu-satunya"
+      },
+      {
+        "atMs": 193180,
+        "text": "Sang garwa pambage, sang pelipur lara"
+      },
+      {
+        "atMs": 196980,
+        "text": "Nyanyikan 'ku kidung setia"
+      },
+      {
+        "atMs": 203420,
+        "text": "Jadikan hanya aku satu-satunya"
+      },
+      {
+        "atMs": 206920,
+        "text": "Sang garwa pambage, sang pelipur lara"
+      },
+      {
+        "atMs": 210760,
+        "text": "Nyanyikan 'ku kidung setia"
+      },
+      {
+        "atMs": 217540,
+        "text": "Asmara telah terkalibrasi"
+      },
+      {
+        "atMs": 220980,
+        "text": "Asmara telah terkalibrasi"
+      },
+      {
+        "atMs": 224200,
+        "text": "Dan jadikan 'ku kidung setia"
+      },
+      {
+        "atMs": 231280,
+        "text": "Asmara telah terkalibrasi"
+      },
+      {
+        "atMs": 234500,
+        "text": "Asmara telah terkalibrasi"
+      },
+      {
+        "atMs": 234800,
+        "text": "Dan jadikan 'ku kidung setia"
+      }
+    ],
+    "lrclibId": 10364332,
+    "songTitle": "Asmalibrasi",
+    "status": "Aligned"
+  },
+  "0d2a0861-2bb0-4b7a-83cb-f4f8b2e29ac8": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lines": [
+      {
+        "atMs": 5780,
+        "text": "Arungi malam"
+      },
+      {
+        "atMs": 10360,
+        "text": "Terjaga kala semua t'lah terbenam"
+      },
+      {
+        "atMs": 15300,
+        "text": "Berkaca, bertanya, apa ku buat salah?"
+      },
+      {
+        "atMs": 21100,
+        "text": "Kalaupun iya, apa?"
+      },
+      {
+        "atMs": 26500,
+        "text": "Apakah sebesar itu hingga"
+      },
+      {
+        "atMs": 31840,
+        "text": "Kau pergi tanpa aba-aba"
+      },
+      {
+        "atMs": 36080,
+        "text": "Bahkan tanpa alasan"
+      },
+      {
+        "atMs": 39900,
+        "text": "Hingga ku harus menerka-nerka"
+      },
+      {
+        "atMs": 43200,
+        "text": "Salahku di mana?"
+      },
+      {
+        "atMs": 47820,
+        "text": "Apa mungkin caraku bicara?"
+      },
+      {
+        "atMs": 53140,
+        "text": "Apa mungkin caraku tertawa?"
+      },
+      {
+        "atMs": 58560,
+        "text": "Apa mungkin dengkurku saat tertidur lelap?"
+      },
+      {
+        "atMs": 63240,
+        "text": "Apa mungkin kamu yang tak lagi cinta"
+      },
+      {
+        "atMs": 68210,
+        "text": ""
+      },
+      {
+        "atMs": 77140,
+        "text": "Sampai sekarang"
+      },
+      {
+        "atMs": 82200,
+        "text": "Dariku belum ada yang berubah"
+      },
+      {
+        "atMs": 87500,
+        "text": "Ku bisa salah"
+      },
+      {
+        "atMs": 90520,
+        "text": "Maka itu jelaskanlah"
+      },
+      {
+        "atMs": 93020,
+        "text": "Di mana letak yang tak kau suka"
+      },
+      {
+        "atMs": 98420,
+        "text": "Apa mungkin caraku bicara?"
+      },
+      {
+        "atMs": 107080,
+        "text": "Apa mungkin caraku tertawa?"
+      },
+      {
+        "atMs": 109160,
+        "text": "Apa mungkin dengkurku saat tertidur lelap?"
+      },
+      {
+        "atMs": 113860,
+        "text": "Atau mungkin kamu yang tak lagi cinta"
+      }
+    ],
+    "lrclibId": 10149668,
+    "songTitle": "Apa Mungkin",
+    "status": "Aligned"
+  },
+  "10f92b1d-87ca-4f63-90ed-039573c68736": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lrclibId": 38909623,
+    "reason": "median probability 0.49 is too low",
+    "songTitle": "Kau Rumahku",
+    "status": "Rejected"
+  },
+  "15d3b4c2-19e1-4ff8-b5be-f2b6d65059eb": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lrclibId": 9741665,
+    "reason": "median probability 0.47 is too low",
+    "songTitle": "Pijaraya",
+    "status": "Rejected"
+  },
+  "1a770430-e708-495c-ae7c-460e871c7a83": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lines": [
+      {
+        "atMs": 280,
+        "text": "Waratte ita no wa \"tsuyogari\"kara ja naku"
+      },
+      {
+        "atMs": 8000,
+        "text": "Nakigao nanka mou mitaku naidesho?"
+      },
+      {
+        "atMs": 14760,
+        "text": "Hoshikuzu mitai na hito tsubu no deai"
+      },
+      {
+        "atMs": 21340,
+        "text": "Sayonara?"
+      },
+      {
+        "atMs": 24600,
+        "text": "Saigo no kotoba ga mitsukaranai"
+      },
+      {
+        "atMs": 28700,
+        "text": "Sou da yo watakushi wa heiki da yo tsuyoikara"
+      },
+      {
+        "atMs": 57600,
+        "text": "Kao agete \"gomen ne\"tte mou iwanaide tsuraikara"
+      },
+      {
+        "atMs": 70600,
+        "text": "It's so precious konna hazu ja nakattakedo"
+      },
+      {
+        "atMs": 77500,
+        "text": "Now I miss it hitori de mo aruiteku"
+      },
+      {
+        "atMs": 86880,
+        "text": "Waratte ita no wa \"tsuyogari\"kara ja naku"
+      },
+      {
+        "atMs": 93460,
+        "text": "Nakigao nanka mou mitaku naidesho?"
+      },
+      {
+        "atMs": 99700,
+        "text": "Hoshikuzu mitai na hito tsubu no deai"
+      }
+    ],
+    "lrclibId": 1051774,
+    "songTitle": "Hoshikuzu Venus",
+    "status": "Aligned"
+  },
+  "1d648497-15be-4187-88f2-0be363bb650b": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lrclibId": 6764917,
+    "reason": "median probability 0.33 is too low",
+    "songTitle": "Halu",
+    "status": "Rejected"
+  },
+  "1d87e5a9-a8df-46a1-a4d6-109077fcd22b": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lines": [
+      {
+        "atMs": 8480,
+        "text": "Persis setahun yang lalu"
+      },
+      {
+        "atMs": 10680,
+        "text": "Ku dijauhkan dari yang tak ditakdirkan untukku"
+      },
+      {
+        "atMs": 19560,
+        "text": "Yang kuingat saat itu"
+      },
+      {
+        "atMs": 22340,
+        "text": "Yang kulakukan hanya menggerutu angkuh"
+      },
+      {
+        "atMs": 30080,
+        "text": "Lebih percaya cara-caraku"
+      },
+      {
+        "atMs": 32940,
+        "text": "Pilih ragukan rencana Sang Maha Penentu"
+      },
+      {
+        "atMs": 42820,
+        "text": "Untungnya, bumi masih berputar"
+      },
+      {
+        "atMs": 46800,
+        "text": "Untungnya, ku tak pilih menyerah"
+      },
+      {
+        "atMs": 53040,
+        "text": "Untungnya, ku bisa rasa"
+      },
+      {
+        "atMs": 56240,
+        "text": "Hal-hal baik yang datangnya belakangan"
+      },
+      {
+        "atMs": 60800,
+        "text": "Ada waktu-waktu"
+      },
+      {
+        "atMs": 63420,
+        "text": "Hal buruk datang berturut-turut"
+      },
+      {
+        "atMs": 66640,
+        "text": "Semua yang tinggal juga yang hilang"
+      },
+      {
+        "atMs": 67420,
+        "text": "Seberapapun absurd-nya pasti ada makna"
+      },
+      {
+        "atMs": 71400,
+        "text": "Untungnya, bumi masih berputar"
+      },
+      {
+        "atMs": 114640,
+        "text": "Untungnya, ku tak pilih menyerah"
+      },
+      {
+        "atMs": 121340,
+        "text": "Itu memang paling mudah"
+      },
+      {
+        "atMs": 124040,
+        "text": "Untungnya, kupilih yang lebih susah"
+      },
+      {
+        "atMs": 131360,
+        "text": "Untungnya, hidup terus berjalan"
+      },
+      {
+        "atMs": 142880,
+        "text": "Untungnya, ku bisa rasa"
+      },
+      {
+        "atMs": 146600,
+        "text": "Hal-hal baik yang datangnya belakangan"
+      }
+    ],
+    "lrclibId": 30215893,
+    "songTitle": "Untungnya, Hidup Harus Tetap Berjalan",
+    "status": "Aligned"
+  },
+  "220e7e93-1d1b-4855-a427-fe5de879eb2f": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lrclibId": 6057290,
+    "reason": "3 weak lines in a row, a section was probably skipped",
+    "songTitle": "Jiwa Yang Bersedih",
+    "status": "Rejected"
+  },
+  "22c4a7f9-36bf-424b-b7a6-05adf9d5ad7c": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lines": [
+      {
+        "atMs": 9700,
+        "text": "Anata no koe de hogurete yuku"
+      },
+      {
+        "atMs": 15780,
+        "text": "Wasuretaku nai to kokoro ga iu"
+      },
+      {
+        "atMs": 22000,
+        "text": "Omoide bakka fuete yuku"
+      },
+      {
+        "atMs": 28160,
+        "text": "Zutto gawa ni itai"
+      },
+      {
+        "atMs": 33580,
+        "text": "Nakimushi de mo ii ka na"
+      },
+      {
+        "atMs": 38120,
+        "text": "Tsuyogaranaide ii yo"
+      },
+      {
+        "atMs": 46220,
+        "text": "Kagiri aru koi da to shite mo"
+      },
+      {
+        "atMs": 52400,
+        "text": "Deaete shiawase desu"
+      },
+      {
+        "atMs": 58140,
+        "text": "Itsu made mo"
+      },
+      {
+        "atMs": 61300,
+        "text": "Itsu made mo"
+      },
+      {
+        "atMs": 64360,
+        "text": "Tsuzuite hoshii to negatte iru"
+      },
+      {
+        "atMs": 70100,
+        "text": "Te wo toru koto wa dekizutomo"
+      },
+      {
+        "atMs": 76920,
+        "text": "Watakushi wa anata wo suite iru"
+      },
+      {
+        "atMs": 97520,
+        "text": "Anata no yume de kokoro yasuragu"
+      },
+      {
+        "atMs": 99940,
+        "text": "Mezametaku nai to boku wa iu"
+      },
+      {
+        "atMs": 100340,
+        "text": "Asu mo gawa ni itai"
+      },
+      {
+        "atMs": 102340,
+        "text": "Doko made mo"
+      },
+      {
+        "atMs": 105360,
+        "text": "Donkan na boku wo shikatte hoshii"
+      },
+      {
+        "atMs": 107960,
+        "text": "Atarimae ga kowareru koto ni"
+      },
+      {
+        "atMs": 111100,
+        "text": "Kizukenai kurai ni kodomo dakedo"
+      },
+      {
+        "atMs": 120440,
+        "text": "Chanto boku wa anata wo suite iru"
+      },
+      {
+        "atMs": 123180,
+        "text": "Watakushi no (boku no) jikan ga tomareba ii no ni"
+      },
+      {
+        "atMs": 130720,
+        "text": "Gut to koraete mirukara sa"
+      },
+      {
+        "atMs": 135460,
+        "text": "Moshi afuredashitara"
+      },
+      {
+        "atMs": 140220,
+        "text": "Hitomi wo chanto mite yo mite yo mite"
+      },
+      {
+        "atMs": 146380,
+        "text": "Anata no kage dake nobite yuku"
+      },
+      {
+        "atMs": 149820,
+        "text": "Kiete shimawanaide zutto"
+      },
+      {
+        "atMs": 152120,
+        "text": "Zutto kono omoi wa kawaranai"
+      },
+      {
+        "atMs": 157640,
+        "text": "Itsu made mo"
+      },
+      {
+        "atMs": 160420,
+        "text": "Itsu made mo"
+      },
+      {
+        "atMs": 163860,
+        "text": "Tsuzuite hoshii to negatte iru"
+      }
+    ],
+    "lrclibId": 28596540,
+    "songTitle": "Tenbyou no Uta",
+    "status": "Aligned"
+  },
+  "23e50543-cbfe-42af-bbda-62ff6fe5d61b": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lines": [
+      {
+        "atMs": 19000,
+        "text": "Harus kutinggalkan dirimu"
+      },
+      {
+        "atMs": 31800,
+        "text": "Ku hanya bisa mengatakan apa yang kurasa"
+      },
+      {
+        "atMs": 32260,
+        "text": "Ku menangis membayangkan"
+      },
+      {
+        "atMs": 38080,
+        "text": "Betapa kejamnya dirimu atas diriku"
+      },
+      {
+        "atMs": 44040,
+        "text": "Kau duakan cinta ini"
+      },
+      {
+        "atMs": 48720,
+        "text": "Kau pergi bersamanya, ho-wo"
+      },
+      {
+        "atMs": 71760,
+        "text": "Ku menangis melepaskan"
+      },
+      {
+        "atMs": 74840,
+        "text": "Kepergian dirimu dari sisi hidupku"
+      },
+      {
+        "atMs": 79900,
+        "text": "Harus s'lalu kau tahu"
+      },
+      {
+        "atMs": 82960,
+        "text": "Akulah hati yang telah kau sakiti"
+      },
+      {
+        "atMs": 91730,
+        "text": ""
+      },
+      {
+        "atMs": 98940,
+        "text": "Hu-uh-uh-uh"
+      },
+      {
+        "atMs": 102020,
+        "text": "Maafkan jika memang kini"
+      },
+      {
+        "atMs": 103960,
+        "text": "Ku hanya bisa mengatakan apa yang kurasa"
+      },
+      {
+        "atMs": 104480,
+        "text": "Ku menangis membayangkan"
+      },
+      {
+        "atMs": 110060,
+        "text": "Betapa kejamnya dirimu atas diriku"
+      },
+      {
+        "atMs": 115640,
+        "text": "Kau duakan cinta ini"
+      },
+      {
+        "atMs": 119940,
+        "text": "Kau pergi bersamanya, ho-oh-wo"
+      },
+      {
+        "atMs": 128740,
+        "text": "Ku menangis melepaskan"
+      },
+      {
+        "atMs": 134340,
+        "text": "Kepergian dirimu dari sisi hidupku"
+      },
+      {
+        "atMs": 140940,
+        "text": "Harus s'lalu kau tahu"
+      },
+      {
+        "atMs": 145140,
+        "text": "Akulah hati yang telah kau sakiti"
+      },
+      {
+        "atMs": 149740,
+        "text": "Ku menangis, ha-wo-oh"
+      },
+      {
+        "atMs": 152800,
+        "text": "Harus s'lalu kau tahu"
+      },
+      {
+        "atMs": 154420,
+        "text": "Akulah hati yang telah, ha-ah"
+      }
+    ],
+    "lrclibId": 20395519,
+    "songTitle": "Hati Yang Kau Sakiti",
+    "status": "Aligned"
+  },
+  "246cd80e-ae20-4568-bea5-87fbaedbace6": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lines": [
+      {
+        "atMs": 980,
+        "text": "Ketika dibuka bajunya, kelihatan bulunya"
+      },
+      {
+        "atMs": 5460,
+        "text": "Idih, idih, terlihat pula bijinya"
+      },
+      {
+        "atMs": 15280,
+        "text": "Bentuknya ada yang panjang, juga ada yang pendek"
+      },
+      {
+        "atMs": 18000,
+        "text": "Idih, idih, tapi banyak yang suka"
+      },
+      {
+        "atMs": 23420,
+        "text": "Bang, boleh, dong, aku nyobain, Bang"
+      },
+      {
+        "atMs": 28520,
+        "text": "Bang, boleh, dong, ku pengin ngerasain"
+      },
+      {
+        "atMs": 38380,
+        "text": "Ketika dibuka bajunya, kelihatan bulunya"
+      },
+      {
+        "atMs": 43100,
+        "text": "Idih, idih, terlihat pula bijinya"
+      },
+      {
+        "atMs": 48820,
+        "text": "Kayaknya, sih, enak betul"
+      },
+      {
+        "atMs": 53400,
+        "text": "Kayaknya, sih, sedap betul"
+      },
+      {
+        "atMs": 55900,
+        "text": "Apalagi dikasih"
+      },
+      {
+        "atMs": 57400,
+        "text": "Duh, Abang, terima kasih"
+      },
+      {
+        "atMs": 57720,
+        "text": "Masih segar dan masih muda"
+      },
+      {
+        "atMs": 60140,
+        "text": "Masih manis rasa di lidah"
+      },
+      {
+        "atMs": 70900,
+        "text": "Jagung rebus, aduh, enaknya"
+      },
+      {
+        "atMs": 75840,
+        "text": "Ketika dibuka bajunya, kelihatan bulunya"
+      },
+      {
+        "atMs": 78360,
+        "text": "Idih, idih, terlihat pula bijinya"
+      },
+      {
+        "atMs": 84200,
+        "text": ""
+      },
+      {
+        "atMs": 115860,
+        "text": "Ketika dibuka bajunya, kelihatan bulunya"
+      },
+      {
+        "atMs": 120860,
+        "text": "Idih, idih, terlihat pula bijinya"
+      },
+      {
+        "atMs": 128560,
+        "text": "Bentuknya ada yang panjang, juga ada yang pendek"
+      },
+      {
+        "atMs": 133100,
+        "text": "Idih, idih, tapi banyak yang suka"
+      },
+      {
+        "atMs": 139580,
+        "text": "Bang, boleh, dong, aku nyobain, Bang"
+      },
+      {
+        "atMs": 144960,
+        "text": "Bang, boleh, dong, ku pengin ngerasain"
+      },
+      {
+        "atMs": 153320,
+        "text": "Ketika dibuka bajunya, kelihatan bulunya"
+      },
+      {
+        "atMs": 158400,
+        "text": "Idih, idih, terlihat pula bijinya"
+      },
+      {
+        "atMs": 163120,
+        "text": "Kayaknya, sih, enak betul"
+      },
+      {
+        "atMs": 166340,
+        "text": "Kayaknya, sih, sedap betul"
+      },
+      {
+        "atMs": 177940,
+        "text": "Apalagi dikasih"
+      },
+      {
+        "atMs": 183640,
+        "text": "Duh, Abang, terima kasih"
+      }
+    ],
+    "lrclibId": 9736769,
+    "songTitle": "Jagung Rebus",
+    "status": "Aligned"
+  },
+  "25933e53-e297-4a31-baca-2333017b57bf": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lrclibId": 38912320,
+    "reason": "median probability 0.48 is too low",
+    "songTitle": "Terlintas",
+    "status": "Rejected"
+  },
+  "25a9c82d-1c14-5bdc-925c-5cd8b9f0084a": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lrclibId": 12943406,
+    "reason": "3 weak lines in a row, a section was probably skipped",
+    "songTitle": "Eiyuu no Shihen",
+    "status": "Rejected"
+  },
+  "270067d3-951f-4e9f-a02e-9f24fbdc6819": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lines": [
+      {
+        "atMs": 3000,
+        "text": "Malam ini"
+      },
+      {
+        "atMs": 5740,
+        "text": "Bintang mengingatkanku"
+      },
+      {
+        "atMs": 12200,
+        "text": ""
+      },
+      {
+        "atMs": 18060,
+        "text": "Indah terang"
+      },
+      {
+        "atMs": 21640,
+        "text": "Seperti matamu"
+      },
+      {
+        "atMs": 23940,
+        "text": "Yang s'lalu kupandang"
+      },
+      {
+        "atMs": 28360,
+        "text": ""
+      },
+      {
+        "atMs": 29800,
+        "text": "Lembut tutur katamu"
+      },
+      {
+        "atMs": 34100,
+        "text": "Merdu tawamu"
+      },
+      {
+        "atMs": 36020,
+        "text": "Parasmu yang menawan"
+      },
+      {
+        "atMs": 39560,
+        "text": "Buat diriku tak bisa lupa"
+      },
+      {
+        "atMs": 49480,
+        "text": "Dari banyaknya insan di dunia"
+      },
+      {
+        "atMs": 55840,
+        "text": "Merdu tawamu"
+      },
+      {
+        "atMs": 57000,
+        "text": "Parasmu yang menawan"
+      },
+      {
+        "atMs": 59960,
+        "text": "Dari banyaknya insan di dunia"
+      },
+      {
+        "atMs": 67140,
+        "text": "Mengapa dirimu yang aku sangka"
+      },
+      {
+        "atMs": 74460,
+        "text": "Bisa temani hari-hariku yang tak selalu indah"
+      },
+      {
+        "atMs": 83520,
+        "text": "Walau kita tak bisa bersama"
+      }
+    ],
+    "lrclibId": 9421345,
+    "songTitle": "Akhir Tak Bahagia",
+    "status": "Aligned"
+  },
+  "2711e34e-9bbe-5b68-92aa-2c247ea019a3": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lines": [
+      {
+        "atMs": 18340,
+        "text": "Malam ini"
+      },
+      {
+        "atMs": 22100,
+        "text": "Bintang mengingatkanku"
+      },
+      {
+        "atMs": 25260,
+        "text": "Padamu"
+      },
+      {
+        "atMs": 28370,
+        "text": ""
+      },
+      {
+        "atMs": 32980,
+        "text": "Indah terang"
+      },
+      {
+        "atMs": 36800,
+        "text": "Seperti matamu"
+      },
+      {
+        "atMs": 39560,
+        "text": "Yang s'lalu kupandang"
+      },
+      {
+        "atMs": 43980,
+        "text": ""
+      },
+      {
+        "atMs": 47080,
+        "text": "Lembut tutur katamu"
+      },
+      {
+        "atMs": 49740,
+        "text": "Merdu tawamu"
+      },
+      {
+        "atMs": 51400,
+        "text": "Parasmu yang menawan"
+      },
+      {
+        "atMs": 55080,
+        "text": "Buat diriku tak bisa lupa"
+      },
+      {
+        "atMs": 59700,
+        "text": "Dari banyaknya insan di dunia"
+      },
+      {
+        "atMs": 68640,
+        "text": "Mengapa dirimu yang aku sangka"
+      },
+      {
+        "atMs": 73830,
+        "text": ""
+      },
+      {
+        "atMs": 76520,
+        "text": "Bisa temani hari-hariku yang tak selalu indah"
+      },
+      {
+        "atMs": 84440,
+        "text": "Walau kita tak bisa bersama"
+      },
+      {
+        "atMs": 93060,
+        "text": ""
+      },
+      {
+        "atMs": 105080,
+        "text": "Lembut tutur katamu"
+      },
+      {
+        "atMs": 109660,
+        "text": "Merdu tawamu"
+      },
+      {
+        "atMs": 111440,
+        "text": "Parasmu yang menawan"
+      },
+      {
+        "atMs": 115080,
+        "text": "Buat diriku tak bisa lupa"
+      },
+      {
+        "atMs": 121540,
+        "text": "Uuuu"
+      },
+      {
+        "atMs": 125160,
+        "text": "Dari banyaknya insan di dunia"
+      },
+      {
+        "atMs": 132620,
+        "text": "Mengapa dirimu yang aku sangka"
+      },
+      {
+        "atMs": 138800,
+        "text": "Bisa temani hari-hariku yang tak selalu indah"
+      },
+      {
+        "atMs": 148940,
+        "text": "Walau kita tak bisa bersama"
+      },
+      {
+        "atMs": 158140,
+        "text": ""
+      },
+      {
+        "atMs": 164300,
+        "text": "Dipertemukan semesta"
+      },
+      {
+        "atMs": 169620,
+        "text": "Walau berakhir tak bahagia"
+      }
+    ],
+    "lrclibId": 9812480,
+    "songTitle": "Akhir Tak Bahagia",
+    "status": "Aligned"
+  },
+  "2c4390b9-d161-5465-b2c4-d327fc252abe": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lines": [
+      {
+        "atMs": 11460,
+        "text": "Akatsuki no sasayaki"
+      },
+      {
+        "atMs": 15060,
+        "text": "Otozureru tabidachi"
+      },
+      {
+        "atMs": 20220,
+        "text": "Motomeru mono no na wa"
+      },
+      {
+        "atMs": 25780,
+        "text": "Suimen ni shirusareru"
+      },
+      {
+        "atMs": 31800,
+        "text": "Yuunagi no seijaku ni"
+      },
+      {
+        "atMs": 37020,
+        "text": "Ashioto narihibiki"
+      },
+      {
+        "atMs": 37960,
+        "text": "Samayou mono no na wo"
+      },
+      {
+        "atMs": 56520,
+        "text": "Tsuki no suna ni kizamu"
+      },
+      {
+        "atMs": 73420,
+        "text": "Bokura wa umarete soshite kiete yuku"
+      },
+      {
+        "atMs": 78420,
+        "text": "Haruka ni haruka ni meguru monogatari"
+      },
+      {
+        "atMs": 83300,
+        "text": "Inori wo namida wo iku Sen to tsumuide"
+      },
+      {
+        "atMs": 88640,
+        "text": "Kasanete orinasu"
+      },
+      {
+        "atMs": 91360,
+        "text": "Eiyuu no shihen wo"
+      },
+      {
+        "atMs": 93920,
+        "text": "Eiyuu no shihen wo"
+      },
+      {
+        "atMs": 97100,
+        "text": "Yoiyami no sango shou"
+      },
+      {
+        "atMs": 100660,
+        "text": "Gareki no orugooru"
+      },
+      {
+        "atMs": 115860,
+        "text": "Wasurerareta moji ni"
+      },
+      {
+        "atMs": 122060,
+        "text": "Nemuru otogibanashi"
+      },
+      {
+        "atMs": 128180,
+        "text": "Inochi wa sekai no madoromi no hotori"
+      },
+      {
+        "atMs": 130580,
+        "text": "Eiyuu no shihen wo"
+      },
+      {
+        "atMs": 133300,
+        "text": "Eiyuu no shihen wo"
+      },
+      {
+        "atMs": 138460,
+        "text": "Unmei no toki wo koete"
+      },
+      {
+        "atMs": 145780,
+        "text": "Haruka ni haruka ni meguru monogatari"
+      },
+      {
+        "atMs": 151200,
+        "text": "Inori wo namida wo iku Sen to tsumuide"
+      },
+      {
+        "atMs": 154160,
+        "text": "Kasanete orinasu"
+      },
+      {
+        "atMs": 157000,
+        "text": "Eiyuu no shihen wo"
+      }
+    ],
+    "lrclibId": 12943406,
+    "songTitle": "Eiyuu no Shihen",
+    "status": "Aligned"
+  },
+  "2d644680-dfd8-5590-9ef1-80a23e7973c1": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lrclibId": 34649954,
+    "reason": "median probability 0.43 is too low",
+    "songTitle": "1000X",
+    "status": "Rejected"
+  },
+  "2dde7993-38e3-4b23-af02-c735bc89d2e8": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lrclibId": 29896955,
+    "reason": "3 weak lines in a row, a section was probably skipped",
+    "songTitle": "Di Akhir Perang",
+    "status": "Rejected"
+  },
+  "33ed587b-c973-4d65-933f-98ee29b0f045": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lrclibId": 16384878,
+    "reason": "no line was sung clearly",
+    "songTitle": "Lapis Lazuli",
+    "status": "Rejected"
+  },
+  "3697b335-5112-4c28-a740-58aece0b8c9c": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lrclibId": 6373633,
+    "reason": "3 weak lines in a row, a section was probably skipped",
+    "songTitle": "Love wins all",
+    "status": "Rejected"
+  },
+  "3b1d9b56-0846-5b1e-a155-87954bc9a67e": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lines": [
+      {
+        "atMs": 7120,
+        "text": "Ketika ku mendengar bahwa"
+      },
+      {
+        "atMs": 10160,
+        "text": "Kini kau tak lagi dengannya"
+      },
+      {
+        "atMs": 13720,
+        "text": "Dalam benakku timbul tanya"
+      },
+      {
+        "atMs": 20220,
+        "text": "Masihkah ada dia di hatimu bertahta?"
+      },
+      {
+        "atMs": 27400,
+        "text": "Atau ini saat bagiku untuk singgah di hatimu?"
+      },
+      {
+        "atMs": 34360,
+        "text": "Namun siapkah kau 'tuk jatuh cinta lagi?"
+      },
+      {
+        "atMs": 44720,
+        "text": "Meski bibir ini tak berkata"
+      },
+      {
+        "atMs": 47200,
+        "text": "Bukan berarti ku tak merasa"
+      },
+      {
+        "atMs": 50700,
+        "text": "Ada yang berbeda di antara kita"
+      },
+      {
+        "atMs": 56080,
+        "text": "Dan tak mungkin ku melewatkanmu hanya karena"
+      },
+      {
+        "atMs": 61100,
+        "text": "Diriku tak mampu untuk bicara"
+      },
+      {
+        "atMs": 64920,
+        "text": "Bahwa aku inginkan kau ada di hidupku"
+      },
+      {
+        "atMs": 74300,
+        "text": ""
+      },
+      {
+        "atMs": 82340,
+        "text": "Sudah tak ada lagi rasa"
+      },
+      {
+        "atMs": 84540,
+        "text": "Antara aku dengan dia"
+      },
+      {
+        "atMs": 89360,
+        "text": "Siapkah kau bertahta di hatiku, adinda?"
+      },
+      {
+        "atMs": 98340,
+        "text": "Karena ini saat yang tepat untuk singgah di hatiku"
+      },
+      {
+        "atMs": 105360,
+        "text": "Namun siapkah kau 'tuk jatuh cinta lagi?"
+      },
+      {
+        "atMs": 115680,
+        "text": "Meski bibir ini tak berkata"
+      },
+      {
+        "atMs": 118140,
+        "text": "Bukan berarti ku tak merasa"
+      },
+      {
+        "atMs": 121640,
+        "text": "Ada yang berbeda di antara kita"
+      },
+      {
+        "atMs": 127040,
+        "text": "Dan tak mungkin ku melewatkanmu hanya karena"
+      },
+      {
+        "atMs": 132040,
+        "text": "Diriku tak mampu untuk bicara"
+      },
+      {
+        "atMs": 136000,
+        "text": "Bahwa aku inginkan kau ada di hidupku"
+      },
+      {
+        "atMs": 154680,
+        "text": "Pikirlah saja dulu"
+      },
+      {
+        "atMs": 158720,
+        "text": "Hingga tiada ragu"
+      },
+      {
+        "atMs": 162100,
+        "text": "Agar mulus jalanku"
+      },
+      {
+        "atMs": 164800,
+        "text": "Melangkah menuju ke hatimu"
+      },
+      {
+        "atMs": 168680,
+        "text": "Melangkah menuju ke hatimu"
+      },
+      {
+        "atMs": 171320,
+        "text": "Siapkah kau 'tuk jatuh cinta lagi?"
+      },
+      {
+        "atMs": 180000,
+        "text": "Meski bibir ini tak berkata"
+      },
+      {
+        "atMs": 184060,
+        "text": "Bukan berarti ku tak merasa"
+      },
+      {
+        "atMs": 187480,
+        "text": "Ada yang berbeda di antara kita"
+      },
+      {
+        "atMs": 193060,
+        "text": "Dan tak mungkin ku melewatkanmu hanya karena"
+      },
+      {
+        "atMs": 198160,
+        "text": "Diriku tak mampu untuk bicara"
+      },
+      {
+        "atMs": 201940,
+        "text": "Bahwa aku inginkan kau ada di hidupku"
+      },
+      {
+        "atMs": 208060,
+        "text": "Meski bibir ini tak berkata"
+      },
+      {
+        "atMs": 211020,
+        "text": "Bukan berarti ku tak merasa"
+      },
+      {
+        "atMs": 214620,
+        "text": "Ada yang berbeda di antara kita"
+      },
+      {
+        "atMs": 220040,
+        "text": "Dan tak mungkin ku melewatkanmu hanya karena"
+      },
+      {
+        "atMs": 225020,
+        "text": "Diriku tak mampu untuk bicara"
+      },
+      {
+        "atMs": 228800,
+        "text": "Bahwa aku inginkan kau ada di hidupku"
+      },
+      {
+        "atMs": 242200,
+        "text": "Bila kau jatuh cinta, katakanlah, jangan buat sia-sia"
+      },
+      {
+        "atMs": 248820,
+        "text": "Bila kau jatuh cinta, katakanlah, jangan buat sia-sia"
+      },
+      {
+        "atMs": 255420,
+        "text": "Siapkah kau 'tuk jatuh cinta lagi?"
+      }
+    ],
+    "lrclibId": 8307087,
+    "songTitle": "Siapkah Kau 'Tuk Jatuh Cinta Lagi",
+    "status": "Aligned"
+  },
+  "3c7dbd3f-a424-4874-9ee7-9e220756d76f": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lrclibId": 29825245,
+    "reason": "3 weak lines in a row, a section was probably skipped",
+    "songTitle": "Kamu & Kenangan",
+    "status": "Rejected"
+  },
+  "3ce905db-3379-4dbb-afc5-2e45a3bbd650": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lines": [
+      {
+        "atMs": 40,
+        "text": "Kioku nado iranai eien ni nemuritai"
+      },
+      {
+        "atMs": 5540,
+        "text": ""
+      },
+      {
+        "atMs": 14820,
+        "text": "Mou kono mama asa ga konakutatte ii ya"
+      },
+      {
+        "atMs": 23270,
+        "text": ""
+      },
+      {
+        "atMs": 25440,
+        "text": "Itsu mo yume no naka de wa anata wa waratteru"
+      },
+      {
+        "atMs": 30100,
+        "text": "I gave you everything. You gave me anything?"
+      },
+      {
+        "atMs": 34560,
+        "text": "Kitto itsu made de mo"
+      },
+      {
+        "atMs": 34980,
+        "text": "You're everything, still my everything."
+      },
+      {
+        "atMs": 57360,
+        "text": "Aishiteru n da yo"
+      },
+      {
+        "atMs": 60300,
+        "text": "Manatsu ni futta yuki no you na sore wa hakanai kiseki na n da"
+      },
+      {
+        "atMs": 72380,
+        "text": "Anata ni deawanakereba konna ni setsunakute"
+      },
+      {
+        "atMs": 83040,
+        "text": "Mune wo shimetsukeru koto mo nakatta***sore de mo"
+      },
+      {
+        "atMs": 90520,
+        "text": "Anata ni deaenakereba tsuyosa mo yasashisa mo shiranai mama"
+      },
+      {
+        "atMs": 103280,
+        "text": "Heya no sumi de naite ita nan mo miezu ni"
+      },
+      {
+        "atMs": 111920,
+        "text": "Kisetsu nado iranai nani mo furetaku nai"
+      },
+      {
+        "atMs": 113600,
+        "text": "Dakedo yume no naka de wa anata wa waratteru"
+      },
+      {
+        "atMs": 119080,
+        "text": "I gave you everything. You gave me anything?"
+      },
+      {
+        "atMs": 126860,
+        "text": "Zutto itsu made de mo"
+      },
+      {
+        "atMs": 129100,
+        "text": "You're everything I'm still waiting."
+      },
+      {
+        "atMs": 182340,
+        "text": "Aishitete mo ii"
+      },
+      {
+        "atMs": 185180,
+        "text": "Mafuyu ni saita hana no you na ima wa hakanai kioku de mo"
+      },
+      {
+        "atMs": 196180,
+        "text": ""
+      },
+      {
+        "atMs": 197220,
+        "text": "Anata ni deawanakereba konna ni sabishikute"
+      },
+      {
+        "atMs": 207980,
+        "text": "Namida ga tomaranai yoru wa nakatta***sore de mo"
+      },
+      {
+        "atMs": 215380,
+        "text": "Anata ni okuritai tada,\"aisarete ite ne***\"to"
+      },
+      {
+        "atMs": 224500,
+        "text": "Tsutsumareteta hajimete waraeta yoru no watashi no you ni"
+      },
+      {
+        "atMs": 237120,
+        "text": "Moshi mo negai ga hitotsu kanau no nara mou ichi do furete hoshii"
+      },
+      {
+        "atMs": 251080,
+        "text": "Umarete yokatta to kanjireta ano asahi ni terasarete"
+      },
+      {
+        "atMs": 267080,
+        "text": ""
+      },
+      {
+        "atMs": 271620,
+        "text": "Anata ni deawanakereba konna ni setsunakute"
+      },
+      {
+        "atMs": 280500,
+        "text": "Mune wo shimetsukeru koto mo nakatta***sore de mo"
+      },
+      {
+        "atMs": 288020,
+        "text": "Anata ni deaenakereba tsuyosa mo yasashisa mo shirazu ni ita"
+      },
+      {
+        "atMs": 300660,
+        "text": "Me wo tojireba sugu soko ni anata ga iru"
+      },
+      {
+        "atMs": 310400,
+        "text": "Ima de mo mada me wo tojireba sugu soko ni anata ga iru"
+      }
+    ],
+    "lrclibId": 11126360,
+    "songTitle": "Anata ni Deawanakereba ~Kasetsu Touka~",
+    "status": "Aligned"
+  },
+  "406a63fe-5a08-4a6d-868e-96aa915d8070": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lrclibId": 36247917,
+    "reason": "median probability 0.48 is too low",
+    "songTitle": "Lantas",
+    "status": "Rejected"
+  },
+  "40a75aa0-9bb2-4fa5-906b-d88fd20e468b": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lrclibId": 18171342,
+    "reason": "only 3 lines were sung",
+    "songTitle": "ALiCE&u",
+    "status": "Rejected"
   },
   "416972eb-f867-5615-b865-774d022474ab": {
     "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
@@ -182,192 +2362,3332 @@
     "songTitle": "Unwavering Startorch",
     "status": "Rejected"
   },
+  "46ad1148-5c0e-4c2c-8ca1-2c341bd4d977": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lrclibId": 12943406,
+    "reason": "3 weak lines in a row, a section was probably skipped",
+    "songTitle": "Eiyuu no Shihen",
+    "status": "Rejected"
+  },
+  "4766bb04-80f4-47e9-a721-abfb0902fb1c": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lrclibId": 9441843,
+    "reason": "3 weak lines in a row, a section was probably skipped",
+    "songTitle": "DALLA DALLA",
+    "status": "Rejected"
+  },
+  "48aa230a-c977-5fcf-9ca1-fe0e7b46ecab": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lines": [
+      {
+        "atMs": 1580,
+        "text": "Here we are at the crossroads once again"
+      },
+      {
+        "atMs": 7820,
+        "text": "You're telling me you're so confused"
+      },
+      {
+        "atMs": 11820,
+        "text": "You can't make up your mind"
+      },
+      {
+        "atMs": 14760,
+        "text": "Is this meant to be?"
+      },
+      {
+        "atMs": 19440,
+        "text": "You're asking me"
+      },
+      {
+        "atMs": 22420,
+        "text": "But only love can say"
+      },
+      {
+        "atMs": 27800,
+        "text": "Try again or walk away"
+      },
+      {
+        "atMs": 31500,
+        "text": "But I believe for you and me"
+      },
+      {
+        "atMs": 35240,
+        "text": "The sun will shine one day"
+      },
+      {
+        "atMs": 38220,
+        "text": "So I'll just play my part"
+      },
+      {
+        "atMs": 43280,
+        "text": "Pray you'll have a change of heart"
+      },
+      {
+        "atMs": 47020,
+        "text": "But I can't make you see it through"
+      },
+      {
+        "atMs": 51920,
+        "text": "That's something only love can do"
+      }
+    ],
+    "lrclibId": 10595302,
+    "songTitle": "Only Love",
+    "status": "Aligned"
+  },
+  "4f669cc9-2bf9-5b82-876a-53ff22e7eb1a": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lines": [
+      {
+        "atMs": 23580,
+        "text": "Boku ga mitsumeru keshiki no sono naka ni"
+      },
+      {
+        "atMs": 28780,
+        "text": "Kimi ga haitte kara kawari hateta sekai wa"
+      },
+      {
+        "atMs": 34440,
+        "text": "Itsu mo sotsu naku konashita hi\"no mannaka"
+      },
+      {
+        "atMs": 39680,
+        "text": "Fushigi na inryoku ni sakaraezu kuzureteku"
+      },
+      {
+        "atMs": 45120,
+        "text": ""
+      },
+      {
+        "atMs": 45660,
+        "text": "I LOVE... nante iikakete wa yamete"
+      },
+      {
+        "atMs": 51240,
+        "text": "I LOVE... I LOVE... nan do mo"
+      },
+      {
+        "atMs": 56380,
+        "text": "Takamaru ai no naka kawaru shinjou no naka"
+      },
+      {
+        "atMs": 64760,
+        "text": "Sanzen to kagayaku sugata wa"
+      },
+      {
+        "atMs": 70400,
+        "text": "Marude suisou no naka ni tobikonde"
+      },
+      {
+        "atMs": 75300,
+        "text": "Toketa enogu mitai na"
+      },
+      {
+        "atMs": 79140,
+        "text": "Iregyuraa"
+      },
+      {
+        "atMs": 81120,
+        "text": "Hitori ja nan hitotsu kizukenakattadarou"
+      },
+      {
+        "atMs": 87840,
+        "text": "Konna ni azayaka na shikisai ni"
+      },
+      {
+        "atMs": 92800,
+        "text": "Futsuu no koto da to tobokeru kimi ni iikaketa"
+      },
+      {
+        "atMs": 100400,
+        "text": "I LOVE sono tsuzuki wo okurasete"
+      },
+      {
+        "atMs": 109980,
+        "text": "Mienai mono mite warau"
+      },
+      {
+        "atMs": 110600,
+        "text": "Kimi no koto wo wakarenai boku ga iru"
+      },
+      {
+        "atMs": 112320,
+        "text": "Utsukushi sugite me ga kurande shimau"
+      },
+      {
+        "atMs": 132560,
+        "text": "Ima mo rettou kan ni shibararete ikite iru"
+      },
+      {
+        "atMs": 138580,
+        "text": ""
+      },
+      {
+        "atMs": 139180,
+        "text": "I love... I love... fukakkou na musubime"
+      },
+      {
+        "atMs": 144740,
+        "text": "I love... I love... tesaguri de mitsukete"
+      },
+      {
+        "atMs": 150340,
+        "text": "I love Your love toite karamatte"
+      },
+      {
+        "atMs": 156000,
+        "text": "Boku wa kurikaeshiteru nan do mo"
+      },
+      {
+        "atMs": 160210,
+        "text": ""
+      },
+      {
+        "atMs": 160420,
+        "text": "Repurika bakari ga kazarareta ginga"
+      },
+      {
+        "atMs": 166480,
+        "text": "Kaaten de tsukurareta kurayami"
+      },
+      {
+        "atMs": 172280,
+        "text": "Nageku hito mo inai nezumiiro no machi no naka de"
+      },
+      {
+        "atMs": 180020,
+        "text": "I love sono akashi wo dakishimete"
+      },
+      {
+        "atMs": 186320,
+        "text": "Yorokobi mo kanashimi mo kutouten no nai omoi mo"
+      },
+      {
+        "atMs": 195700,
+        "text": "Kanzen ni wakachiau yori"
+      },
+      {
+        "atMs": 198640,
+        "text": "Aimai ni nayaminagara mo"
+      },
+      {
+        "atMs": 201480,
+        "text": "Mitomeaetanara"
+      },
+      {
+        "atMs": 205300,
+        "text": "Kasanaru ai no naka nigotta kanjou no naka"
+      },
+      {
+        "atMs": 212060,
+        "text": "Mabataki no wazuka sono aima ni"
+      },
+      {
+        "atMs": 217060,
+        "text": "Kimi ga kureta purezento wa"
+      },
+      {
+        "atMs": 221160,
+        "text": "Kono yake ni yasashii sekai da"
+      },
+      {
+        "atMs": 225600,
+        "text": "Iregyuraa"
+      },
+      {
+        "atMs": 227560,
+        "text": "Hitori ja nan hitotsu kizukenakattadarou"
+      },
+      {
+        "atMs": 234400,
+        "text": "Konna ni taisetsu na hikari ni"
+      },
+      {
+        "atMs": 239260,
+        "text": "Futsuu no koto da to tobokeru kimi ni iikaketa"
+      },
+      {
+        "atMs": 246920,
+        "text": "I love sono tsuzuki wo okurasete"
+      },
+      {
+        "atMs": 254360,
+        "text": ""
+      },
+      {
+        "atMs": 261300,
+        "text": "Uketori au bokura"
+      },
+      {
+        "atMs": 263880,
+        "text": "Namae mo nai yoru ga fukete iku"
+      }
+    ],
+    "lrclibId": 36378679,
+    "songTitle": "I LOVE...",
+    "status": "Aligned"
+  },
+  "53642c29-7aa6-4841-8b2d-a8a777932003": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lines": [
+      {
+        "atMs": 2800,
+        "text": "Lembaran foto hitam-putih"
+      },
+      {
+        "atMs": 7340,
+        "text": "Aku coba ingat lagi warna bajumu kala itu"
+      },
+      {
+        "atMs": 13560,
+        "text": "Kali pertama di hidupku"
+      },
+      {
+        "atMs": 18320,
+        "text": "Manusia lain memelukku"
+      },
+      {
+        "atMs": 22660,
+        "text": ""
+      },
+      {
+        "atMs": 24400,
+        "text": "Lembaran foto hitam-putih"
+      },
+      {
+        "atMs": 29200,
+        "text": "Aku coba ingat lagi wangi rumah di sore itu"
+      },
+      {
+        "atMs": 34920,
+        "text": "Kue coklat, balon warna-warni"
+      },
+      {
+        "atMs": 40120,
+        "text": "Pesta hari ulang tahunku"
+      },
+      {
+        "atMs": 45520,
+        "text": "Di mana pun kalian berada"
+      },
+      {
+        "atMs": 51040,
+        "text": "Kukirimkan terima kasih"
+      },
+      {
+        "atMs": 55800,
+        "text": "Untuk warna dalam hidupku dan banyak kenangan indah"
+      },
+      {
+        "atMs": 65380,
+        "text": "Kau melukis aku"
+      },
+      {
+        "atMs": 69460,
+        "text": "Lembaran foto hitam-putih"
+      },
+      {
+        "atMs": 78340,
+        "text": "Kembali teringat malam, kuhitung-hitung bintang"
+      },
+      {
+        "atMs": 84480,
+        "text": "Saat mataku sulit tidur, mm-mm"
+      },
+      {
+        "atMs": 89120,
+        "text": "Suaramu buatku lelap, mm-mm"
+      },
+      {
+        "atMs": 97420,
+        "text": "Di mana pun kalian berada"
+      },
+      {
+        "atMs": 102880,
+        "text": "Kukirimkan terima kasih"
+      },
+      {
+        "atMs": 107660,
+        "text": "Untuk warna dalam hidupku dan banyak kenangan indah"
+      },
+      {
+        "atMs": 114790,
+        "text": ""
+      },
+      {
+        "atMs": 117200,
+        "text": "Kau melukis aku"
+      },
+      {
+        "atMs": 124060,
+        "text": "Kita tak pernah tahu"
+      },
+      {
+        "atMs": 127920,
+        "text": "Berapa lama kita diberi waktu"
+      },
+      {
+        "atMs": 133040,
+        "text": "Jika aku pergi lebih dulu, jangan lupakan aku"
+      },
+      {
+        "atMs": 142040,
+        "text": "Ini lagu untukmu, ungkapan terima kasihku"
+      }
+    ],
+    "lrclibId": 14779493,
+    "songTitle": "Monokrom",
+    "status": "Aligned"
+  },
+  "53e9e654-481e-40d2-948e-9c92e43028df": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lrclibId": 1063678,
+    "reason": "3 weak lines in a row, a section was probably skipped",
+    "songTitle": "Bon Appétit♡S",
+    "status": "Rejected"
+  },
+  "5733b061-cd0f-4c70-b48d-1238e93de730": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lines": [
+      {
+        "atMs": 3320,
+        "text": "Kala mata t'lah menghunuskan"
+      },
+      {
+        "atMs": 9300,
+        "text": "Arti pulang jadi hal yang berarti"
+      },
+      {
+        "atMs": 17820,
+        "text": "Dan ku harus melepasmu"
+      },
+      {
+        "atMs": 29200,
+        "text": "Dengan sederhana di tengah"
+      },
+      {
+        "atMs": 35300,
+        "text": "Gempitanya perayaan mati rasa"
+      },
+      {
+        "atMs": 50640,
+        "text": "Bila waktunya langit memanggilmu"
+      },
+      {
+        "atMs": 59000,
+        "text": "Pulang, wahai mentari"
+      },
+      {
+        "atMs": 63700,
+        "text": "Jangan kau risau"
+      },
+      {
+        "atMs": 68260,
+        "text": "Semesta bersamamu"
+      },
+      {
+        "atMs": 74860,
+        "text": "Biarkan rebah pada tangisku"
+      },
+      {
+        "atMs": 80180,
+        "text": "Raga, rasa kita yang lalu"
+      },
+      {
+        "atMs": 87200,
+        "text": "Melepas itu caraku mencintaimu"
+      },
+      {
+        "atMs": 97320,
+        "text": "Masih nyala dalam dekapku"
+      },
+      {
+        "atMs": 103460,
+        "text": "Semua asa yang kita rengkuh"
+      },
+      {
+        "atMs": 109820,
+        "text": "Dan tertatih dia mencari hatimu"
+      },
+      {
+        "atMs": 123300,
+        "text": "Dengan lembut retakkan semua"
+      },
+      {
+        "atMs": 129340,
+        "text": "Yang kaumau dan rayakan mati rasa"
+      },
+      {
+        "atMs": 144640,
+        "text": "Bila waktunya langit memanggilmu"
+      },
+      {
+        "atMs": 152520,
+        "text": "Pulang, wahai mentari"
+      },
+      {
+        "atMs": 157720,
+        "text": "Jangan kau risau"
+      },
+      {
+        "atMs": 160920,
+        "text": "Semesta bersamamu"
+      },
+      {
+        "atMs": 165440,
+        "text": "Biarkan rebah pada tangisku"
+      },
+      {
+        "atMs": 171220,
+        "text": "Raga, rasa kita yang lalu"
+      },
+      {
+        "atMs": 177500,
+        "text": "Melepas itu caraku mencinta"
+      },
+      {
+        "atMs": 186900,
+        "text": "Biar aku berlayar ('tuk menemukanmu)"
+      },
+      {
+        "atMs": 191380,
+        "text": "Ke mana pun ku pergi, oh-oh-oh"
+      },
+      {
+        "atMs": 204010,
+        "text": "Kehilangan ini (menjadi saksi)"
+      },
+      {
+        "atMs": 206280,
+        "text": "Hanya namamu doaku (oh-ho-oh-oh)"
+      },
+      {
+        "atMs": 216360,
+        "text": "Hanya namamu doaku"
+      },
+      {
+        "atMs": 224560,
+        "text": ""
+      },
+      {
+        "atMs": 236850,
+        "text": "Biarkan rebah pada tangisku"
+      },
+      {
+        "atMs": 242410,
+        "text": "Raga, rasa kita yang lalu"
+      },
+      {
+        "atMs": 248690,
+        "text": "Melepas itu caraku mencintaimu"
+      }
+    ],
+    "lrclibId": 7794762,
+    "songTitle": "Perayaan Mati Rasa",
+    "status": "Aligned"
+  },
+  "5a7d2ff1-ba6b-408c-9d89-9a32f3b15c18": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lines": [
+      {
+        "atMs": 3040,
+        "text": "Boku wo hikarasete kimi wo kumoraseta"
+      },
+      {
+        "atMs": 10960,
+        "text": "Kono koi ni bokura no yume wo noseru no wa omoni sugita ka na"
+      },
+      {
+        "atMs": 18380,
+        "text": "Kimi no kirai ni narikata wo boku wa wasureta yo"
+      },
+      {
+        "atMs": 27360,
+        "text": "Doko wo sagashite mo miataranai n da yo"
+      },
+      {
+        "atMs": 31560,
+        "text": "Ano hi douse nara"
+      },
+      {
+        "atMs": 34480,
+        "text": "\"sayonara\"to issho ni oshiete hoshikatta yo"
+      },
+      {
+        "atMs": 50320,
+        "text": "Ano yakusoku no yaburikata wo hoka no dare ka no aishikata wo"
+      },
+      {
+        "atMs": 58420,
+        "text": "Dakedo honto wa shiritaku nai n da"
+      },
+      {
+        "atMs": 66780,
+        "text": "Yakusoku shita yo ne\"100toshi made yoroshiku ne\""
+      },
+      {
+        "atMs": 80320,
+        "text": "101nenme ga konna ni hayaku kuru to wa omowanakatta yo"
+      },
+      {
+        "atMs": 88800,
+        "text": "Konna koto itte (konna koto itte) honto ni gomen ne"
+      },
+      {
+        "atMs": 96800,
+        "text": "Atama de wakatte mo kokoro ga goneru no"
+      },
+      {
+        "atMs": 101280,
+        "text": "Dakedo sonna boku"
+      },
+      {
+        "atMs": 104260,
+        "text": "Tsukutte kureta no wa sukutte kureta no wa"
+      },
+      {
+        "atMs": 119180,
+        "text": "Kitto papa de mo tabun mama de mo kamisama de mo nai to omou n da yo"
+      },
+      {
+        "atMs": 128060,
+        "text": "Nokoru wa tsumari hora ne kimi datta"
+      },
+      {
+        "atMs": 135320,
+        "text": "Boku ga tatoeba hoka no hito to musubareta to shite"
+      },
+      {
+        "atMs": 137800,
+        "text": "Futari no aida ni inochi ga yadotta to shite"
+      },
+      {
+        "atMs": 158040,
+        "text": "Sono naka ni mo kitto kimi no idenshi mo sotto"
+      },
+      {
+        "atMs": 162600,
+        "text": "Magirekonde irudarou"
+      },
+      {
+        "atMs": 166300,
+        "text": "De mo kimi ga inainara kitto tsumaranaikara"
+      },
+      {
+        "atMs": 174880,
+        "text": "Himatsubushigatera 2085toshi made matteru yo"
+      },
+      {
+        "atMs": 184260,
+        "text": "Ima made honto ni arigatou ima made honto ni gomen ne"
+      },
+      {
+        "atMs": 199980,
+        "text": "Kondo wa boku ga matsu ban da yo kimi ga ikite iyouto nakarou to"
+      },
+      {
+        "atMs": 208220,
+        "text": "Da tte hajimete waratte ieta yakusoku na n da mon"
+      },
+      {
+        "atMs": 217020,
+        "text": "\"sayonara\"to issho ni (\"sora ga kirei da ne hito wa kanashii ne\")"
+      },
+      {
+        "atMs": 225520,
+        "text": "Boku kara no kotoba wo (mata miesuita honto de boku wo aratte yo tsugi ga moshi areba)"
+      },
+      {
+        "atMs": 233820,
+        "text": "\"arigatou\"to issho ni (boku no suki na kimi sono kimi ga suki na boku)"
+      },
+      {
+        "atMs": 241640,
+        "text": "\"gomen ne\"wo (sou yatte itsu shi ka boku wa boku wo taisetsu ni omoeta yo)"
+      }
+    ],
+    "lrclibId": 33884251,
+    "songTitle": "Me Me She",
+    "status": "Aligned"
+  },
+  "5b0cff81-0209-4099-aa8e-f8874af14bba": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lrclibId": 2691656,
+    "reason": "median probability 0.33 is too low",
+    "songTitle": "Mantra Hujan",
+    "status": "Rejected"
+  },
+  "5b24f812-5218-45da-abc0-7d22f501e22e": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lines": [
+      {
+        "atMs": 300,
+        "text": "Fukai fukai mori no oku ni ima mo kitto"
+      },
+      {
+        "atMs": 5940,
+        "text": "Okizari ni shita kokoro kakushiteru yo"
+      },
+      {
+        "atMs": 12080,
+        "text": "Sagasu hodo no chikara mo naku tsukare hateta"
+      },
+      {
+        "atMs": 17780,
+        "text": "Hito\"wa eien no yami ni kieru"
+      },
+      {
+        "atMs": 24600,
+        "text": "Chiisai mama nara kitto"
+      },
+      {
+        "atMs": 30300,
+        "text": "Ima de mo mieta ka na"
+      },
+      {
+        "atMs": 37750,
+        "text": ""
+      },
+      {
+        "atMs": 39920,
+        "text": "Bokutachi wa ikiru hodo ni"
+      },
+      {
+        "atMs": 45280,
+        "text": "Nakushiteku sukoshi zutsu"
+      },
+      {
+        "atMs": 51680,
+        "text": "Itsuwari ya uso wo matoi"
+      },
+      {
+        "atMs": 57740,
+        "text": "Tachisukumu koe mo naku"
+      },
+      {
+        "atMs": 64000,
+        "text": "Aoi aoi sora no iro mo kizukanai mama"
+      },
+      {
+        "atMs": 81080,
+        "text": "Sugite yuku mainichi ga kawatte yuku"
+      },
+      {
+        "atMs": 87020,
+        "text": "Tsukurareta wakugumi wo koe ima wo ikite"
+      },
+      {
+        "atMs": 92720,
+        "text": "Sabitsuita kokoro mata ugoki dasu yo"
+      },
+      {
+        "atMs": 99740,
+        "text": "Toki no rizumu wo shireba"
+      },
+      {
+        "atMs": 104840,
+        "text": "Bokutachi wa samayoinagara"
+      },
+      {
+        "atMs": 120740,
+        "text": "Ikite yuku doko made mo"
+      },
+      {
+        "atMs": 126640,
+        "text": "Shinjiteru hikari motome"
+      },
+      {
+        "atMs": 132740,
+        "text": "Aruki dasu kimi to ima"
+      },
+      {
+        "atMs": 139780,
+        "text": "Bokutachi wa ikiru hodo ni"
+      },
+      {
+        "atMs": 142400,
+        "text": "Nakushiteku sukoshi zutsu"
+      },
+      {
+        "atMs": 143400,
+        "text": "Itsuwari ya uso wo matoi"
+      },
+      {
+        "atMs": 165980,
+        "text": "Bokutachi wa samayoinagara"
+      },
+      {
+        "atMs": 168660,
+        "text": "Ikite yuku doko made mo"
+      },
+      {
+        "atMs": 176380,
+        "text": "Furikaeru michi wo tozashi"
+      },
+      {
+        "atMs": 183880,
+        "text": "Tachisukumu koe mo naku"
+      },
+      {
+        "atMs": 193100,
+        "text": "Ikite yuku eien ni"
+      }
+    ],
+    "lrclibId": 30714317,
+    "songTitle": "Fukai Mori",
+    "status": "Aligned"
+  },
+  "5b7470b9-f7e9-4511-ad8a-c2626d341023": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lrclibId": 38909623,
+    "reason": "3 weak lines in a row, a section was probably skipped",
+    "songTitle": "Kau Rumahku",
+    "status": "Rejected"
+  },
+  "5c0e4181-4b9e-4b36-b972-1d645ce00d9d": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lrclibId": 29896955,
+    "reason": "3 weak lines in a row, a section was probably skipped",
+    "songTitle": "Di Akhir Perang",
+    "status": "Rejected"
+  },
+  "5d467c48-c40f-4e48-abf5-1ff35135e300": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lrclibId": 37491100,
+    "reason": "3 weak lines in a row, a section was probably skipped",
+    "songTitle": "Yang Terbaik Bagimu",
+    "status": "Rejected"
+  },
+  "5de55760-c2e0-56e0-bb1b-e88305cd3660": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lines": [
+      {
+        "atMs": 18880,
+        "text": "Kuhampiri jalan yang kita lewati"
+      },
+      {
+        "atMs": 25380,
+        "text": "Setiap hari kita di sini"
+      },
+      {
+        "atMs": 31700,
+        "text": ""
+      },
+      {
+        "atMs": 34380,
+        "text": "Ku menanti hadirmu 'tuk kembali"
+      },
+      {
+        "atMs": 40820,
+        "text": "Hanya kenangan yang tersisa di sini"
+      },
+      {
+        "atMs": 48600,
+        "text": "Namun, s'karang kau t'lah pergi"
+      },
+      {
+        "atMs": 52260,
+        "text": "Dan kuyakini kau takkan kembali"
+      },
+      {
+        "atMs": 58860,
+        "text": "Mungkin hari ini, hari esok, atau nanti"
+      },
+      {
+        "atMs": 66560,
+        "text": "Berjuta memori yang terpatri dalam hati ini"
+      },
+      {
+        "atMs": 74600,
+        "text": "Mungkin hari ini, hari esok, atau nanti"
+      },
+      {
+        "atMs": 81800,
+        "text": "Tak lagi saling menyapa"
+      },
+      {
+        "atMs": 85980,
+        "text": "Meski ku masih harapkanmu"
+      },
+      {
+        "atMs": 98480,
+        "text": "Ku menanti hadirmu 'tuk kembali"
+      },
+      {
+        "atMs": 104560,
+        "text": "Hanya kenangan yang tersisa di sini (namun, sekarang)"
+      },
+      {
+        "atMs": 112540,
+        "text": "Namun, s'karang kau t'lah pergi (pergi)"
+      },
+      {
+        "atMs": 116400,
+        "text": "Dan kuyakini kau takkan kembali"
+      },
+      {
+        "atMs": 122740,
+        "text": "Mungkin hari ini, hari esok, atau nanti"
+      },
+      {
+        "atMs": 130380,
+        "text": "Berjuta memori yang terpatri dalam hati ini"
+      },
+      {
+        "atMs": 139060,
+        "text": "Mungkin hari ini, hari esok, atau nanti"
+      },
+      {
+        "atMs": 146060,
+        "text": "Tak lagi saling menyapa"
+      },
+      {
+        "atMs": 149580,
+        "text": "Meski ku masih harapkanmu"
+      },
+      {
+        "atMs": 157900,
+        "text": "Sesungguhnya hatiku tak sanggup menerima"
+      },
+      {
+        "atMs": 165880,
+        "text": "Dan lupakan s'galanya"
+      },
+      {
+        "atMs": 193100,
+        "text": "Mungkin hari ini, hari esok, atau nanti"
+      },
+      {
+        "atMs": 195740,
+        "text": "Berjuta memori yang terpatri dalam hati ini"
+      },
+      {
+        "atMs": 204200,
+        "text": "Mungkin hari ini, hari esok, atau nanti"
+      },
+      {
+        "atMs": 211780,
+        "text": "Tak lagi saling menyapa"
+      },
+      {
+        "atMs": 215420,
+        "text": "Meski ku masih harapkanmu (harapkanmu), oh-oh"
+      },
+      {
+        "atMs": 221420,
+        "text": "Meski ku masih harapkanmu, oh-oh"
+      }
+    ],
+    "lrclibId": 8990335,
+    "songTitle": "Mungkin Hari Ini Esok atau Nanti",
+    "status": "Aligned"
+  },
+  "5f744ef9-b479-5fdc-b8b0-480dab8377c8": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lines": [
+      {
+        "atMs": 10380,
+        "text": "Kau datang tatkala sinar senjaku telah redup"
+      },
+      {
+        "atMs": 19920,
+        "text": "Dan pamit ketika purnamaku penuh seutuhnya"
+      },
+      {
+        "atMs": 29600,
+        "text": "Kau yang singgah tapi tak sungguh"
+      },
+      {
+        "atMs": 34480,
+        "text": "Kau yang singgah tapi tak sungguh"
+      },
+      {
+        "atMs": 39420,
+        "text": "Kukira kau rumah"
+      },
+      {
+        "atMs": 43180,
+        "text": "Nyatanya kau cuma aku sewa"
+      },
+      {
+        "atMs": 48340,
+        "text": "Dari tubuh seorang perempuan yang memintamu untuk pulang"
+      },
+      {
+        "atMs": 58420,
+        "text": "Kau bukan rumah"
+      },
+      {
+        "atMs": 62880,
+        "text": "Kau bukan rumah"
+      },
+      {
+        "atMs": 66860,
+        "text": "Kau bukan rumah"
+      },
+      {
+        "atMs": 72300,
+        "text": "Kau bukan rumah"
+      },
+      {
+        "atMs": 77680,
+        "text": ""
+      },
+      {
+        "atMs": 87180,
+        "text": "Kukira kau rumah"
+      },
+      {
+        "atMs": 91120,
+        "text": "Nyatanya kau cuma aku sewa"
+      },
+      {
+        "atMs": 96540,
+        "text": "Dari tubuh seorang perempuan yang memintamu untuk pulang"
+      },
+      {
+        "atMs": 105900,
+        "text": "Kau bukan rumah"
+      },
+      {
+        "atMs": 111220,
+        "text": "Kau bukan rumah"
+      },
+      {
+        "atMs": 116240,
+        "text": "Kau bukan rumah"
+      },
+      {
+        "atMs": 120240,
+        "text": "Kau bukan rumah"
+      },
+      {
+        "atMs": 125520,
+        "text": ""
+      },
+      {
+        "atMs": 154420,
+        "text": "Kau bukan rumah"
+      },
+      {
+        "atMs": 159220,
+        "text": "Kau bukan rumah"
+      }
+    ],
+    "lrclibId": 39596931,
+    "songTitle": "Kukira Kau Rumah",
+    "status": "Aligned"
+  },
+  "5f92a126-3e23-4caf-a64e-aade63980e1f": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lrclibId": 10247010,
+    "reason": "median probability 0.46 is too low",
+    "songTitle": "Tampar",
+    "status": "Rejected"
+  },
+  "629bf6fe-069d-4ca9-96f4-0659d363ff2f": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lrclibId": 17086812,
+    "reason": "median probability 0.40 is too low",
+    "songTitle": "Mendarah",
+    "status": "Rejected"
+  },
+  "6340dff1-aa19-445d-8437-1f6e59239ec2": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lines": [
+      {
+        "atMs": 6980,
+        "text": "Bagaikan sungai yang tak punya malu"
+      },
+      {
+        "atMs": 15400,
+        "text": "Mengalir meskipun terancam surut"
+      },
+      {
+        "atMs": 21440,
+        "text": "Lalu (hmm), kakimu melangkah ke rumahku"
+      },
+      {
+        "atMs": 31980,
+        "text": "Setengah melirik, mencoba rayu"
+      },
+      {
+        "atMs": 40180,
+        "text": "Apa yang kau inginkan"
+      },
+      {
+        "atMs": 44460,
+        "text": "Dari senyumku, ya tuan?"
+      },
+      {
+        "atMs": 51380,
+        "text": "Gemar sekali kau lukiskan bintang untukku"
+      },
+      {
+        "atMs": 60000,
+        "text": "Sungguh lihai tanganmu menata kembali hati"
+      },
+      {
+        "atMs": 66340,
+        "text": "Yang hampir mati"
+      },
+      {
+        "atMs": 68390,
+        "text": "'Kan ku letakkan hangat di tengah dekap kita"
+      },
+      {
+        "atMs": 72940,
+        "text": ""
+      },
+      {
+        "atMs": 75860,
+        "text": "Jangan biarkan ku pulang"
+      },
+      {
+        "atMs": 79910,
+        "text": "Ke rumah yang bukan engkau"
+      },
+      {
+        "atMs": 84880,
+        "text": ""
+      },
+      {
+        "atMs": 95890,
+        "text": "Bicarakan tentang seisi dunia"
+      },
+      {
+        "atMs": 104550,
+        "text": "Perlahan mendekat, bisikkan cinta"
+      },
+      {
+        "atMs": 110190,
+        "text": "Membuatku terlena"
+      },
+      {
+        "atMs": 112550,
+        "text": "Ke dalam pesona sukma yang begitu indah"
+      },
+      {
+        "atMs": 117660,
+        "text": ""
+      },
+      {
+        "atMs": 120870,
+        "text": "Apa yang kau inginkan"
+      },
+      {
+        "atMs": 124790,
+        "text": "Dari senyumku, ya tuan?"
+      },
+      {
+        "atMs": 131850,
+        "text": "Gemar sekali kau lukiskan bintang untukku"
+      },
+      {
+        "atMs": 135060,
+        "text": ""
+      },
+      {
+        "atMs": 140370,
+        "text": "Sungguh lihai tanganmu menata kembali hati"
+      },
+      {
+        "atMs": 146710,
+        "text": "Yang hampir mati"
+      },
+      {
+        "atMs": 148850,
+        "text": "'Kan ku letakkan hangat di tengah dekap kita"
+      },
+      {
+        "atMs": 156030,
+        "text": "Jangan biarkan ku pulang"
+      },
+      {
+        "atMs": 160470,
+        "text": "Ke rumah yang bukan engkau"
+      },
+      {
+        "atMs": 164140,
+        "text": ""
+      },
+      {
+        "atMs": 168930,
+        "text": "Jika mampu ku menjelajahi langit"
+      },
+      {
+        "atMs": 177570,
+        "text": "'Kan ku petik pelangi 'tuk warnai harimu"
+      },
+      {
+        "atMs": 183810,
+        "text": "Jangan khawatir, masih ada aku"
+      },
+      {
+        "atMs": 192230,
+        "text": "Jangan khawatir, masih ada aku"
+      },
+      {
+        "atMs": 197850,
+        "text": ""
+      },
+      {
+        "atMs": 233850,
+        "text": "Gemas sekali kau lukiskan bintang untukku"
+      },
+      {
+        "atMs": 240080,
+        "text": ""
+      },
+      {
+        "atMs": 242030,
+        "text": "Sungguh lihai tanganmu menata kembali hati"
+      },
+      {
+        "atMs": 248370,
+        "text": "Yang hampir mati"
+      },
+      {
+        "atMs": 250550,
+        "text": "'Kan ku letakkan hangat di tengah dekap kita"
+      },
+      {
+        "atMs": 255660,
+        "text": ""
+      },
+      {
+        "atMs": 258950,
+        "text": "'Kan aku persilahkan kau menetap di sini"
+      }
+    ],
+    "lrclibId": 38909623,
+    "songTitle": "Kau Rumahku",
+    "status": "Aligned"
+  },
+  "63a9bf4a-1c5e-4ef7-b0c2-80a5461aa336": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lines": [
+      {
+        "atMs": 16520,
+        "text": "Dag-dig-dug hatiku"
+      },
+      {
+        "atMs": 18520,
+        "text": "Saat aromamu lewati hidungku"
+      },
+      {
+        "atMs": 23620,
+        "text": "Melotot mataku"
+      },
+      {
+        "atMs": 27420,
+        "text": "Melihatmu lewat di depanku"
+      },
+      {
+        "atMs": 33480,
+        "text": "Seorang biasa saja"
+      },
+      {
+        "atMs": 36120,
+        "text": "Apa pantas 'tuk bersanding denganmu? (Denganmu)"
+      },
+      {
+        "atMs": 41080,
+        "text": "Overthinking, tapi gak mau ambil pusing"
+      },
+      {
+        "atMs": 44720,
+        "text": "Karena aku bukan kaum mendang-mending"
+      },
+      {
+        "atMs": 49280,
+        "text": "Oh, asmara berdebar rasanya ku di dekatmu"
+      },
+      {
+        "atMs": 57640,
+        "text": "Oh, asmara dengar bisikan cinta, lirih matamu"
+      },
+      {
+        "atMs": 64760,
+        "text": "Hantam jantungku (oh, oh, asmara)"
+      },
+      {
+        "atMs": 69200,
+        "text": "Hari ke sekian"
+      },
+      {
+        "atMs": 85000,
+        "text": "Masih tak berhasil mendekatimu"
+      },
+      {
+        "atMs": 89140,
+        "text": "Ugh, bagaimana melelehkan beku hatimu?"
+      },
+      {
+        "atMs": 96700,
+        "text": "Ugh!"
+      },
+      {
+        "atMs": 99100,
+        "text": "\"Mending nyerah, dah?\" Oh, tentu tidak (tidak)"
+      },
+      {
+        "atMs": 102420,
+        "text": "Demi gapai impian, kita harus terus belajar"
+      },
+      {
+        "atMs": 108460,
+        "text": "Belajar memahami bahasa cintamu"
+      },
+      {
+        "atMs": 110980,
+        "text": "Ehe!"
+      },
+      {
+        "atMs": 113740,
+        "text": "Oh, asmara berdebar rasanya (rasanya) ku di dekatmu (di dekatmu)"
+      },
+      {
+        "atMs": 121520,
+        "text": "Oh, asmara dengar bisikan cinta, lirih matamu, hu-uh-uuh"
+      },
+      {
+        "atMs": 128560,
+        "text": "Oh, asmara balas sinyal cinta ku, sekali saja"
+      },
+      {
+        "atMs": 136000,
+        "text": "Oh, asmara tidak adakah ruang dalam hatimu, hu-uh-uuh"
+      },
+      {
+        "atMs": 145120,
+        "text": "Tersisa untukku?"
+      },
+      {
+        "atMs": 148050,
+        "text": ""
+      },
+      {
+        "atMs": 150280,
+        "text": "Sore itu"
+      },
+      {
+        "atMs": 152260,
+        "text": "Tumben-tumbenan kau duluan"
+      },
+      {
+        "atMs": 154740,
+        "text": "Yang datang menghampiriku (oh, asmara datanglah padaku)"
+      },
+      {
+        "atMs": 161480,
+        "text": "Oh, asmara berdebar rasanya ku di dekatmu"
+      },
+      {
+        "atMs": 170860,
+        "text": "Oh, asmara dengar bisikan cinta, lirih matamu, hu-uh-uuh, hoo"
+      },
+      {
+        "atMs": 180700,
+        "text": "Oh, asmara berdebar rasanya (rasanya) ku di dekatmu"
+      },
+      {
+        "atMs": 189900,
+        "text": "Oh, asmara dengar bisikan cinta, lirih matamu, hu-uh-uuh"
+      },
+      {
+        "atMs": 197900,
+        "text": "Oh, asmara (berdebar rasanya), di-ba-ri-ba-ri-di, da-ra-da (ku di dekatmu)"
+      },
+      {
+        "atMs": 205340,
+        "text": "Oh, asmara terjawab semua sudah teka-tekimu, hmm-mm (teka-tekimu)"
+      },
+      {
+        "atMs": 217700,
+        "text": "Milikmu (milikmu, milikmu, milikmu, milikmu)"
+      },
+      {
+        "atMs": 225740,
+        "text": "Milikmu"
+      },
+      {
+        "atMs": 227930,
+        "text": ""
+      },
+      {
+        "atMs": 230900,
+        "text": "Milikmu"
+      }
+    ],
+    "lrclibId": 33102695,
+    "songTitle": "Oh! Asmara",
+    "status": "Aligned"
+  },
+  "65ceeb8f-84fd-4f85-a830-f4da8fa63c18": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lines": [
+      {
+        "atMs": 7380,
+        "text": "Ku terbangun lagi"
+      },
+      {
+        "atMs": 10840,
+        "text": "Di antara sepi"
+      },
+      {
+        "atMs": 13300,
+        "text": "Hanya pikiran yang ramai"
+      },
+      {
+        "atMs": 22060,
+        "text": "Mengutuki diri"
+      },
+      {
+        "atMs": 25880,
+        "text": "Tak bisa kembali"
+      },
+      {
+        "atMs": 28260,
+        "text": "'Tuk mengubah alur kisah"
+      },
+      {
+        "atMs": 36420,
+        "text": "Ketika mereka meminta tawa"
+      },
+      {
+        "atMs": 44300,
+        "text": "Ternyata rela tak semudah kata"
+      },
+      {
+        "atMs": 51380,
+        "text": ""
+      },
+      {
+        "atMs": 53180,
+        "text": "Tak perlu khawatir, ku hanya terluka"
+      },
+      {
+        "atMs": 62420,
+        "text": "Terbiasa 'tuk pura-pura tertawa"
+      },
+      {
+        "atMs": 69840,
+        "text": "Namun bolehkah s'kali saja ku menangis?"
+      },
+      {
+        "atMs": 77420,
+        "text": "Sebelum kembali membohongi diri"
+      },
+      {
+        "atMs": 84140,
+        "text": ""
+      },
+      {
+        "atMs": 88720,
+        "text": "Ketika kau lelah"
+      },
+      {
+        "atMs": 91900,
+        "text": "Berhentilah dulu"
+      },
+      {
+        "atMs": 95760,
+        "text": "Beri ruang, beri waktu"
+      },
+      {
+        "atMs": 103900,
+        "text": "Mereka bilang, \"Syukurilah saja\""
+      },
+      {
+        "atMs": 111400,
+        "text": "Padahal rela tak semudah kata"
+      },
+      {
+        "atMs": 118660,
+        "text": "Tak perlu khawatir, ku hanya terluka"
+      },
+      {
+        "atMs": 126160,
+        "text": "Terbiasa 'tuk pura-pura tertawa"
+      },
+      {
+        "atMs": 133600,
+        "text": "Namun bolehkah s'kali saja ku menangis?"
+      },
+      {
+        "atMs": 141220,
+        "text": "Sebelum kembali membohongi diri"
+      },
+      {
+        "atMs": 146600,
+        "text": "Ha, ha, ha-ah"
+      },
+      {
+        "atMs": 149860,
+        "text": "Ha, ha, ha-ah"
+      },
+      {
+        "atMs": 153620,
+        "text": "Ha, ha, ha-ah-oh"
+      },
+      {
+        "atMs": 158500,
+        "text": "Kita hanyalah manusia yang terluka"
+      },
+      {
+        "atMs": 163660,
+        "text": "Terbiasa 'tuk pura-pura tertawa"
+      },
+      {
+        "atMs": 189880,
+        "text": "Namun bolehkah sekali saja ku menangis?"
+      },
+      {
+        "atMs": 197500,
+        "text": "Ku tak ingin lagi membohongi diri"
+      },
+      {
+        "atMs": 204540,
+        "text": "Ku ingin belajar menerima diri"
+      }
+    ],
+    "lrclibId": 9030188,
+    "songTitle": "Runtuh",
+    "status": "Aligned"
+  },
+  "664a501a-a350-4161-91a5-c501409c4894": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lrclibId": 38222730,
+    "reason": "3 weak lines in a row, a section was probably skipped",
+    "songTitle": "Dia Masa Lalumu, Aku Masa Depanmu",
+    "status": "Rejected"
+  },
+  "66aaa7ac-e953-5700-8a22-1be5d432844b": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lrclibId": 14896215,
+    "reason": "median probability 0.26 is too low",
+    "songTitle": "Fansa",
+    "status": "Rejected"
+  },
+  "66e1b566-f147-453d-ba26-d6627e542cb0": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lrclibId": 34717775,
+    "reason": "median probability 0.37 is too low",
+    "songTitle": "Raksa",
+    "status": "Rejected"
+  },
+  "6bce7ec0-e5d6-4f48-92ae-59ef63e5e9df": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lrclibId": 32456782,
+    "reason": "3 weak lines in a row, a section was probably skipped",
+    "songTitle": "Gala Bunga Matahari",
+    "status": "Rejected"
+  },
+  "702d1f45-8710-49de-aecc-d1766c32e2e6": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lines": [
+      {
+        "atMs": 7340,
+        "text": "Persis setahun yang lalu"
+      },
+      {
+        "atMs": 9740,
+        "text": "Ku dijauhkan dari yang tak ditakdirkan untukku"
+      },
+      {
+        "atMs": 18420,
+        "text": "Yang kuingat saat itu"
+      },
+      {
+        "atMs": 21200,
+        "text": "Yang kulakukan hanya menggerutu angkuh"
+      },
+      {
+        "atMs": 28940,
+        "text": "Lebih percaya cara-caraku"
+      },
+      {
+        "atMs": 31800,
+        "text": "Pilih ragukan rencana Sang Maha Penentu"
+      },
+      {
+        "atMs": 40860,
+        "text": "Untungnya, bumi masih berputar"
+      },
+      {
+        "atMs": 45760,
+        "text": "Untungnya, ku tak pilih menyerah"
+      },
+      {
+        "atMs": 51560,
+        "text": "Untungnya, ku bisa rasa"
+      },
+      {
+        "atMs": 55120,
+        "text": "Hal-hal baik yang datangnya belakangan"
+      }
+    ],
+    "lrclibId": 30215893,
+    "songTitle": "Untungnya, Hidup Harus Tetap Berjalan",
+    "status": "Aligned"
+  },
+  "7971a28a-8cae-4eb3-9031-94b5c99fd123": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lines": [
+      {
+        "atMs": 11080,
+        "text": "Entah sudah Selasa yang keberapa"
+      },
+      {
+        "atMs": 16440,
+        "text": "Masih saja kau ada, lekat di kepala"
+      },
+      {
+        "atMs": 22100,
+        "text": "Hari ini janji, esok mesti lupa"
+      },
+      {
+        "atMs": 27720,
+        "text": "Tetapi hati tak tepati"
+      },
+      {
+        "atMs": 33360,
+        "text": "Tampar aku di pipi"
+      },
+      {
+        "atMs": 39060,
+        "text": "Biar sadar dan ku mengerti"
+      },
+      {
+        "atMs": 44660,
+        "text": "Hujan samarkan derasnya, tutup air mata"
+      },
+      {
+        "atMs": 51060,
+        "text": "Temani kecewaku yang t'lah lama"
+      },
+      {
+        "atMs": 55980,
+        "text": "Berdosakah ku berdoa, minta kau terluka"
+      },
+      {
+        "atMs": 62360,
+        "text": "Dan tinggalkan dirinya?"
+      },
+      {
+        "atMs": 66480,
+        "text": "Hari ini janji, esok mesti lupa"
+      },
+      {
+        "atMs": 68500,
+        "text": "Tetapi hati tak tepati"
+      },
+      {
+        "atMs": 69180,
+        "text": "Biar sadar dan ku mengerti"
+      },
+      {
+        "atMs": 97960,
+        "text": "Hujan samarkan derasnya, tutup air mata"
+      },
+      {
+        "atMs": 104660,
+        "text": "Temani kecewa (temani kecewa) ku yang t'lah lama"
+      },
+      {
+        "atMs": 109620,
+        "text": "Berdosakah ku berdoa, minta kau terluka"
+      },
+      {
+        "atMs": 116040,
+        "text": "Dan tinggalkan dirinya?"
+      },
+      {
+        "atMs": 121120,
+        "text": "Ho-oh-ho-oh (ho-oh-oh)"
+      },
+      {
+        "atMs": 124200,
+        "text": "Bukan ku tak berupaya (berusaha), hu-uh, hu-uh"
+      },
+      {
+        "atMs": 132700,
+        "text": ""
+      },
+      {
+        "atMs": 139960,
+        "text": "Hujan samarkan derasnya, tutup air mata (air mata)"
+      },
+      {
+        "atMs": 147160,
+        "text": "Temani kecewa (kecewa) ku yang t'lah lama"
+      },
+      {
+        "atMs": 151960,
+        "text": "Berdosakah ku berdoa, minta kau terluka"
+      },
+      {
+        "atMs": 158360,
+        "text": "Dan tinggalkan dirinya?"
+      },
+      {
+        "atMs": 161880,
+        "text": "Hujan samarkan derasnya (derasnya)"
+      },
+      {
+        "atMs": 167520,
+        "text": "Tutup air mata"
+      },
+      {
+        "atMs": 171700,
+        "text": "Tiga tahun tak terasa, masih kau yang ada"
+      },
+      {
+        "atMs": 178120,
+        "text": "Bodoh yang sebenarnya"
+      },
+      {
+        "atMs": 182980,
+        "text": "Tampar aku di pipi"
+      },
+      {
+        "atMs": 188620,
+        "text": "Sadarkan kau-aku takkan terjadi"
+      }
+    ],
+    "lrclibId": 19123967,
+    "songTitle": "Tampar",
+    "status": "Aligned"
+  },
+  "7c8f50e4-eb3c-5882-8a8f-1c8f89e72f9f": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lines": [
+      {
+        "atMs": 8980,
+        "text": "baboya, oneureun andoendago malhaji ma"
+      },
+      {
+        "atMs": 13280,
+        "text": "oneulmankeumeun naegedo kkok gihoereul jwo"
+      },
+      {
+        "atMs": 17960,
+        "text": "sarangseureopge utneun geotdo yeppeuge malhaneun geotdo"
+      },
+      {
+        "atMs": 22880,
+        "text": "mani yeonseuphaesseo, bogo sipeodo chameurago haji ma"
+      },
+      {
+        "atMs": 27120,
+        "text": "Baby, nan jom eokji burineun geotdo maja"
+      },
+      {
+        "atMs": 31780,
+        "text": "oneuldo nae nunmul yeongiro badanaen neowaui deiteu"
+      },
+      {
+        "atMs": 36300,
+        "text": "bogo sipeodo maeil kkuk chamgo isseodo"
+      },
+      {
+        "atMs": 38840,
+        "text": "naneun nega anajugiman hamyeon sareureureureu noga, yeah"
+      },
+      {
+        "atMs": 45280,
+        "text": "Baby, you-ooh-ooh, you-ooh-ooh, you-ooh-ooh, yeah, yeah"
+      },
+      {
+        "atMs": 50540,
+        "text": "You-ooh-ooh, you-ooh-ooh, you-ooh-ooh, yeah, yeah"
+      }
+    ],
+    "lrclibId": 25095115,
+    "songTitle": "You (=I)",
+    "status": "Aligned"
+  },
+  "7d73c0af-3f23-4bd0-bae1-9bb8550c55de": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lrclibId": 31432372,
+    "reason": "median probability 0.47 is too low",
+    "songTitle": "Oh! Asmara",
+    "status": "Rejected"
+  },
+  "80c0a2db-8a2d-5464-a3a8-6c0bfd543a3b": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lrclibId": 10364332,
+    "reason": "median probability 0.49 is too low",
+    "songTitle": "Asmalibrasi",
+    "status": "Rejected"
+  },
+  "81f090da-d819-5528-b88a-58ce8208b217": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lrclibId": 38631688,
+    "reason": "median probability 0.38 is too low",
+    "songTitle": "Maafkan Aku #TerlanjurMencinta",
+    "status": "Rejected"
+  },
+  "847f6217-58a1-4760-937a-844af82a0f9a": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lrclibId": 29572294,
+    "reason": "3 weak lines in a row, a section was probably skipped",
+    "songTitle": "Tokyo",
+    "status": "Rejected"
+  },
+  "885a30de-0b3d-4e73-882b-ecefca2aeb34": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lines": [
+      {
+        "atMs": 1700,
+        "text": "Lembaran foto hitam-putih"
+      },
+      {
+        "atMs": 6440,
+        "text": "Aku coba ingat lagi warna bajumu kala itu"
+      },
+      {
+        "atMs": 12600,
+        "text": "Kali pertama di hidupku"
+      },
+      {
+        "atMs": 17320,
+        "text": "Manusia lain memelukku"
+      },
+      {
+        "atMs": 23440,
+        "text": "Lembaran foto hitam-putih"
+      },
+      {
+        "atMs": 28300,
+        "text": "Aku coba ingat lagi wangi rumah di sore itu"
+      },
+      {
+        "atMs": 35000,
+        "text": "Kue coklat, balon warna-warni"
+      },
+      {
+        "atMs": 39440,
+        "text": "Pesta hari ulang tahunku"
+      },
+      {
+        "atMs": 42140,
+        "text": "Di mana pun kalian berada"
+      },
+      {
+        "atMs": 50080,
+        "text": "Kukirimkan terima kasih"
+      },
+      {
+        "atMs": 54860,
+        "text": "Untuk warna dalam hidupku dan banyak kenangan indah"
+      },
+      {
+        "atMs": 64880,
+        "text": "Kau melukis aku"
+      },
+      {
+        "atMs": 72540,
+        "text": "Lembaran foto hitam-putih"
+      },
+      {
+        "atMs": 77360,
+        "text": "Kembali teringat malam, kuhitung-hitung bintang"
+      },
+      {
+        "atMs": 83500,
+        "text": "Saat mataku sulit tidur, mm-mm"
+      },
+      {
+        "atMs": 88340,
+        "text": "Suaramu buatku lelap, mm-mm"
+      },
+      {
+        "atMs": 96920,
+        "text": "Di mana pun kalian berada"
+      },
+      {
+        "atMs": 101900,
+        "text": "Kukirimkan terima kasih"
+      },
+      {
+        "atMs": 106700,
+        "text": "Untuk warna dalam hidupku dan banyak kenangan indah"
+      },
+      {
+        "atMs": 116240,
+        "text": "Kau melukis aku"
+      },
+      {
+        "atMs": 120720,
+        "text": "Kita tak pernah tahu"
+      },
+      {
+        "atMs": 127900,
+        "text": "Berapa lama kita diberi waktu"
+      },
+      {
+        "atMs": 132640,
+        "text": "Jika aku pergi lebih dulu, jangan lupakan aku"
+      },
+      {
+        "atMs": 140720,
+        "text": "Ini lagu untukmu, ungkapan terima kasihku"
+      },
+      {
+        "atMs": 154420,
+        "text": "Lembar monokrom hitam-putih"
+      },
+      {
+        "atMs": 159440,
+        "text": "Aku coba ingat warna demi warna di hidupku"
+      },
+      {
+        "atMs": 165340,
+        "text": "Tak akan ku mengenal cinta"
+      },
+      {
+        "atMs": 170040,
+        "text": "Bila bukan kar'na hati baikmu"
+      }
+    ],
+    "lrclibId": 9078460,
+    "songTitle": "Monokrom",
+    "status": "Aligned"
+  },
+  "8e0699ed-4020-5099-b428-05e45a8b1920": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lines": [
+      {
+        "atMs": 3500,
+        "text": "Senyumanmu yang indah bagaikan candu"
+      },
+      {
+        "atMs": 11720,
+        "text": "Ingin t'rus kulihat walau"
+      },
+      {
+        "atMs": 16520,
+        "text": ""
+      },
+      {
+        "atMs": 24160,
+        "text": "Ku berandai"
+      },
+      {
+        "atMs": 28120,
+        "text": "Kau disini"
+      },
+      {
+        "atMs": 32300,
+        "text": "Mengobati rindu ruai"
+      },
+      {
+        "atMs": 37370,
+        "text": ""
+      },
+      {
+        "atMs": 40560,
+        "text": "Dalam sunyi"
+      },
+      {
+        "atMs": 44700,
+        "text": "Ku sendiri meratapi"
+      },
+      {
+        "atMs": 50660,
+        "text": "Perasaan yang tak jua di dengar"
+      },
+      {
+        "atMs": 57420,
+        "text": ""
+      },
+      {
+        "atMs": 61540,
+        "text": "Takkan apa"
+      },
+      {
+        "atMs": 64040,
+        "text": "Bila rasa ini tumbuh sendirinya"
+      },
+      {
+        "atMs": 73610,
+        "text": ""
+      },
+      {
+        "atMs": 78140,
+        "text": "Tak berdaya"
+      },
+      {
+        "atMs": 81760,
+        "text": "Diri bila diantara"
+      },
+      {
+        "atMs": 88720,
+        "text": "Walau itu hanya bayang-bayangmu"
+      },
+      {
+        "atMs": 96580,
+        "text": "Senyumanmu yang indah bagaikan candu"
+      },
+      {
+        "atMs": 102180,
+        "text": "Senyumanmu yang indah bagaikan candu"
+      },
+      {
+        "atMs": 105080,
+        "text": "Ingin t'rus kulihat walau dari jauh"
+      },
+      {
+        "atMs": 112980,
+        "text": "Sekarang aku pun sadari semua hanya mimpiku"
+      },
+      {
+        "atMs": 120740,
+        "text": "Yang berkhayallah 'kan bisa bersamamu"
+      },
+      {
+        "atMs": 142520,
+        "text": "Senyumanmu yang indah bagaikan candu"
+      },
+      {
+        "atMs": 150500,
+        "text": "Ingin t'rus kulihat walau dari jauh"
+      },
+      {
+        "atMs": 158120,
+        "text": "Sekarang aku pun sadari semua hanya mimpiku"
+      },
+      {
+        "atMs": 166200,
+        "text": "Yang berkhayallah 'kan bisa bersamamu"
+      },
+      {
+        "atMs": 174560,
+        "text": "Dihampiri seribu ragu"
+      },
+      {
+        "atMs": 204500,
+        "text": "Hanya membisu"
+      },
+      {
+        "atMs": 221480,
+        "text": "Dihampiri seribu ragu"
+      },
+      {
+        "atMs": 225340,
+        "text": "Hanya membisu"
+      }
+    ],
+    "lrclibId": 6764917,
+    "songTitle": "Halu",
+    "status": "Aligned"
+  },
+  "92ba350b-4e91-48e9-861f-3d24d47b1383": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lines": [
+      {
+        "atMs": 580,
+        "text": "Kau datang tatkala sinar senjaku telah redup"
+      },
+      {
+        "atMs": 10900,
+        "text": "Dan pamit ketika purnamaku penuh seutuhnya"
+      },
+      {
+        "atMs": 20580,
+        "text": "Kau yang singgah tapi tak sungguh"
+      },
+      {
+        "atMs": 23680,
+        "text": "Kau yang singgah tapi tak sungguh"
+      },
+      {
+        "atMs": 30280,
+        "text": "Kukira kau rumah"
+      },
+      {
+        "atMs": 34320,
+        "text": "Nyatanya kau cuma aku sewa"
+      },
+      {
+        "atMs": 39800,
+        "text": "Dari tubuh seorang perempuan yang memintamu untuk pulang"
+      },
+      {
+        "atMs": 49420,
+        "text": "Kau bukan rumah"
+      },
+      {
+        "atMs": 54200,
+        "text": "Kau bukan rumah"
+      },
+      {
+        "atMs": 63840,
+        "text": "Kau bukan rumah"
+      },
+      {
+        "atMs": 69220,
+        "text": ""
+      },
+      {
+        "atMs": 76240,
+        "text": "Kukira kau rumah"
+      },
+      {
+        "atMs": 82140,
+        "text": "Nyatanya kau cuma aku sewa"
+      },
+      {
+        "atMs": 87740,
+        "text": "Dari tubuh seorang perempuan yang memintamu untuk pulang"
+      },
+      {
+        "atMs": 97440,
+        "text": "Kau bukan rumah"
+      },
+      {
+        "atMs": 102220,
+        "text": "Kau bukan rumah"
+      },
+      {
+        "atMs": 111760,
+        "text": "Kau bukan rumah"
+      },
+      {
+        "atMs": 117040,
+        "text": ""
+      },
+      {
+        "atMs": 135740,
+        "text": "Kau bukan rumah"
+      },
+      {
+        "atMs": 140620,
+        "text": "Kau bukan rumah"
+      },
+      {
+        "atMs": 150220,
+        "text": "Kau bukan rumah"
+      }
+    ],
+    "lrclibId": 39596931,
+    "songTitle": "Kukira Kau Rumah",
+    "status": "Aligned"
+  },
+  "96c272f2-4be8-4a6a-a5b8-314b30f97b44": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lrclibId": 30801239,
+    "reason": "only 1 lines were sung",
+    "songTitle": "Dry Flower",
+    "status": "Rejected"
+  },
+  "9800e03e-f8a7-530f-8ea1-2b3c39244da1": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lrclibId": 0,
+    "reason": "3 weak lines in a row, a section was probably skipped",
+    "songTitle": "Gentari Hariku",
+    "source": "Local",
+    "status": "Rejected"
+  },
+  "9c8d25a8-859c-47a8-b65f-9ba15f2110fe": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lrclibId": 9812225,
+    "reason": "median probability 0.38 is too low",
+    "songTitle": "Rayuan Perempuan Gila",
+    "status": "Rejected"
+  },
+  "9d1e89b8-fd61-4a69-818c-b443663e69bb": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lines": [
+      {
+        "atMs": 3300,
+        "text": "Arungi malam"
+      },
+      {
+        "atMs": 7740,
+        "text": "Terjaga kala semua t'lah terbenam"
+      },
+      {
+        "atMs": 12940,
+        "text": "Berkaca, bertanya, apa ku buat salah?"
+      },
+      {
+        "atMs": 18640,
+        "text": "Kalaupun iya, apa?"
+      },
+      {
+        "atMs": 24080,
+        "text": "Apakah sebesar itu hingga"
+      },
+      {
+        "atMs": 29480,
+        "text": "Kau pergi tanpa aba-aba"
+      },
+      {
+        "atMs": 34980,
+        "text": "Bahkan tanpa alasan"
+      },
+      {
+        "atMs": 37380,
+        "text": "Hingga ku harus menerka-nerka"
+      },
+      {
+        "atMs": 41200,
+        "text": "Salahku di mana?"
+      },
+      {
+        "atMs": 45300,
+        "text": "Apa mungkin caraku bicara?"
+      },
+      {
+        "atMs": 50720,
+        "text": "Apa mungkin caraku tertawa?"
+      },
+      {
+        "atMs": 56140,
+        "text": "Apa mungkin dengkurku saat tertidur lelap?"
+      },
+      {
+        "atMs": 60880,
+        "text": "Apa mungkin kamu yang tak lagi cinta"
+      },
+      {
+        "atMs": 65850,
+        "text": ""
+      },
+      {
+        "atMs": 74900,
+        "text": "Sampai sekarang"
+      },
+      {
+        "atMs": 79780,
+        "text": "Dariku belum ada yang berubah"
+      },
+      {
+        "atMs": 85060,
+        "text": "Ku bisa salah"
+      },
+      {
+        "atMs": 87560,
+        "text": "Maka itu jelaskanlah"
+      },
+      {
+        "atMs": 90520,
+        "text": "Di mana letak yang tak kau suka"
+      },
+      {
+        "atMs": 96100,
+        "text": "Apa mungkin caraku bicara?"
+      },
+      {
+        "atMs": 100200,
+        "text": "Apa mungkin caraku tertawa?"
+      },
+      {
+        "atMs": 106840,
+        "text": "Apa mungkin dengkurku saat tertidur lelap?"
+      },
+      {
+        "atMs": 111420,
+        "text": "Atau mungkin kamu yang tak lagi cinta"
+      },
+      {
+        "atMs": 115740,
+        "text": ""
+      },
+      {
+        "atMs": 137140,
+        "text": "Dari dulu semua burukku"
+      },
+      {
+        "atMs": 141420,
+        "text": "Kau terima katamu tiada yang mengganggu"
+      },
+      {
+        "atMs": 147060,
+        "text": "Mengapa tiba-tiba jadi masalah?"
+      },
+      {
+        "atMs": 157460,
+        "text": "Sejak kapan semuanya berubah?"
+      },
+      {
+        "atMs": 162820,
+        "text": "Apa sejak kau lihat ku marah?"
+      },
+      {
+        "atMs": 168060,
+        "text": "Apa kar'na leluconku itu itu saja?"
+      },
+      {
+        "atMs": 172900,
+        "text": "Atau memang kamu yang tak lagi cinta"
+      },
+      {
+        "atMs": 178740,
+        "text": "Apa mungkin caraku bicara?"
+      },
+      {
+        "atMs": 183900,
+        "text": "Apa mungkin caraku tertawa?"
+      },
+      {
+        "atMs": 189460,
+        "text": "Apa mungkin dengkurku saat tertidur lelap?"
+      },
+      {
+        "atMs": 194100,
+        "text": "Atau mungkin kamu yang tak"
+      },
+      {
+        "atMs": 196780,
+        "text": "(Kamu yang tak lagi cinta)"
+      },
+      {
+        "atMs": 199400,
+        "text": "Atau mungkin kamu yang tak"
+      },
+      {
+        "atMs": 204080,
+        "text": "Tak lagi cinta"
+      }
+    ],
+    "lrclibId": 10149668,
+    "songTitle": "Apa Mungkin",
+    "status": "Aligned"
+  },
+  "a41e1f89-f626-46c4-8732-eb8eb211aa37": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lrclibId": 6373633,
+    "reason": "3 weak lines in a row, a section was probably skipped",
+    "songTitle": "Love wins all",
+    "status": "Rejected"
+  },
+  "a4cc95be-28d8-4d14-a3ff-7797b0e1d97d": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lrclibId": 6057290,
+    "reason": "median probability 0.41 is too low",
+    "songTitle": "Jiwa Yang Bersedih",
+    "status": "Rejected"
+  },
+  "a560cef1-89e1-4b07-8440-ccc5e6c3beb1": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lines": [
+      {
+        "atMs": 2020,
+        "text": "\"Terima kasih,\" katanya"
+      },
+      {
+        "atMs": 9480,
+        "text": "Semua aku dirayakan"
+      },
+      {
+        "atMs": 15540,
+        "text": "\"Jangan menangis,\" ku dibuai"
+      },
+      {
+        "atMs": 21140,
+        "text": "Sampai tenang"
+      },
+      {
+        "atMs": 25140,
+        "text": ""
+      },
+      {
+        "atMs": 27460,
+        "text": "Diciumnya api marahku"
+      },
+      {
+        "atMs": 33660,
+        "text": "Ternyata kacau bisa luluh"
+      },
+      {
+        "atMs": 39460,
+        "text": "\"Jangan menangis,\" biar tenang"
+      },
+      {
+        "atMs": 45520,
+        "text": "Ku dibuai"
+      },
+      {
+        "atMs": 52640,
+        "text": "Jika malam datang"
+      },
+      {
+        "atMs": 58600,
+        "text": "Dan takut menyerang"
+      },
+      {
+        "atMs": 64280,
+        "text": "Kaugenggam apa yang kuragukan"
+      },
+      {
+        "atMs": 72340,
+        "text": ""
+      },
+      {
+        "atMs": 73080,
+        "text": "Semua aku dirayakan, hm-mm"
+      },
+      {
+        "atMs": 76840,
+        "text": "Tiada yang bilang"
+      },
+      {
+        "atMs": 82640,
+        "text": "Badainya 'kan reda"
+      },
+      {
+        "atMs": 88220,
+        "text": "Berhadapan dengan"
+      },
+      {
+        "atMs": 91380,
+        "text": "Cahaya yang kerap membutakan, hu-oh"
+      },
+      {
+        "atMs": 102040,
+        "text": "Tiada yang bilang"
+      },
+      {
+        "atMs": 106620,
+        "text": "Jawaban 'kan datang"
+      },
+      {
+        "atMs": 112260,
+        "text": "Jauh dari seram"
+      },
+      {
+        "atMs": 115380,
+        "text": "Yang s'lama ini telah kubayangkan"
+      }
+    ],
+    "lrclibId": 17484238,
+    "songTitle": "Semua Aku Dirayakan",
+    "status": "Aligned"
+  },
+  "b13ead41-3d5b-4205-880d-f66af27b0625": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lrclibId": 23453992,
+    "reason": "median probability 0.45 is too low",
+    "songTitle": "Yamko Rambe Yamko",
+    "status": "Rejected"
+  },
+  "b1710a8d-d833-44fe-978c-3f8bbd1f6f3f": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lrclibId": 23646799,
+    "reason": "no line was sung clearly",
+    "songTitle": "Miniatur",
+    "status": "Rejected"
+  },
+  "b299a7f4-2212-4dc2-8865-49120924a3b6": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lines": [
+      {
+        "atMs": 520,
+        "text": "Perjalanan membawamu"
+      },
+      {
+        "atMs": 5420,
+        "text": "Bertemu denganku, ku bertemu kamu"
+      },
+      {
+        "atMs": 13860,
+        "text": "Sepertimu yang kucari"
+      },
+      {
+        "atMs": 18800,
+        "text": "Konon aku juga s'perti yang kaucari"
+      },
+      {
+        "atMs": 25580,
+        "text": "Kukira kita Asam dan Garam"
+      },
+      {
+        "atMs": 31160,
+        "text": "Dan kita bertemu di Belanga"
+      },
+      {
+        "atMs": 33580,
+        "text": "Kisah yang ternyata tak seindah itu"
+      },
+      {
+        "atMs": 34680,
+        "text": "Kukira kita akan bersama"
+      },
+      {
+        "atMs": 44520,
+        "text": "Kukira takkan ada kendala"
+      },
+      {
+        "atMs": 57880,
+        "text": "Kukira ini 'kan mudah"
+      },
+      {
+        "atMs": 62360,
+        "text": "Kau-aku jadi kita"
+      },
+      {
+        "atMs": 70780,
+        "text": "Kasih sayangmu membekas"
+      },
+      {
+        "atMs": 75720,
+        "text": "Redam kini sudah pijar istimewa"
+      },
+      {
+        "atMs": 83720,
+        "text": "Entah apa maksud dunia"
+      },
+      {
+        "atMs": 88820,
+        "text": "Tentang ujung cerita, kita tak bersama"
+      },
+      {
+        "atMs": 95520,
+        "text": "Semoga rindu ini menghilang"
+      },
+      {
+        "atMs": 101140,
+        "text": "Konon katanya waktu sembuhkan"
+      },
+      {
+        "atMs": 104260,
+        "text": "Akan adakah lagi yang sepertimu?"
+      },
+      {
+        "atMs": 110960,
+        "text": "Kukira kita akan bersama"
+      },
+      {
+        "atMs": 115720,
+        "text": "Begitu banyak yang sama"
+      },
+      {
+        "atMs": 119280,
+        "text": "Latarmu dan latarku"
+      },
+      {
+        "atMs": 124280,
+        "text": "Kukira takkan ada kendala"
+      },
+      {
+        "atMs": 129340,
+        "text": "Kukira ini 'kan mudah"
+      },
+      {
+        "atMs": 132480,
+        "text": "Kau-aku jadi kita"
+      },
+      {
+        "atMs": 138440,
+        "text": "Kau melanjutkan perjalananmu"
+      },
+      {
+        "atMs": 145120,
+        "text": "Ku melanjutkan perjalananku"
+      },
+      {
+        "atMs": 149860,
+        "text": "Uh-uh, uh-uh"
+      },
+      {
+        "atMs": 164260,
+        "text": "Kukira kita akan bersama"
+      },
+      {
+        "atMs": 169060,
+        "text": "Begitu banyak yang sama"
+      },
+      {
+        "atMs": 174320,
+        "text": "Latarmu dan latarku"
+      },
+      {
+        "atMs": 177600,
+        "text": "Kukira takkan ada kendala"
+      },
+      {
+        "atMs": 182580,
+        "text": "Kukira ini 'kan mudah"
+      },
+      {
+        "atMs": 185740,
+        "text": "Kau-aku jadi kita"
+      },
+      {
+        "atMs": 191280,
+        "text": "Kukira kita akan bersama"
+      }
+    ],
+    "lrclibId": 34314975,
+    "songTitle": "Hati-Hati di Jalan",
+    "status": "Aligned"
+  },
+  "b33c23b5-3222-4457-91cf-38a92968f8bf": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lrclibId": 38325453,
+    "reason": "median probability 0.20 is too low",
+    "songTitle": "Tanging Dahilan",
+    "status": "Rejected"
+  },
+  "b593d509-80df-40ed-ae39-116cb55c90b7": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lrclibId": 7659988,
+    "reason": "3 weak lines in a row, a section was probably skipped",
+    "songTitle": "Samurai Heart (Some Like It Hot!!)",
+    "status": "Rejected"
+  },
+  "b9021875-e551-4143-991e-39eb4a1d29e6": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lrclibId": 12943406,
+    "reason": "median probability 0.19 is too low",
+    "songTitle": "Eiyuu no Shihen",
+    "status": "Rejected"
+  },
+  "ba36db82-3843-4b9b-ab25-1bffa17c26be": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lrclibId": 17484238,
+    "reason": "3 weak lines in a row, a section was probably skipped",
+    "songTitle": "Semua Aku Dirayakan",
+    "status": "Rejected"
+  },
+  "ba8d12ac-a8f2-5b12-8211-586c71cff35d": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lines": [
+      {
+        "atMs": 200,
+        "text": "Perjalanan membawamu"
+      },
+      {
+        "atMs": 5060,
+        "text": "Bertemu denganku, ku bertemu kamu"
+      },
+      {
+        "atMs": 14480,
+        "text": "Sepertimu yang kucari"
+      },
+      {
+        "atMs": 19840,
+        "text": "Konon aku juga s'perti yang kaucari"
+      },
+      {
+        "atMs": 30020,
+        "text": "Kukira kita Asam dan Garam"
+      },
+      {
+        "atMs": 32840,
+        "text": "Dan kita bertemu di Belanga"
+      },
+      {
+        "atMs": 36900,
+        "text": "Kisah yang ternyata tak seindah itu"
+      },
+      {
+        "atMs": 47900,
+        "text": "Kukira kita akan bersama"
+      },
+      {
+        "atMs": 52520,
+        "text": "Begitu banyak yang sama"
+      },
+      {
+        "atMs": 56520,
+        "text": "Latarmu dan latarku"
+      },
+      {
+        "atMs": 62420,
+        "text": "Kukira takkan ada kendala"
+      },
+      {
+        "atMs": 67480,
+        "text": "Kukira ini 'kan mudah"
+      },
+      {
+        "atMs": 71300,
+        "text": "Kau-aku jadi kita"
+      },
+      {
+        "atMs": 73660,
+        "text": "Kasih sayangmu membekas"
+      },
+      {
+        "atMs": 81540,
+        "text": "Redam kini sudah pijar istimewa"
+      },
+      {
+        "atMs": 88500,
+        "text": "Entah apa maksud dunia"
+      },
+      {
+        "atMs": 96140,
+        "text": "Tentang ujung cerita, kita tak bersama"
+      },
+      {
+        "atMs": 104180,
+        "text": "Semoga rindu ini menghilang"
+      },
+      {
+        "atMs": 109700,
+        "text": "Konon katanya waktu sembuhkan"
+      },
+      {
+        "atMs": 113280,
+        "text": "Akan adakah lagi yang sepertimu?"
+      },
+      {
+        "atMs": 118380,
+        "text": "Kukira kita akan bersama"
+      },
+      {
+        "atMs": 135460,
+        "text": "Kukira takkan ada kendala"
+      },
+      {
+        "atMs": 139780,
+        "text": "Kukira ini 'kan mudah"
+      },
+      {
+        "atMs": 143700,
+        "text": "Kau-aku jadi kita"
+      },
+      {
+        "atMs": 150520,
+        "text": "Kau melanjutkan perjalananmu"
+      },
+      {
+        "atMs": 157860,
+        "text": "Ku melanjutkan perjalananku"
+      },
+      {
+        "atMs": 163200,
+        "text": "Uh-uh, uh-uh"
+      },
+      {
+        "atMs": 178780,
+        "text": "Kukira kita akan bersama"
+      },
+      {
+        "atMs": 184000,
+        "text": "Begitu banyak yang sama"
+      },
+      {
+        "atMs": 187280,
+        "text": "Latarmu dan latarku"
+      },
+      {
+        "atMs": 193300,
+        "text": "Kukira takkan ada kendala"
+      },
+      {
+        "atMs": 198440,
+        "text": "Kukira ini 'kan mudah"
+      },
+      {
+        "atMs": 202200,
+        "text": "Kau-aku jadi kita"
+      },
+      {
+        "atMs": 217180,
+        "text": "Kukira kita akan bersama"
+      },
+      {
+        "atMs": 230500,
+        "text": "Hati-hati di jalan"
+      }
+    ],
+    "lrclibId": 34314975,
+    "songTitle": "Hati-Hati di Jalan",
+    "status": "Aligned"
+  },
   "baa8310f-f3b6-47b3-a81d-b80ad7de5099": {
     "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
     "lines": [
       {
         "atMs": 4600,
-        "text": "君の心へ"
+        "text": "Kimi no kokoro e"
       },
       {
         "atMs": 6880,
-        "text": "届け届け届け"
+        "text": "Todoke todoke todoke"
       },
       {
         "atMs": 7760,
-        "text": "君の心へ"
+        "text": "Kimi no kokoro e"
       },
       {
         "atMs": 19540,
-        "text": "届くように"
+        "text": "Todoku you ni"
       },
       {
         "atMs": 19900,
-        "text": "だいたいいつも通りに"
+        "text": "Daitai itsu mo toori ni"
       },
       {
         "atMs": 23700,
-        "text": "その角を曲がれば"
+        "text": "Sono kado wo magareba"
       },
       {
         "atMs": 27900,
-        "text": "人波に紛れ込み"
+        "text": "Hitonami ni magirekomi"
       },
       {
         "atMs": 32920,
-        "text": "溶けて消えていく"
+        "text": "Tokete kiete iku"
       },
       {
         "atMs": 37780,
-        "text": "僕は道を無くし"
+        "text": "Boku wa michi wo nakushi"
       },
       {
         "atMs": 42040,
-        "text": "言葉すら無くしてしまう"
+        "text": "Kotoba sura nakushite shimau"
       },
       {
         "atMs": 46780,
-        "text": "だけど一つだけは"
+        "text": "Dakedo hitotsu dake wa"
       },
       {
         "atMs": 50680,
-        "text": "残ってた残ってた"
+        "text": "Nokotteta nokotteta"
       },
       {
         "atMs": 55720,
-        "text": "君の声が"
+        "text": "Kimi no koe ga"
       },
       {
         "atMs": 60540,
-        "text": "笑う顔も"
+        "text": "Warau kao mo"
       },
       {
         "atMs": 62600,
-        "text": "怒る顔も全て"
+        "text": "Okoru kao mo subete"
       },
       {
         "atMs": 65320,
-        "text": "僕を歩かせる"
+        "text": "Boku wo arukaseru"
       },
       {
         "atMs": 69880,
-        "text": "雲が切れた先を"
+        "text": "Kumo ga kireta saki wo"
       },
       {
         "atMs": 72600,
-        "text": "見たらきっと"
+        "text": "Mitara kitto"
       },
       {
         "atMs": 74740,
-        "text": "ねえ わかるでしょ?"
+        "text": "Nee wakarudesho?"
       }
     ],
     "lrclibId": 29786483,
     "songTitle": "Michi ~to you all",
     "status": "Aligned"
   },
+  "bba4684f-5b7b-4e9d-be9e-98b4d79eed8a": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lines": [
+      {
+        "atMs": 193730,
+        "text": "Mungkinkah"
+      },
+      {
+        "atMs": 197650,
+        "text": "Mungkinkah"
+      },
+      {
+        "atMs": 200850,
+        "text": "Kau mampir hari ini"
+      },
+      {
+        "atMs": 205970,
+        "text": "Bila tidak mirip kau jadilah bunga matahari"
+      },
+      {
+        "atMs": 262750,
+        "text": "Mungkinkah"
+      }
+    ],
+    "lrclibId": 37087098,
+    "songTitle": "Gala Bunga Matahari",
+    "status": "Aligned"
+  },
+  "beccc703-6470-4fcb-bc6f-7ec86aec254f": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lrclibId": 34480268,
+    "reason": "only 1 lines were sung",
+    "songTitle": "Sampai Jadi Debu",
+    "status": "Rejected"
+  },
+  "c2871206-9575-450e-8be5-4467ff3ba310": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lrclibId": 9859871,
+    "reason": "3 weak lines in a row, a section was probably skipped",
+    "songTitle": "Nikmati Perjalanannya",
+    "status": "Rejected"
+  },
+  "c3871e26-2865-4f28-b4da-12ae1431499d": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lrclibId": 23646799,
+    "reason": "only 1 lines were sung",
+    "songTitle": "Miniatur",
+    "status": "Rejected"
+  },
+  "c7709e26-ed09-403c-aef4-7b8b38840b70": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lines": [
+      {
+        "atMs": 5340,
+        "text": "Bun, hidup berjalan seperti bajingan"
+      },
+      {
+        "atMs": 13410,
+        "text": ""
+      },
+      {
+        "atMs": 15960,
+        "text": "Seperti landak yang tak punya teman"
+      },
+      {
+        "atMs": 23590,
+        "text": ""
+      },
+      {
+        "atMs": 26380,
+        "text": "Ia menggonggong bak suara hujan"
+      },
+      {
+        "atMs": 36580,
+        "text": "Dan kau pangeranku, mengambil peran"
+      },
+      {
+        "atMs": 44630,
+        "text": ""
+      },
+      {
+        "atMs": 48360,
+        "text": "Bun, kalau saat hancur ku disayang"
+      },
+      {
+        "atMs": 56430,
+        "text": ""
+      },
+      {
+        "atMs": 58740,
+        "text": "Apalagi saat ku jadi juara"
+      },
+      {
+        "atMs": 70260,
+        "text": "Saat tak tahu arah kau di sana"
+      },
+      {
+        "atMs": 79620,
+        "text": "Menjadi gagah saat ku tak bisa"
+      },
+      {
+        "atMs": 90580,
+        "text": "Sedikit kujelaskan tentangku dan kamu"
+      },
+      {
+        "atMs": 95720,
+        "text": "Agar seisi dunia tahu"
+      },
+      {
+        "atMs": 101060,
+        "text": "Keras kepalaku sama denganmu"
+      },
+      {
+        "atMs": 106300,
+        "text": "Caraku marah, caraku tersenyum"
+      },
+      {
+        "atMs": 111640,
+        "text": "Seperti detak jantung yang bertaut"
+      },
+      {
+        "atMs": 116880,
+        "text": "Nyawaku nyala karena denganmu"
+      },
+      {
+        "atMs": 122340,
+        "text": "Aku masih ada sampai di sini"
+      },
+      {
+        "atMs": 127620,
+        "text": "Melihatmu kuat setengah mati"
+      },
+      {
+        "atMs": 133160,
+        "text": "Seperti detak jantung yang bertaut"
+      },
+      {
+        "atMs": 138200,
+        "text": "Nyawaku nyala karena denganmu"
+      },
+      {
+        "atMs": 143640,
+        "text": "Bun, aku masih tak mengerti banyak hal"
+      },
+      {
+        "atMs": 147000,
+        "text": "Semuanya berenang di kepala"
+      },
+      {
+        "atMs": 154130,
+        "text": ""
+      },
+      {
+        "atMs": 175840,
+        "text": "Dan kau dan semua yang kau tahu tentangnya"
+      },
+      {
+        "atMs": 186520,
+        "text": "Menjadi jawab saat ku bertanya"
+      },
+      {
+        "atMs": 196860,
+        "text": "Sedikit kujelaskan tentangku dan kamu"
+      },
+      {
+        "atMs": 202380,
+        "text": "Agar seisi dunia tahu"
+      },
+      {
+        "atMs": 207640,
+        "text": "Keras kepalaku sama denganmu"
+      },
+      {
+        "atMs": 213000,
+        "text": "Caraku marah, caraku tersenyum"
+      },
+      {
+        "atMs": 218280,
+        "text": "Seperti detak jantung yang bertaut"
+      },
+      {
+        "atMs": 224600,
+        "text": "Nyawaku nyala karena denganmu"
+      },
+      {
+        "atMs": 228980,
+        "text": "Aku masih ada sampai di sini"
+      },
+      {
+        "atMs": 234260,
+        "text": "Melihatmu kuat setengah mati"
+      },
+      {
+        "atMs": 241980,
+        "text": "Seperti detak jantung yang bertaut"
+      },
+      {
+        "atMs": 244900,
+        "text": "Nyawaku nyala karena denganmu"
+      },
+      {
+        "atMs": 251060,
+        "text": "Semoga lama hidupmu di sini"
+      },
+      {
+        "atMs": 255600,
+        "text": "Melihatku berjuang sampai akhir"
+      },
+      {
+        "atMs": 261200,
+        "text": "Seperti detak jantung yang bertaut"
+      }
+    ],
+    "lrclibId": 30955174,
+    "songTitle": "Bertaut",
+    "status": "Aligned"
+  },
+  "c7905871-e110-4e87-aa62-21a6af800ccf": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lrclibId": 35248183,
+    "reason": "3 weak lines in a row, a section was probably skipped",
+    "songTitle": "Lonely",
+    "status": "Rejected"
+  },
   "c7cec101-d93a-5f8a-b3d5-a9c0c08cebee": {
     "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
     "lines": [
       {
         "atMs": 4380,
-        "text": "君とのラブストーリー"
+        "text": "Kimi to no rabu sutoorii"
       },
       {
         "atMs": 7160,
-        "text": "それは予想通り"
+        "text": "Sore wa yosou toori"
       },
       {
         "atMs": 9840,
-        "text": "いざ始まればひとり芝居だ"
+        "text": "Iza hajimareba hitorishibai da"
       },
       {
         "atMs": 14100,
-        "text": "ずっとそばにいたって"
+        "text": "Zutto soba ni itatte"
       },
       {
         "atMs": 16640,
-        "text": "結局ただの観客だ"
+        "text": "Kekkyoku tada no kankyaku da"
       },
       {
         "atMs": 19640,
-        "text": "感情のないアイムソーリー"
+        "text": "Kanjou no nai aimu soorii"
       },
       {
         "atMs": 22700,
-        "text": "それはいつも通り"
+        "text": "Sore wa itsu mo toori"
       },
       {
         "atMs": 25500,
-        "text": "慣れてしまえば悪くはないけど"
+        "text": "Narete shimaeba waruku wa naikedo"
       },
       {
         "atMs": 29800,
-        "text": "君とのロマンスは人生柄"
+        "text": "Kimi to no romansu wa jinsei gara"
       },
       {
         "atMs": 33260,
-        "text": "続きはしないことを知った"
+        "text": "Tsuzuki wa shinai koto wo shitta"
       },
       {
         "atMs": 40140,
-        "text": "もっと違う設定で もっと違う関係で"
+        "text": "Motto chigau settei de motto chigau kankei de"
       },
       {
         "atMs": 45280,
-        "text": "出会える世界線 選べたらよかった"
+        "text": "Deaeru sekaisen erabetara yokatta"
       },
       {
         "atMs": 50560,
-        "text": "もっと違う性格で もっと違う価値観で"
+        "text": "Motto chigau seikaku de motto chigau kachikan de"
       },
       {
         "atMs": 55820,
-        "text": "愛を伝えられたらいいな そう願っても無駄だから"
+        "text": "Ai wo tsutaeraretara ii na sou negatte mo muda dakara"
       },
       {
         "atMs": 65500,
-        "text": "グッバイ"
+        "text": "Gubbai"
       },
       {
         "atMs": 66600,
-        "text": "君の運命のヒトは僕じゃない"
+        "text": "Kimi no unmei no hito wa boku ja nai"
       },
       {
         "atMs": 71040,
-        "text": "辛いけど否めない でも離れ難いのさ"
+        "text": "Tsuraikedo inamenai de mo hanaregatai no sa"
       },
       {
         "atMs": 77720,
-        "text": "その髪に触れただけで 痛いや"
+        "text": "Sono kami ni fureta dake de itai ya"
       },
       {
         "atMs": 83060,
-        "text": "いやでも 甘いな いやいや"
+        "text": "Iya de mo amai na iyaiya"
       },
       {
         "atMs": 86480,
-        "text": "グッバイ"
+        "text": "Gubbai"
       },
       {
         "atMs": 87480,
-        "text": "それじゃ僕にとって君は何？"
+        "text": "Sore ja boku ni totte kimi wa nan?"
       },
       {
         "atMs": 92220,
-        "text": "答えは分からない 分かりたくもないのさ"
+        "text": "Kotae wa wakaranai wakaritaku mo nai no sa"
       },
       {
         "atMs": 97980,
-        "text": "たったひとつ確かなことがあるとするのならば"
+        "text": "Tatta hitotsu tashika na koto ga aru to suru no naraba"
       },
       {
         "atMs": 106400,
-        "text": "「君は綺麗だ」"
+        "text": "\"kimi wa kirei da\""
       }
     ],
     "lrclibId": 3821917,
     "songTitle": "Pretender",
+    "status": "Aligned"
+  },
+  "c8268647-8ee6-4857-bdbb-19b1b3dfdcba": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lrclibId": 29896955,
+    "reason": "3 weak lines in a row, a section was probably skipped",
+    "songTitle": "Di Akhir Perang",
+    "status": "Rejected"
+  },
+  "c95f5df5-9d51-5572-9e12-2e5dda196742": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lines": [
+      {
+        "atMs": 35520,
+        "text": "Saatnya 'tuk mengikat janji merangkum indahnya"
+      },
+      {
+        "atMs": 42000,
+        "text": "Laras rasa nihil ragu"
+      },
+      {
+        "atMs": 43880,
+        "text": "Biar, biarlah merayu di ruang biru"
+      },
+      {
+        "atMs": 48840,
+        "text": "Bias kita jadi taksu gairah kalbu mendayu"
+      },
+      {
+        "atMs": 52400,
+        "text": "Sabda diramu"
+      },
+      {
+        "atMs": 55740,
+        "text": "Jadikan hanya aku satu-satunya"
+      },
+      {
+        "atMs": 59240,
+        "text": "Sang garwa pambage, sang pelipur lara"
+      },
+      {
+        "atMs": 62700,
+        "text": "Nyanyikan 'ku kidung setia"
+      },
+      {
+        "atMs": 69080,
+        "text": "Jadikan hanya aku satu-satunya"
+      },
+      {
+        "atMs": 72840,
+        "text": "Sang garwa pambage, sang pelipur lara"
+      },
+      {
+        "atMs": 76740,
+        "text": "Nyanyikan 'ku kidung setia"
+      },
+      {
+        "atMs": 83910,
+        "text": ""
+      },
+      {
+        "atMs": 86560,
+        "text": "Kini saatnya merangkai binar asmara"
+      },
+      {
+        "atMs": 97270,
+        "text": "Melebur 'tuk satukan ego dalam indahnya"
+      },
+      {
+        "atMs": 103730,
+        "text": "Berdansa dalam bahtera mahligai rasa"
+      },
+      {
+        "atMs": 106710,
+        "text": "Merajut ketulusan jiwa"
+      },
+      {
+        "atMs": 110590,
+        "text": "Mengabdi dalam indahnya kalbu"
+      },
+      {
+        "atMs": 113050,
+        "text": "Mengukir ruang renjana selamanya"
+      },
+      {
+        "atMs": 117410,
+        "text": "Jadikan hanya aku satu-satunya"
+      },
+      {
+        "atMs": 120970,
+        "text": "Sang garwa pambage, sang pelipur lara"
+      },
+      {
+        "atMs": 124770,
+        "text": "Nyanyikan 'ku kidung setia"
+      },
+      {
+        "atMs": 128990,
+        "text": "Jadikan hanya aku satu-satunya"
+      },
+      {
+        "atMs": 134670,
+        "text": "Sang garwa pambage, sang pelipur lara"
+      },
+      {
+        "atMs": 138490,
+        "text": "Nyanyikan 'ku kidung setia"
+      },
+      {
+        "atMs": 145130,
+        "text": "Berdansa dalam bahtera mahligai rasa"
+      },
+      {
+        "atMs": 146870,
+        "text": "Merajut ketulusan jiwa"
+      },
+      {
+        "atMs": 150010,
+        "text": "Mengabdi dalam indahnya kalbu"
+      },
+      {
+        "atMs": 153030,
+        "text": "Mengukir ruang renjana selamanya"
+      },
+      {
+        "atMs": 155470,
+        "text": "Jadikan hanya aku satu-satunya"
+      },
+      {
+        "atMs": 157730,
+        "text": "Sang garwa pambage, sang pelipur lara"
+      },
+      {
+        "atMs": 185830,
+        "text": "Nyanyikan 'ku kidung setia"
+      },
+      {
+        "atMs": 187710,
+        "text": "Jadikan hanya aku satu-satunya"
+      },
+      {
+        "atMs": 189510,
+        "text": "Sang garwa pambage, sang pelipur lara"
+      },
+      {
+        "atMs": 193270,
+        "text": "Nyanyikan 'ku kidung setia"
+      },
+      {
+        "atMs": 199310,
+        "text": "Asmara telah terkalibrasi"
+      },
+      {
+        "atMs": 203090,
+        "text": "Asmara telah terkalibrasi"
+      },
+      {
+        "atMs": 206290,
+        "text": "Dan jadikan 'ku kidung setia"
+      },
+      {
+        "atMs": 213890,
+        "text": "Asmara telah terkalibrasi"
+      },
+      {
+        "atMs": 216870,
+        "text": "Asmara telah terkalibrasi"
+      },
+      {
+        "atMs": 220710,
+        "text": "Dan jadikan 'ku kidung setia"
+      }
+    ],
+    "lrclibId": 10364332,
+    "songTitle": "Asmalibrasi",
     "status": "Aligned"
   },
   "cb3b8e05-9818-5059-89fd-8fe87d14977d": {
@@ -428,6 +5748,1071 @@
     ],
     "lrclibId": 28719152,
     "songTitle": "Blue Jeans",
+    "status": "Aligned"
+  },
+  "cb9a3c0d-ee1d-44f3-bd12-9da48bac20b4": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lines": [
+      {
+        "atMs": 6700,
+        "text": "(Ta-na-na-na, ha-ah)"
+      },
+      {
+        "atMs": 12340,
+        "text": "Kemarilah"
+      },
+      {
+        "atMs": 15660,
+        "text": "Singgah dulu sebentar"
+      },
+      {
+        "atMs": 20460,
+        "text": "Perjalananmu jauh"
+      },
+      {
+        "atMs": 25260,
+        "text": "Tak ada tempat berteduh"
+      },
+      {
+        "atMs": 30320,
+        "text": ""
+      },
+      {
+        "atMs": 32320,
+        "text": "Menangislah"
+      },
+      {
+        "atMs": 35440,
+        "text": "Kan kau juga manusia"
+      },
+      {
+        "atMs": 40160,
+        "text": "Mana ada yang bisa berlarut-larut"
+      },
+      {
+        "atMs": 47480,
+        "text": "Berpura-pura sempurna"
+      },
+      {
+        "atMs": 51340,
+        "text": "Sampaikan pada jiwa yang bersedih"
+      },
+      {
+        "atMs": 56320,
+        "text": "Begitu dingin dunia yang kauhuni"
+      },
+      {
+        "atMs": 61220,
+        "text": "Jika tak ada tempatmu kembali"
+      },
+      {
+        "atMs": 66120,
+        "text": "Bawa lukamu, biar aku obati"
+      },
+      {
+        "atMs": 71060,
+        "text": "Tidakkah letih kakimu berlari?"
+      },
+      {
+        "atMs": 76000,
+        "text": "Ada hal yang tak mereka mengerti"
+      },
+      {
+        "atMs": 80840,
+        "text": "Beri waktu 'tuk bersandar sebentar"
+      },
+      {
+        "atMs": 85900,
+        "text": "S'lama ini kau hebat, hanya kau tak didengar"
+      },
+      {
+        "atMs": 94140,
+        "text": "Ho-oh, menangislah"
+      },
+      {
+        "atMs": 99480,
+        "text": "Kan kau juga manusia"
+      },
+      {
+        "atMs": 104140,
+        "text": "Mana ada yang bisa berlarut-larut"
+      },
+      {
+        "atMs": 111580,
+        "text": "Berpura-pura sempurna"
+      },
+      {
+        "atMs": 115480,
+        "text": "Sampaikan pada jiwa yang bersedih"
+      },
+      {
+        "atMs": 120420,
+        "text": "Begitu dingin dunia yang kauhuni"
+      },
+      {
+        "atMs": 125320,
+        "text": "Jika tak ada tempatmu kembali"
+      },
+      {
+        "atMs": 130240,
+        "text": "Bawa lukamu, biar aku obati"
+      },
+      {
+        "atMs": 135200,
+        "text": "Tidakkah letih kakimu berlari?"
+      },
+      {
+        "atMs": 140560,
+        "text": "Ada hal yang tak mereka mengerti"
+      },
+      {
+        "atMs": 144880,
+        "text": "Beri waktu 'tuk bersandar sebentar"
+      },
+      {
+        "atMs": 149880,
+        "text": "S'lama ini kau hebat, hanya kau tak didengar"
+      },
+      {
+        "atMs": 157400,
+        "text": "(Ha-ha, ha-ha-ha) uh-uh-uh-uh-uh"
+      },
+      {
+        "atMs": 161680,
+        "text": "(Ha-ha, ha-ha-ha-ah)"
+      },
+      {
+        "atMs": 162380,
+        "text": "(Ha-ha, ha-ha-ha) uh-uh-uh-uh-uh"
+      },
+      {
+        "atMs": 165960,
+        "text": "Sampaikan pada (jiwa yang bersedih)"
+      },
+      {
+        "atMs": 182060,
+        "text": "(Begitu dingin dunia yang kauhuni)"
+      },
+      {
+        "atMs": 187520,
+        "text": "Jika tak ada (tempatmu kembali)"
+      },
+      {
+        "atMs": 194680,
+        "text": "(Bawa lukamu, biar aku obati)"
+      },
+      {
+        "atMs": 196880,
+        "text": "Tidakkah letih (kakimu berlari?)"
+      },
+      {
+        "atMs": 201700,
+        "text": "M'reka tak mengerti (ada hal yang tak mereka mengerti)"
+      },
+      {
+        "atMs": 207080,
+        "text": "Beri waktu ('tuk bersandar sebentar)"
+      },
+      {
+        "atMs": 211620,
+        "text": "Selama ini kau hebat, hanya kau tak didengar"
+      },
+      {
+        "atMs": 219600,
+        "text": "(Sampaikan pada jiwa yang bersedih)"
+      },
+      {
+        "atMs": 226400,
+        "text": "(Begitu dingin dunia yang kauhuni) tak didengar"
+      },
+      {
+        "atMs": 232960,
+        "text": "(Jika tak ada tempatmu kembali)"
+      },
+      {
+        "atMs": 234760,
+        "text": "(Bawa lukamu, biar kuobati)"
+      },
+      {
+        "atMs": 236620,
+        "text": "Tidakkah letih kakimu berlari?"
+      },
+      {
+        "atMs": 241240,
+        "text": "Ada hal yang tak mereka mengerti"
+      },
+      {
+        "atMs": 245940,
+        "text": "Beri waktu 'tuk bersandar sebentar"
+      },
+      {
+        "atMs": 250980,
+        "text": "S'lama ini kau hebat, hanya kau tak didengar"
+      },
+      {
+        "atMs": 259100,
+        "text": "S'lama ini kau hebat, kau pasti 'kan didengar"
+      }
+    ],
+    "lrclibId": 6057290,
+    "songTitle": "Jiwa Yang Bersedih",
+    "status": "Aligned"
+  },
+  "ce53261b-fb53-465d-a72d-20cb59dfd7e0": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lines": [
+      {
+        "atMs": 6800,
+        "text": "Fukai fukai mori no oku ni ima mo kitto"
+      },
+      {
+        "atMs": 12400,
+        "text": "Okizari ni shita kokoro kakushiteru yo"
+      },
+      {
+        "atMs": 18440,
+        "text": "Sagasu hodo no chikara mo naku tsukare hateta"
+      },
+      {
+        "atMs": 24260,
+        "text": "Hito\"wa eien no yami ni kieru"
+      },
+      {
+        "atMs": 30860,
+        "text": "Chiisai mama nara kitto"
+      },
+      {
+        "atMs": 36020,
+        "text": "Ima de mo mieta ka na"
+      },
+      {
+        "atMs": 43470,
+        "text": ""
+      },
+      {
+        "atMs": 44040,
+        "text": "Bokutachi wa ikiru hodo ni"
+      },
+      {
+        "atMs": 51640,
+        "text": "Nakushiteku sukoshi zutsu"
+      },
+      {
+        "atMs": 57600,
+        "text": "Itsuwari ya uso wo matoi"
+      },
+      {
+        "atMs": 63540,
+        "text": "Tachisukumu koe mo naku"
+      },
+      {
+        "atMs": 70020,
+        "text": ""
+      },
+      {
+        "atMs": 70520,
+        "text": "Aoi aoi sora no iro mo kizukanai mama"
+      },
+      {
+        "atMs": 86480,
+        "text": "Sugite yuku mainichi ga kawatte yuku"
+      },
+      {
+        "atMs": 93100,
+        "text": "Tsukurareta wakugumi wo koe ima wo ikite"
+      },
+      {
+        "atMs": 98320,
+        "text": "Sabitsuita kokoro mata ugoki dasu yo"
+      },
+      {
+        "atMs": 104960,
+        "text": "Toki no rizumu wo shireba"
+      },
+      {
+        "atMs": 110060,
+        "text": "Mou ichi do toberudarou"
+      },
+      {
+        "atMs": 116420,
+        "text": "Bokutachi wa samayoinagara"
+      },
+      {
+        "atMs": 125820,
+        "text": "Ikite yuku doko made mo"
+      },
+      {
+        "atMs": 131620,
+        "text": "Shinjiteru hikari motome"
+      },
+      {
+        "atMs": 137660,
+        "text": "Aruki dasu kimi to ima"
+      },
+      {
+        "atMs": 144980,
+        "text": "Bokutachi wa ikiru hodo ni"
+      },
+      {
+        "atMs": 161600,
+        "text": "Nakushiteku sukoshi zutsu"
+      },
+      {
+        "atMs": 162820,
+        "text": "Tachisukumu koe mo naku"
+      },
+      {
+        "atMs": 200180,
+        "text": "Ikite yuku eien ni"
+      }
+    ],
+    "lrclibId": 30714317,
+    "songTitle": "Fukai Mori",
+    "status": "Aligned"
+  },
+  "cf807dff-51d3-4e4a-a6cf-8885cee849a5": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lrclibId": 12943406,
+    "reason": "median probability 0.35 is too low",
+    "songTitle": "Eiyuu no Shihen",
+    "status": "Rejected"
+  },
+  "d1991da9-c689-5593-9c22-138954216af0": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lrclibId": 36247917,
+    "reason": "3 weak lines in a row, a section was probably skipped",
+    "songTitle": "Lantas",
+    "status": "Rejected"
+  },
+  "d1ac0633-0c1c-4306-bd57-5dc9135a8b36": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lrclibId": 23646799,
+    "reason": "no line was sung clearly",
+    "songTitle": "Miniatur",
+    "status": "Rejected"
+  },
+  "dc8560be-6814-4961-bc12-e2202ae30bbd": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lrclibId": 29825245,
+    "reason": "3 weak lines in a row, a section was probably skipped",
+    "songTitle": "Kamu & Kenangan",
+    "status": "Rejected"
+  },
+  "dd53ea6f-2213-40af-9366-978122ba2c9e": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lrclibId": 36247917,
+    "reason": "3 weak lines in a row, a section was probably skipped",
+    "songTitle": "Lantas",
+    "status": "Rejected"
+  },
+  "e0e45796-7792-4533-ae2f-7e643f66236b": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lines": [
+      {
+        "atMs": 9320,
+        "text": "Bagaikan sungai yang tak punya malu"
+      },
+      {
+        "atMs": 18060,
+        "text": "Mengalir meskipun terancam surut"
+      },
+      {
+        "atMs": 23760,
+        "text": "Lalu (hmm), kakimu melangkah ke rumahku"
+      },
+      {
+        "atMs": 34280,
+        "text": "Setengah melirik, mencoba rayu"
+      },
+      {
+        "atMs": 42520,
+        "text": "Apa yang kau inginkan"
+      },
+      {
+        "atMs": 46800,
+        "text": "Dari senyumku, ya tuan?"
+      },
+      {
+        "atMs": 53940,
+        "text": "Gemar sekali kau lukiskan bintang untukku"
+      },
+      {
+        "atMs": 62300,
+        "text": "Sungguh lihai tanganmu menata kembali hati"
+      },
+      {
+        "atMs": 68600,
+        "text": "Yang hampir mati"
+      },
+      {
+        "atMs": 70780,
+        "text": "'Kan ku letakkan hangat di tengah dekap kita"
+      },
+      {
+        "atMs": 75330,
+        "text": ""
+      },
+      {
+        "atMs": 77940,
+        "text": "Jangan biarkan ku pulang"
+      },
+      {
+        "atMs": 82260,
+        "text": "Ke rumah yang bukan engkau"
+      },
+      {
+        "atMs": 87230,
+        "text": ""
+      },
+      {
+        "atMs": 98240,
+        "text": "Bicarakan tentang seisi dunia"
+      },
+      {
+        "atMs": 106760,
+        "text": "Perlahan mendekat, bisikkan cinta"
+      },
+      {
+        "atMs": 112560,
+        "text": "Membuatku terlena"
+      },
+      {
+        "atMs": 114810,
+        "text": "Ke dalam pesona sukma yang begitu indah"
+      },
+      {
+        "atMs": 119920,
+        "text": ""
+      },
+      {
+        "atMs": 122910,
+        "text": "Apa yang kau inginkan"
+      },
+      {
+        "atMs": 127050,
+        "text": "Dari senyumku, ya tuan?"
+      },
+      {
+        "atMs": 134250,
+        "text": "Gemar sekali kau lukiskan bintang untukku"
+      },
+      {
+        "atMs": 137460,
+        "text": ""
+      },
+      {
+        "atMs": 142690,
+        "text": "Sungguh lihai tanganmu menata kembali hati"
+      },
+      {
+        "atMs": 149110,
+        "text": "Yang hampir mati"
+      },
+      {
+        "atMs": 151210,
+        "text": "'Kan ku letakkan hangat di tengah dekap kita"
+      },
+      {
+        "atMs": 157630,
+        "text": "Jangan biarkan ku pulang"
+      },
+      {
+        "atMs": 162770,
+        "text": "Ke rumah yang bukan engkau"
+      },
+      {
+        "atMs": 166440,
+        "text": ""
+      },
+      {
+        "atMs": 171250,
+        "text": "Jika mampu ku menjelajahi langit"
+      },
+      {
+        "atMs": 179790,
+        "text": "'Kan ku petik pelangi 'tuk warnai harimu"
+      },
+      {
+        "atMs": 186150,
+        "text": "Jangan khawatir, masih ada aku"
+      },
+      {
+        "atMs": 194610,
+        "text": "Jangan khawatir, masih ada aku"
+      },
+      {
+        "atMs": 200230,
+        "text": ""
+      },
+      {
+        "atMs": 204230,
+        "text": "Gemas sekali kau lukiskan bintang untukku"
+      },
+      {
+        "atMs": 210460,
+        "text": ""
+      },
+      {
+        "atMs": 244390,
+        "text": "Sungguh lihai tanganmu menata kembali hati"
+      },
+      {
+        "atMs": 250770,
+        "text": "Yang hampir mati"
+      },
+      {
+        "atMs": 252850,
+        "text": "'Kan ku letakkan hangat di tengah dekap kita"
+      },
+      {
+        "atMs": 257960,
+        "text": ""
+      },
+      {
+        "atMs": 261270,
+        "text": "'Kan aku persilahkan kau menetap di sini"
+      }
+    ],
+    "lrclibId": 38909623,
+    "songTitle": "Kau Rumahku",
+    "status": "Aligned"
+  },
+  "e1c73e02-4d67-5c0f-8195-b1bf7b73e03b": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lrclibId": 33754340,
+    "reason": "no line was sung clearly",
+    "songTitle": "Unwavering Startorch",
+    "status": "Rejected"
+  },
+  "e2a9ddff-a9ad-48ba-81f5-bdf884589418": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lrclibId": 32922912,
+    "reason": "only 3 lines were sung",
+    "songTitle": "Dari Planet Lain",
+    "status": "Rejected"
+  },
+  "e648692a-3200-428b-b626-3b36b847e908": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lrclibId": 16147373,
+    "reason": "no line was sung clearly",
+    "songTitle": "Akane Sasu",
+    "status": "Rejected"
+  },
+  "e6b94289-e2db-4ce9-b14f-ca7443be32fd": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lrclibId": 3821917,
+    "reason": "3 weak lines in a row, a section was probably skipped",
+    "songTitle": "Pretender",
+    "status": "Rejected"
+  },
+  "ea12d755-dac2-4a18-978a-6d1af251d558": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lrclibId": 23453992,
+    "reason": "median probability 0.48 is too low",
+    "songTitle": "Yamko Rambe Yamko",
+    "status": "Rejected"
+  },
+  "eada3206-2c0c-5085-bd31-0f9d6b3142c6": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lines": [
+      {
+        "atMs": 27220,
+        "text": "Kau bercerita semalam kita bertemu dalam mimpi"
+      },
+      {
+        "atMs": 31070,
+        "text": ""
+      },
+      {
+        "atMs": 36440,
+        "text": "Entah mengapa aku merasakan hadirmu di sini"
+      },
+      {
+        "atMs": 45700,
+        "text": "Tawa candamu menghibur saat ku sendiri"
+      },
+      {
+        "atMs": 51360,
+        "text": ""
+      },
+      {
+        "atMs": 54900,
+        "text": "Aku di sini dan kau di sana"
+      },
+      {
+        "atMs": 59440,
+        "text": "Hanya berjumpa via suara"
+      },
+      {
+        "atMs": 64440,
+        "text": "Namun ku s'lalu menunggu"
+      },
+      {
+        "atMs": 66880,
+        "text": "Saat kita akan berjumpa"
+      },
+      {
+        "atMs": 70400,
+        "text": ""
+      },
+      {
+        "atMs": 73000,
+        "text": "Meski kau kini jauh di sana"
+      },
+      {
+        "atMs": 77740,
+        "text": "Kita memandang langit yang sama"
+      },
+      {
+        "atMs": 82640,
+        "text": "Jauh di mata"
+      },
+      {
+        "atMs": 84420,
+        "text": "Namun dekat di hati"
+      },
+      {
+        "atMs": 87090,
+        "text": ""
+      },
+      {
+        "atMs": 96520,
+        "text": "Dering telfonku membuatku tersenyum di pagi hari"
+      },
+      {
+        "atMs": 100000,
+        "text": ""
+      },
+      {
+        "atMs": 105220,
+        "text": "Tawa candamu menghibur saat ku sendiri, oh"
+      },
+      {
+        "atMs": 108610,
+        "text": ""
+      },
+      {
+        "atMs": 114900,
+        "text": "Aku di sini dan kau di sana"
+      },
+      {
+        "atMs": 119480,
+        "text": "Hanya berjumpa via suara"
+      },
+      {
+        "atMs": 123900,
+        "text": "Namun ku s'lalu menunggu"
+      },
+      {
+        "atMs": 126820,
+        "text": "Saat kita akan berjumpa"
+      },
+      {
+        "atMs": 129840,
+        "text": ""
+      },
+      {
+        "atMs": 133360,
+        "text": "Meski kau kini jauh di sana"
+      },
+      {
+        "atMs": 137760,
+        "text": "Kita memandang langit yang sama"
+      },
+      {
+        "atMs": 142560,
+        "text": "Jauh di mata"
+      },
+      {
+        "atMs": 144440,
+        "text": "Namun dekat di hati"
+      },
+      {
+        "atMs": 146940,
+        "text": ""
+      },
+      {
+        "atMs": 170000,
+        "text": "Ho-ho, aku di sini dan kau di sana"
+      },
+      {
+        "atMs": 173490,
+        "text": ""
+      },
+      {
+        "atMs": 179460,
+        "text": "Hanya berjumpa via suara"
+      },
+      {
+        "atMs": 184120,
+        "text": "Namun ku s'lalu menunggu"
+      },
+      {
+        "atMs": 187060,
+        "text": "Saat kita akan berjumpa"
+      },
+      {
+        "atMs": 189890,
+        "text": ""
+      },
+      {
+        "atMs": 193350,
+        "text": "Meski kau kini jauh di sana"
+      },
+      {
+        "atMs": 197570,
+        "text": "Kita memandang langit yang sama"
+      },
+      {
+        "atMs": 202600,
+        "text": "Jauh di mata"
+      },
+      {
+        "atMs": 204410,
+        "text": "Namun kau dekat di hati"
+      },
+      {
+        "atMs": 213800,
+        "text": ""
+      },
+      {
+        "atMs": 216570,
+        "text": "Bagai detak jantung yang kubawa"
+      },
+      {
+        "atMs": 222750,
+        "text": "Ke mana pun ku pergi, oh, oh, oh"
+      },
+      {
+        "atMs": 225500,
+        "text": ""
+      },
+      {
+        "atMs": 225650,
+        "text": "Meski kau kini jauh di sana"
+      },
+      {
+        "atMs": 229490,
+        "text": "Kita memandang langit yang sama"
+      },
+      {
+        "atMs": 234850,
+        "text": "Jauh di mata"
+      },
+      {
+        "atMs": 236910,
+        "text": "Namun dekat di hati"
+      },
+      {
+        "atMs": 239720,
+        "text": ""
+      },
+      {
+        "atMs": 241650,
+        "text": "Dekat di hati"
+      },
+      {
+        "atMs": 246690,
+        "text": "Dekat di hati"
+      }
+    ],
+    "lrclibId": 34651718,
+    "songTitle": "Dekat di Hati",
+    "status": "Aligned"
+  },
+  "ebdbc379-d28a-4374-b35c-c27ec073788a": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lrclibId": 19123967,
+    "reason": "no line was sung clearly",
+    "songTitle": "Tampar",
+    "status": "Rejected"
+  },
+  "ec598166-0cf9-4789-9d33-9f3812bb18c0": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lines": [
+      {
+        "atMs": 21960,
+        "text": "Bun, hidup berjalan seperti bajingan"
+      },
+      {
+        "atMs": 30030,
+        "text": ""
+      },
+      {
+        "atMs": 32220,
+        "text": "Seperti landak yang tak punya teman"
+      },
+      {
+        "atMs": 39850,
+        "text": ""
+      },
+      {
+        "atMs": 42560,
+        "text": "Ia menggonggong bak suara hujan"
+      },
+      {
+        "atMs": 50820,
+        "text": "Dan kau pangeranku, mengambil peran"
+      },
+      {
+        "atMs": 58870,
+        "text": ""
+      },
+      {
+        "atMs": 64660,
+        "text": "Bun, kalau saat hancur ku disayang"
+      },
+      {
+        "atMs": 72730,
+        "text": ""
+      },
+      {
+        "atMs": 75120,
+        "text": "Apalagi saat ku jadi juara"
+      },
+      {
+        "atMs": 85720,
+        "text": "Saat tak tahu arah kau di sana"
+      },
+      {
+        "atMs": 95960,
+        "text": "Menjadi gagah saat ku tak bisa"
+      },
+      {
+        "atMs": 106620,
+        "text": "Sedikit kujelaskan tentangku dan kamu"
+      },
+      {
+        "atMs": 112320,
+        "text": "Agar seisi dunia tahu"
+      },
+      {
+        "atMs": 116760,
+        "text": "Keras kepalaku sama denganmu"
+      },
+      {
+        "atMs": 122660,
+        "text": "Caraku marah, caraku tersenyum"
+      },
+      {
+        "atMs": 127900,
+        "text": "Seperti detak jantung yang bertaut"
+      },
+      {
+        "atMs": 134260,
+        "text": "Nyawaku nyala karena denganmu"
+      },
+      {
+        "atMs": 138640,
+        "text": "Aku masih ada sampai di sini"
+      },
+      {
+        "atMs": 143980,
+        "text": "Melihatmu kuat setengah mati"
+      },
+      {
+        "atMs": 149400,
+        "text": "Seperti detak jantung yang bertaut"
+      },
+      {
+        "atMs": 154640,
+        "text": "Nyawaku nyala karena denganmu"
+      },
+      {
+        "atMs": 160240,
+        "text": ""
+      },
+      {
+        "atMs": 160260,
+        "text": "Bun, aku masih tak mengerti banyak hal"
+      },
+      {
+        "atMs": 168610,
+        "text": ""
+      },
+      {
+        "atMs": 181640,
+        "text": "Semuanya berenang di kepala"
+      },
+      {
+        "atMs": 188770,
+        "text": ""
+      },
+      {
+        "atMs": 192240,
+        "text": "Dan kau dan semua yang kau tahu tentangnya"
+      },
+      {
+        "atMs": 202620,
+        "text": "Menjadi jawab saat ku bertanya"
+      },
+      {
+        "atMs": 213240,
+        "text": "Sedikit kujelaskan tentangku dan kamu"
+      },
+      {
+        "atMs": 218880,
+        "text": "Agar seisi dunia tahu"
+      },
+      {
+        "atMs": 223920,
+        "text": "Keras kepalaku sama denganmu"
+      },
+      {
+        "atMs": 229340,
+        "text": "Caraku marah, caraku tersenyum"
+      },
+      {
+        "atMs": 234660,
+        "text": "Seperti detak jantung yang bertaut"
+      },
+      {
+        "atMs": 239880,
+        "text": "Nyawaku nyala karena denganmu"
+      },
+      {
+        "atMs": 245300,
+        "text": "Aku masih ada sampai di sini"
+      },
+      {
+        "atMs": 250720,
+        "text": "Melihatmu kuat setengah mati"
+      },
+      {
+        "atMs": 256060,
+        "text": "Seperti detak jantung yang bertaut"
+      },
+      {
+        "atMs": 261220,
+        "text": "Nyawaku nyala karena denganmu"
+      },
+      {
+        "atMs": 266660,
+        "text": "Semoga lama hidupmu di sini"
+      },
+      {
+        "atMs": 272040,
+        "text": "Melihatku berjuang sampai akhir"
+      },
+      {
+        "atMs": 277420,
+        "text": "Seperti detak jantung yang bertaut"
+      },
+      {
+        "atMs": 282660,
+        "text": "Nyawaku nyala karena denganmu"
+      }
+    ],
+    "lrclibId": 30955174,
+    "songTitle": "Bertaut",
+    "status": "Aligned"
+  },
+  "f154514a-c04d-4059-b034-91604bbd1117": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lines": [
+      {
+        "atMs": 2640,
+        "text": "Senyumanmu yang indah bagaikan candu"
+      },
+      {
+        "atMs": 10860,
+        "text": "Ingin t'rus kulihat walau"
+      },
+      {
+        "atMs": 15660,
+        "text": ""
+      },
+      {
+        "atMs": 23340,
+        "text": "Ku berandai"
+      },
+      {
+        "atMs": 27140,
+        "text": "Kau disini"
+      },
+      {
+        "atMs": 31200,
+        "text": "Mengobati rindu ruai"
+      },
+      {
+        "atMs": 36270,
+        "text": ""
+      },
+      {
+        "atMs": 39640,
+        "text": "Dalam sunyi"
+      },
+      {
+        "atMs": 43660,
+        "text": "Ku sendiri meratapi"
+      },
+      {
+        "atMs": 50520,
+        "text": "Perasaan yang tak jua di dengar"
+      },
+      {
+        "atMs": 57280,
+        "text": ""
+      },
+      {
+        "atMs": 60520,
+        "text": "Takkan apa"
+      },
+      {
+        "atMs": 64320,
+        "text": "Bila rasa ini tumbuh sendirinya"
+      },
+      {
+        "atMs": 73890,
+        "text": ""
+      },
+      {
+        "atMs": 77120,
+        "text": "Tak berdaya"
+      },
+      {
+        "atMs": 80860,
+        "text": "Diri bila diantara"
+      },
+      {
+        "atMs": 87840,
+        "text": "Walau itu hanya bayang-bayangmu"
+      },
+      {
+        "atMs": 95720,
+        "text": "Senyumanmu yang indah bagaikan candu"
+      },
+      {
+        "atMs": 102100,
+        "text": "Senyumanmu yang indah bagaikan candu"
+      },
+      {
+        "atMs": 103940,
+        "text": "Ingin t'rus kulihat walau dari jauh"
+      },
+      {
+        "atMs": 112300,
+        "text": "Sekarang aku pun sadari semua hanya mimpiku"
+      },
+      {
+        "atMs": 119620,
+        "text": "Yang berkhayallah 'kan bisa bersamamu"
+      },
+      {
+        "atMs": 125480,
+        "text": "Yang berkhayallah 'kan bisa bersamamu"
+      },
+      {
+        "atMs": 127020,
+        "text": "Hu-uu-uu"
+      },
+      {
+        "atMs": 128920,
+        "text": "Dihampiri seribu ragu"
+      }
+    ],
+    "lrclibId": 6764917,
+    "songTitle": "Halu",
     "status": "Aligned"
   }
 }
