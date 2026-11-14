@@ -46,6 +46,17 @@ export type TransitionRow = Readonly<{
   skips: number
 }>
 
+export type SongMoodRow = Readonly<{
+  songId: string
+  title: string | null
+  artist: string | null
+  videoUrl: string | null
+  votes: Readonly<Record<string, number>>
+  total: number
+}>
+
+export type MoodDayRow = Readonly<{ day: string; votes: number }>
+
 export type Report = Readonly<{
   days: number
   since: string
@@ -58,6 +69,9 @@ export type Report = Readonly<{
   outcomes: readonly OutcomeRow[]
   transitions: readonly TransitionRow[]
   transitionMinPlays: number
+  moodNames: readonly string[]
+  moods: readonly SongMoodRow[]
+  moodDaily: readonly MoodDayRow[]
 }>
 
 const record = (value: unknown) =>
@@ -198,6 +212,39 @@ const parseTransition = (item: unknown): TransitionRow | undefined => {
       }
 }
 
+const parseSongMoods = (
+  item: unknown,
+  moodNames: readonly string[],
+): SongMoodRow | undefined => {
+  const fields = record(item)
+  const votes = record(fields?.votes)
+  const songId = text(fields?.songId)
+  const counts = moodNames.map(name => count(votes?.[name]))
+  return songId === undefined || counts.some(amount => amount === undefined)
+    ? undefined
+    : {
+        songId,
+        title: text(fields?.title) ?? null,
+        artist: text(fields?.artist) ?? null,
+        videoUrl: text(fields?.videoUrl) ?? null,
+        votes: Object.fromEntries(
+          moodNames.map((name, index) => [name, counts[index] ?? 0]),
+        ),
+        total: counts.reduce<number>((sum, amount) => sum + (amount ?? 0), 0),
+      }
+}
+
+const parseMoodDay = (item: unknown): MoodDayRow | undefined => {
+  const fields = record(item)
+  const day = text(fields?.day)
+  const votes = count(fields?.votes)
+  return day !== undefined &&
+    /^\d{4}-\d{2}-\d{2}$/.test(day) &&
+    votes !== undefined
+    ? { day, votes }
+    : undefined
+}
+
 export const parseReport = (raw: unknown): Report | undefined => {
   const fields = record(raw)
   const days = count(fields?.days)
@@ -211,6 +258,11 @@ export const parseReport = (raw: unknown): Report | undefined => {
   const outcomes = each(fields?.outcomes, parseOutcome)
   const transitions = each(fields?.transitions, parseTransition)
   const transitionMinPlays = count(fields?.transitionMinPlays)
+  const moodDaily = each(fields?.moodDaily, parseMoodDay)
+  const moodNames = each(fields?.moodNames, name => text(name))
+  const moods = moodNames
+    ? each(fields?.moods, item => parseSongMoods(item, moodNames))
+    : undefined
   if (
     days === undefined ||
     since === undefined ||
@@ -222,7 +274,10 @@ export const parseReport = (raw: unknown): Report | undefined => {
     !skipBucketCount ||
     !outcomes ||
     !transitions ||
-    transitionMinPlays === undefined
+    transitionMinPlays === undefined ||
+    !moodNames ||
+    !moods ||
+    !moodDaily
   ) {
     return undefined
   }
@@ -238,8 +293,63 @@ export const parseReport = (raw: unknown): Report | undefined => {
     outcomes,
     transitions,
     transitionMinPlays,
+    moodNames,
+    moods,
+    moodDaily,
   }
 }
+
+export const FEW_MOOD_VOTES = 3
+
+export type MoodShare = Readonly<{ mood: string; votes: number }>
+
+export const moodMix = (
+  rows: readonly SongMoodRow[],
+  moodNames: readonly string[],
+): MoodShare[] =>
+  moodNames.map(mood => ({
+    mood,
+    votes: rows.reduce((total, row) => total + (row.votes[mood] ?? 0), 0),
+  }))
+
+export const topMoods = (
+  row: SongMoodRow,
+  moodNames: readonly string[],
+): string[] => {
+  const best = Math.max(0, ...moodNames.map(mood => row.votes[mood] ?? 0))
+  return best === 0 ? [] : moodNames.filter(mood => row.votes[mood] === best)
+}
+
+export type MoodSummary = Readonly<{
+  totalVotes: number
+  songsWithVotes: number
+  topMood: readonly string[]
+}>
+
+export const summarizeMoods = (report: Report): MoodSummary => {
+  const mix = moodMix(report.moods, report.moodNames)
+  const best = Math.max(0, ...mix.map(share => share.votes))
+  return {
+    totalVotes: mix.reduce((total, share) => total + share.votes, 0),
+    songsWithVotes: report.moods.filter(row => row.total > 0).length,
+    topMood:
+      best === 0
+        ? []
+        : mix.filter(share => share.votes === best).map(share => share.mood),
+  }
+}
+
+export const moodRowsFor = (
+  rows: readonly SongMoodRow[],
+  moodNames: readonly string[],
+  mood: string | null,
+): SongMoodRow[] =>
+  [...rows]
+    .filter(row => mood === null || topMoods(row, moodNames).includes(mood))
+    .sort(
+      (left, right) =>
+        right.total - left.total || left.songId.localeCompare(right.songId),
+    )
 
 const sum = (values: readonly number[]) =>
   values.reduce((total, value) => total + value, 0)

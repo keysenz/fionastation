@@ -1,12 +1,14 @@
-import { histogram, timeSeries } from './charts.ts'
+import { histogram, moodTimeSeries, stackedBar, timeSeries } from './charts.ts'
 import {
   EXPORT_TABLES,
+  FEW_MOOD_VOTES,
   MIN_PLAYS_CHOICES,
   RANGES,
   SONG_COLUMNS,
   TRANSITION_COLUMNS,
   type Report,
   type SongColumn,
+  type SongMoodRow,
   type SortDirection,
   type TransitionColumn,
   type VideoRow,
@@ -15,10 +17,14 @@ import {
   formatPercent,
   formatSeconds,
   histogramOf,
+  moodMix,
+  moodRowsFor,
   parseReport,
   ratio,
   sortSongs,
   sortTransitions,
+  summarizeMoods,
+  topMoods,
   totalsOf,
 } from './report.ts'
 
@@ -42,6 +48,7 @@ type View = {
   transitionColumn: TransitionColumn
   transitionDirection: SortDirection
   minTransitionPlays: number
+  moodFilter: string | null
 }
 
 const view: View = {
@@ -53,6 +60,7 @@ const view: View = {
   transitionColumn: 'plays',
   transitionDirection: 'desc',
   minTransitionPlays: MIN_PLAYS_CHOICES[0],
+  moodFilter: null,
 }
 
 const NOTICES: Readonly<Record<string, string>> = {
@@ -405,6 +413,152 @@ const transitionTable = (report: Report) => {
   ])
 }
 
+const moodTop = (row: SongMoodRow, names: readonly string[]) => {
+  const top = topMoods(row, names)
+  return top.length === 0
+    ? '-'
+    : top.length === 1
+      ? (top[0] ?? '-')
+      : `${top.join(' / ')} (tie)`
+}
+
+const moodTable = (report: Report) => {
+  const rows = moodRowsFor(report.moods, report.moodNames, view.moodFilter)
+  return h('div', { class: 'scroll' }, [
+    h('table', { 'data-table': 'moods' }, [
+      h('thead', {}, [
+        h('tr', {}, [
+          h('th', { scope: 'col', class: 'text' }, ['Song']),
+          h('th', { scope: 'col', class: 'num' }, ['Votes']),
+          h('th', { scope: 'col', class: 'text' }, ['Mix']),
+          h('th', { scope: 'col', class: 'text' }, ['Top mood']),
+        ]),
+      ]),
+      h(
+        'tbody',
+        {},
+        rows.slice(0, 100).map(row => {
+          const label = row.title ?? `Unknown song ${row.songId}`
+          const detail = report.moodNames
+            .map(name => `${name} ${row.votes[name] ?? 0}`)
+            .join(', ')
+          return h('tr', { 'data-mood-song': row.songId }, [
+            h('td', { class: 'text' }, [
+              row.videoUrl
+                ? h(
+                    'a',
+                    {
+                      class: 'link',
+                      href: row.videoUrl,
+                      target: '_blank',
+                      rel: 'noreferrer',
+                    },
+                    [label],
+                  )
+                : label,
+              row.artist
+                ? h('span', { class: 'note' }, [` ${row.artist}`])
+                : undefined,
+            ]),
+            num(row.total),
+            h('td', { class: 'text', title: detail }, [
+              stackedBar(
+                report.moodNames.map(mood => ({
+                  mood,
+                  votes: row.votes[mood] ?? 0,
+                })),
+                detail,
+                'mood-mini',
+              ),
+            ]),
+            h('td', { class: 'text', 'data-top-mood': true }, [
+              moodTop(row, report.moodNames),
+              row.total < FEW_MOOD_VOTES
+                ? h('span', { class: 'few', 'data-few-votes': true }, [
+                    'few votes',
+                  ])
+                : undefined,
+            ]),
+          ])
+        }),
+      ),
+    ]),
+  ])
+}
+
+const moodSection = (report: Report) => {
+  const summary = summarizeMoods(report)
+  const mix = moodMix(report.moods, report.moodNames)
+  return [
+    h('div', { class: 'tiles', 'data-moods-tiles': true }, [
+      tile(
+        'mood-votes',
+        'Mood votes',
+        formatCount(summary.totalVotes),
+        'moods tapped by viewers',
+      ),
+      tile(
+        'mood-songs',
+        'Songs with votes',
+        formatCount(summary.songsWithVotes),
+        'at least one mood',
+      ),
+      tile(
+        'mood-top',
+        'Top mood',
+        summary.topMood.length === 0 ? '-' : summary.topMood.join(' / '),
+        summary.topMood.length > 1 ? 'tied' : 'most voted overall',
+      ),
+    ]),
+    h('section', { class: 'panel wide', 'data-panel': 'mood-daily' }, [
+      h('h2', {}, ['Mood votes per day']),
+      h('p', { class: 'note' }, [
+        'Shows whether viewers answer the question at all.',
+      ]),
+      moodTimeSeries(report.moodDaily),
+    ]),
+    h('section', { class: 'panel wide', 'data-panel': 'mood-mix' }, [
+      h('h2', {}, ['Mood mix']),
+      stackedBar(mix, 'Mood mix overall', 'mood-mix'),
+      h(
+        'ul',
+        { class: 'legend' },
+        mix.map(({ mood, votes }) =>
+          h('li', { 'data-mood-share': mood }, [
+            h('span', { class: `swatch mood-${mood}` }),
+            `${mood} ${formatCount(votes)} (${formatPercent(ratio(votes, summary.totalVotes))})`,
+          ]),
+        ),
+      ),
+    ]),
+    h('section', { class: 'panel wide', 'data-panel': 'moods' }, [
+      h('h2', {}, ['Mood votes by song']),
+      h('p', { class: 'note' }, [
+        'Most voted first. Pick a mood to list only the songs it leads, then pick it again to clear. A tie lists the song under each tied mood.',
+      ]),
+      h(
+        'div',
+        { class: 'chips' },
+        report.moodNames.map(mood =>
+          h(
+            'button',
+            {
+              type: 'button',
+              class: view.moodFilter === mood ? 'chip on' : 'chip',
+              'aria-pressed': view.moodFilter === mood,
+              'data-mood-filter': mood,
+            },
+            [h('span', { class: `swatch mood-${mood}` }), mood],
+          ),
+        ),
+      ),
+      report.moods.length > 0
+        ? moodTable(report)
+        : h('p', { class: 'note' }, ['No mood votes in this range yet.']),
+    ]),
+  ]
+}
+
 const minPlaysButtons = () =>
   h(
     'div',
@@ -526,6 +680,7 @@ const dashboard = (report: Report, name: string | undefined) => {
       minPlaysButtons(),
       transitionTable(report),
     ]),
+    ...moodSection(report),
     h('section', { class: 'panel wide', 'data-panel': 'export' }, [
       h('h2', {}, ['Export for offline modeling']),
       h('p', { class: 'note' }, [
@@ -603,7 +758,7 @@ const isSortColumn = (value: string | undefined): value is SongColumn =>
 root.addEventListener('click', event => {
   const target = event.target instanceof Element ? event.target : null
   const action = target?.closest<HTMLElement>(
-    '[data-action], [data-range], [data-sort], [data-pick], [data-sort-transition], [data-min-plays]',
+    '[data-action], [data-range], [data-sort], [data-pick], [data-sort-transition], [data-min-plays], [data-mood-filter]',
   )
   if (!action) return
   if (action.dataset.action === 'logout') {
@@ -636,6 +791,12 @@ root.addEventListener('click', event => {
           ? 'asc'
           : 'desc'
     view.transitionColumn = column
+    render()
+  } else if (action.dataset.moodFilter !== undefined) {
+    view.moodFilter =
+      action.dataset.moodFilter === view.moodFilter
+        ? null
+        : action.dataset.moodFilter
     render()
   } else if (action.dataset.minPlays !== undefined) {
     view.minTransitionPlays = Number(action.dataset.minPlays)

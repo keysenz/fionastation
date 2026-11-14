@@ -5,9 +5,13 @@ import {
   type Report,
   formatPercent,
   histogramOf,
+  moodMix,
+  moodRowsFor,
   parseReport,
   sortSongs,
   sortTransitions,
+  summarizeMoods,
+  topMoods,
   totalsOf,
 } from './report.ts'
 
@@ -54,6 +58,37 @@ const raw = {
     { prevSongId: 'c', songId: 'a', prevTitle: 'C', title: 'A', plays: 4, finishes: 1, skips: 0 },
   ],
   transitionMinPlays: 2,
+  moodNames: ['ceria', 'sendu'],
+  moods: [
+    {
+      songId: 'a',
+      title: 'A',
+      artist: 'X',
+      videoUrl: 'https://youtu.be/v1',
+      votes: { ceria: 3, sendu: 1 },
+      total: 4,
+    },
+    {
+      songId: 'b',
+      title: null,
+      artist: null,
+      videoUrl: null,
+      votes: { ceria: 1, sendu: 1 },
+      total: 2,
+    },
+    {
+      songId: 'c',
+      title: 'C',
+      artist: null,
+      videoUrl: null,
+      votes: { ceria: 0, sendu: 2 },
+      total: 2,
+    },
+  ],
+  moodDaily: [
+    { day: '2026-11-13', votes: 0 },
+    { day: '2026-11-14', votes: 8 },
+  ],
 }
 const report = parseReport(raw) as Report
 
@@ -194,10 +229,54 @@ describe('transitions', () => {
     ).toEqual(['ab', 'bc', 'ca'])
   })
 
+  test('reads the mood votes, and rejects a mood list that misses a vote count', () => {
+    expect(report.moods.map(row => [row.songId, row.total])).toEqual([
+      ['a', 4],
+      ['b', 2],
+      ['c', 2],
+    ])
+    expect(report.moods[0]?.videoUrl).toBe('https://youtu.be/v1')
+    expect(report.moodDaily).toHaveLength(2)
+    expect(
+      parseReport({
+        ...raw,
+        moods: [{ songId: 'a', title: 'A', votes: { ceria: 3 } }],
+      }),
+    ).toBeUndefined()
+    expect(parseReport({ ...raw, moodNames: undefined })).toBeUndefined()
+  })
+
   test('rejects a report whose outcomes are missing', () => {
     expect(parseReport({ ...raw, outcomes: undefined })).toBeUndefined()
     expect(
       parseReport({ ...raw, transitions: [{ prevSongId: 'a' }] }),
     ).toBeUndefined()
+  })
+})
+
+describe('moods', () => {
+  test('summarizes the votes, the songs that have any and the top mood', () => {
+    expect(summarizeMoods(report)).toEqual({
+      totalVotes: 8,
+      songsWithVotes: 3,
+      topMood: ['ceria', 'sendu'],
+    })
+    expect(moodMix(report.moods, report.moodNames)).toEqual([
+      { mood: 'ceria', votes: 4 },
+      { mood: 'sendu', votes: 4 },
+    ])
+  })
+
+  test('marks tied top moods and lists a tied song under each', () => {
+    const tied = report.moods.find(row => row.songId === 'b')
+    expect(tied && topMoods(tied, report.moodNames)).toEqual(['ceria', 'sendu'])
+    expect(
+      moodRowsFor(report.moods, report.moodNames, 'sendu').map(
+        row => row.songId,
+      ),
+    ).toEqual(['b', 'c'])
+    expect(
+      moodRowsFor(report.moods, report.moodNames, null).map(row => row.songId),
+    ).toEqual(['a', 'b', 'c'])
   })
 })
