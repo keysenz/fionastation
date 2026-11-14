@@ -14,7 +14,13 @@ import {
   update,
 } from './karaoke.ts'
 import { PlayStat } from './playStats.ts'
-import { TrailDecision, TrailTag, newSessionId } from './trail.ts'
+import {
+  TrailDecision,
+  TrailTag,
+  claimSeqs,
+  newSessionId,
+  startedTrail,
+} from './trail.ts'
 
 const song = (id: string, video: string, timestamp: string): PlayableSong => ({
   id,
@@ -245,5 +251,19 @@ describe('autoplay decisions', () => {
       Message.CompletedPickRandomVideo({ playId: 1, song: solo, poolSize: 4 }),
     )
     expect(trace(redrawn).some(line => line.includes('Decision'))).toBe(false)
+  })
+})
+
+describe('claimSeqs', () => {
+  test('the decision takes a lower seq than the stats claimed in the same update', () => {
+    const claimed = claimSeqs(
+      Option.some(startedTrail(SESSION)),
+      Option.some({ songId: 'solo', poolSize: 4 }),
+      [PlayStat.Played({ songId: 'solo', origin: 'Autoplay' })],
+    )
+    expect(Option.getOrUndefined(claimed.maybeDecision)?.tag.seq).toBe(1)
+    expect(
+      claimed.tagged.map(({ maybeTag }) => Option.getOrUndefined(maybeTag)?.seq),
+    ).toEqual([2])
   })
 })
