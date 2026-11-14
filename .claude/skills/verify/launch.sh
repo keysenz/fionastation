@@ -24,6 +24,11 @@ echo "playlists db $PLAYLISTS_DB_PATH"
 export STATS_DB_PATH="${STATS_DB_PATH:-$(mktemp -d /tmp/fio-stats-XXXXXX)/stats.db}"
 echo "$STATS_DB_PATH" >"$RUN/stats.path"
 echo "stats db $STATS_DB_PATH"
+export COMMISSIONS_DB_PATH="${COMMISSIONS_DB_PATH:-$(mktemp -d /tmp/fio-commissions-XXXXXX)/commissions.db}"
+echo "$COMMISSIONS_DB_PATH" >"$RUN/commissions.path"
+echo "commissions db $COMMISSIONS_DB_PATH"
+export COMMISSIONS_SECRET="${COMMISSIONS_SECRET:-verify-commissions-secret}"
+export COMMISSIONS_IP_LIMIT_PER_HOUR="${COMMISSIONS_IP_LIMIT_PER_HOUR:-1000}"
 export ADMIN_PORT="${ADMIN_PORT:-3911}" ADMIN_SECRET="${ADMIN_SECRET:-verify-admin-secret}"
 
 PLAYLISTS_IP_LIMIT_PER_HOUR="${PLAYLISTS_IP_LIMIT_PER_HOUR:-1000}" DATABASE_PATH="$PWD/$RUN/karaoke.db" PORT="$PORT" HOSTNAME=127.0.0.1 \
