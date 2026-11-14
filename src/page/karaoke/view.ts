@@ -9,7 +9,7 @@ import {
   formatPublishDate,
   songLabel,
 } from '../../domain.ts'
-import { songsRouter } from '../../route'
+import { hireRouter, songsRouter } from '../../route'
 import { type LoadFailure, thumbnailUrl } from '../../youtube'
 import type { LoginFailure } from './account.ts'
 import { infoButtonView, infoPanelView } from './info.ts'
@@ -768,6 +768,21 @@ const headerView = (model: Model, h: HtmlBuilder<Message>): Html =>
             [
               myPlaylistsButtonView(h),
               savePlaylistButtonView(h),
+              h.a(
+                [
+                  h.Href(hireRouter()),
+                  h.Class(
+                    'flex shrink-0 items-center gap-2 min-h-10 px-3 sm:px-4 whitespace-nowrap rounded-full border border-white/15 bg-black/40 text-sm font-semibold text-gray-100 hover:bg-black/70 hover:border-white/30 drop-shadow-md transition',
+                  ),
+                ],
+                [
+                  h.span(
+                    [h.Class('hidden sm:inline')],
+                    [h.i([h.Class('fas fa-microphone'), h.AriaHidden(true)])],
+                  ),
+                  'Hire Fio',
+                ],
+              ),
               h.a(
                 [
                   h.Href(songsRouter()),
