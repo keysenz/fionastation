@@ -27,6 +27,7 @@ import {
   WriteFailure,
   fetchJson,
   fetchJsonOrFailure,
+  postWithoutReply,
   sendJson,
 } from '../../api'
 import {
@@ -98,6 +99,13 @@ import {
   parseLayers,
 } from './layers.ts'
 import {
+  Listen,
+  PlayStat,
+  type Standing,
+  Trigger,
+  stepStats,
+} from './playStats.ts'
+import {
   type OpenedPlaylist,
   PlaylistFailure,
   PlaylistOpen,
@@ -147,6 +155,7 @@ import {
   failLoad,
   firstSongOfEachOtherLiveVideo,
   intentOf,
+  isStreamGone,
   loadPlaylist,
   loadRetryDelaySeconds,
   moveInQueue,
@@ -254,6 +263,7 @@ export const Model = Schema.Struct({
   maybeSelectedVideoId: Schema.Option(Schema.String),
   maybeQueueDrag: Schema.Option(QueueDrag),
   maybePlayhead: Schema.Option(Playhead),
+  listens: Schema.Array(Listen),
   lyricsBySongId: Schema.Record(Schema.String, LyricsFetch),
   lyricsWaitCount: Schema.Number,
   lyricNudges: Nudges,
@@ -404,6 +414,7 @@ export const Message = defineMessageUnion({
   CompletedWaitBeforeDismissToast: { dismissId: Schema.Number },
   CompletedWaitBeforeLoadTimeout: { playId: Schema.Number },
   CompletedWaitBeforeRetryLoad: { playId: Schema.Number },
+  CompletedRecordStat: {},
 })
 export type Message = typeof Message.Type
 
@@ -1004,6 +1015,30 @@ export const PickRandomVideo = Command.define('PickRandomVideo', {
     ),
 })
 
+export const RecordStat = Command.define('RecordStat', {
+  args: { stat: PlayStat },
+  messages: [Message.CompletedRecordStat],
+  execute: ({ stat }) =>
+    postWithoutReply(
+      '/api/stats',
+      PlayStat.match(stat, {
+        Clicked: ({ songId }) => ({
+          songId,
+          kind: 'Click',
+          origin: 'Visitor',
+        }),
+        Played: ({ songId, origin }) => ({ songId, kind: 'Play', origin }),
+        Finished: ({ songId, origin }) => ({ songId, kind: 'Finish', origin }),
+        Skipped: ({ songId, origin, secondsIntoSong }) => ({
+          songId,
+          kind: 'Skip',
+          origin,
+          secondsIntoSong,
+        }),
+      }),
+    ).pipe(Effect.ignore, Effect.as(Message.CompletedRecordStat())),
+})
+
 const TOAST_SECONDS = 6
 
 export const WaitBeforeDismissToast = Command.define('WaitBeforeDismissToast', {
@@ -1200,6 +1235,7 @@ export const init = (): Model => ({
   maybeSelectedVideoId: Option.none(),
   maybeQueueDrag: Option.none(),
   maybePlayhead: Option.none(),
+  listens: [],
   lyricsBySongId: {},
   lyricsWaitCount: 0,
   lyricNudges: {},
@@ -2340,7 +2376,8 @@ const updateModel = (model: Model, message: Message) =>
           nowPlaying => nowPlaying.song.id === song.id,
         ),
         {
-          onNone: () => changeSetlist(model, play(model.setlist, song)),
+          onNone: () =>
+            changeSetlist(model, play(model.setlist, song, 'Visitor')),
           onSome: ({ phase }) =>
             phase._tag === 'LoadFailed'
               ? {
@@ -2559,7 +2596,7 @@ const updateModel = (model: Model, message: Message) =>
                   : { model: modifyFields(model, { setlist: settleGone }) },
               )
             }
-            const setlist = play(model.setlist, song)
+            const setlist = play(model.setlist, song, 'Autoplay')
             const saveSetlist = SaveSetlist({ json: toPersistedJson(setlist) })
             const dismissId = setlist.playCount
             return phase._tag === 'MovingOn'
@@ -3103,7 +3140,91 @@ const updateModel = (model: Model, message: Message) =>
       settleCopy(model, CopyResult.CopyFailed({ target })),
 
     CompletedFocusPlaylistDialog: () => ({ model }),
+
+    CompletedRecordStat: () => ({ model }),
   })
+
+const standingOf = (model: Model): Option.Option<Standing> =>
+  Option.map(model.setlist.maybeNowPlaying, nowPlaying => {
+    const maybeSinging = nowSingingOf(model)
+    const song = songOnBar(model, nowPlaying)
+    return {
+      playId: nowPlaying.playId,
+      origin: nowPlaying.origin,
+      isPlaying: nowPlaying.phase._tag === 'Playing',
+      hasFailedLoad: nowPlaying.phase._tag === 'LoadFailed',
+      hasGoneStream: isStreamGone(nowPlaying.phase),
+      songId: song.id,
+      maybeNextSongId: Option.map(
+        songBeside(allSongs(model), song, Option.none(), 1),
+        ({ id }) => id,
+      ),
+      secondsIntoSong: Option.getOrElse(
+        Option.zipWith(
+          maybeSinging,
+          playheadOf(model, nowPlaying),
+          ({ segment }, { seconds }) =>
+            Math.max(0, Math.floor(seconds - segment.startSeconds)),
+        ),
+        () => 0,
+      ),
+    }
+  })
+
+const triggerOf = (message: Message): Trigger => {
+  if (message._tag === 'ClickedNext') {
+    return Trigger.PressedNext()
+  }
+  if (message._tag === 'ReceivedPlayerEvent') {
+    const { playId, event } = message
+    if (event._tag === 'Ended') {
+      return Trigger.EndedPlay({ playId })
+    }
+    if (event._tag === 'Progressed') {
+      return Trigger.MovedPlayhead()
+    }
+  }
+  return Trigger.Other()
+}
+
+const clickedStatOf = (message: Message): ReadonlyArray<PlayStat> =>
+  message._tag === 'ClickedSong' || message._tag === 'ClickedAddToQueue'
+    ? [PlayStat.Clicked({ songId: message.song.id })]
+    : []
+
+const isCounting = (before: Model, after: Model): boolean =>
+  before.listens.length > 0 ||
+  Option.exists(
+    after.setlist.maybeNowPlaying,
+    ({ phase }) => phase._tag === 'Playing',
+  )
+
+const withPlayStats = (
+  before: Model,
+  message: Message,
+  result: UpdateReturn,
+): UpdateReturn => {
+  const step = isCounting(before, result.model)
+    ? stepStats(
+        before.listens,
+        triggerOf(message),
+        standingOf(before),
+        standingOf(result.model),
+      )
+    : { listens: [], stats: [] }
+  const stats = [...clickedStatOf(message), ...step.stats]
+  return {
+    model: modifyFields(result.model, { listens: () => step.listens }),
+    ...(Array.isReadonlyArrayNonEmpty(stats) || result.commands
+      ? {
+          commands: [
+            ...(result.commands ?? []),
+            ...stats.map(stat => RecordStat({ stat })),
+          ],
+        }
+      : {}),
+  }
+}
 
 /** Every new play starts its own load timeout, whatever started the play, so a
  *  load that never reports anything still ends. */
@@ -3128,7 +3249,11 @@ const withLoadTimeout = (before: Model, result: UpdateReturn): UpdateReturn =>
  *  the topmost one. A change that came from the address bar already has its
  *  entry, so it only repairs a URL that says something the model does not. */
 export const update = (model: Model, message: Message): UpdateReturn => {
-  const updated = withLoadTimeout(model, updateModel(model, message))
+  const updated = withPlayStats(
+    model,
+    message,
+    withLoadTimeout(model, updateModel(model, message)),
+  )
   const result = {
     ...updated,
     model: giveUpEndedRetries(updated.model),

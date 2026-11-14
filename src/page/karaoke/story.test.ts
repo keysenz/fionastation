@@ -34,6 +34,7 @@ import {
   type Model,
   PickRandomVideo,
   RecheckAccount,
+  RecordStat,
   RefreshPlaylist,
   RemovePlaylist,
   ReplacePlaylist,
@@ -80,7 +81,6 @@ import {
   toVolumeJson,
 } from './setlist.ts'
 
-// NOTE: every new play starts a load timeout. Only the tests about that timer look at it, so the rest drive the page without it.
 const update = (current: Model, next: Message): UpdateReturn => {
   const result = pageUpdate(current, next)
   return result.commands === undefined
@@ -88,7 +88,8 @@ const update = (current: Model, next: Message): UpdateReturn => {
     : {
         ...result,
         commands: result.commands.filter(
-          ({ name }) => name !== WaitBeforeLoadTimeout.name,
+          ({ name }) =>
+            name !== WaitBeforeLoadTimeout.name && name !== RecordStat.name,
         ),
       }
 }

@@ -57,10 +57,14 @@ export type Repeat = typeof Repeat.Type
 export const nextRepeat = (repeat: Repeat): Repeat =>
   repeat === 'Off' ? 'All' : repeat === 'All' ? 'One' : 'Off'
 
+export const PlayOrigin = Schema.Literals(['Visitor', 'Autoplay'])
+export type PlayOrigin = typeof PlayOrigin.Type
+
 export const NowPlaying = Schema.Struct({
   song: PlayableSong,
   // NOTE: tells two plays of one song apart, so replaying it still reloads the video.
   playId: Schema.Number,
+  origin: PlayOrigin,
   phase: Phase,
   // NOTE: counts the loads of this song since it last played, across the new playId of each retry. It lives beside the phase because a load that got ready or paused can still fail.
   attempt: Schema.Number,
@@ -96,12 +100,17 @@ export const emptySetlist: Setlist = {
   maybeOpenedPlaylistId: Option.none(),
 }
 
-const startPlay = (setlist: Setlist, song: PlayableSong): Setlist =>
+const startPlay = (
+  setlist: Setlist,
+  song: PlayableSong,
+  origin: PlayOrigin,
+): Setlist =>
   modifyFields(setlist, {
     maybeNowPlaying: () =>
       Option.some({
         song,
         playId: setlist.playCount + 1,
+        origin,
         phase: Phase.Loading({ intent: 'Playing' }),
         attempt: 1,
       }),
@@ -115,7 +124,11 @@ const leftSong = (setlist: Setlist): Option.Option<PlayableSong> =>
     isStreamGone(phase) ? Option.none() : Option.some(song),
   )
 
-export const play = (setlist: Setlist, song: PlayableSong): Setlist =>
+export const play = (
+  setlist: Setlist,
+  song: PlayableSong,
+  origin: PlayOrigin,
+): Setlist =>
   startPlay(
     modifyFields(setlist, {
       history: history =>
@@ -125,6 +138,7 @@ export const play = (setlist: Setlist, song: PlayableSong): Setlist =>
         }),
     }),
     song,
+    origin,
   )
 
 const editQueueAndForgetPlaylist = (
@@ -307,6 +321,7 @@ export const playFromQueue = (setlist: Setlist, index: number): Setlist => {
           queue: queue => withoutQueued(queue, index),
         }),
         song,
+        'Visitor',
       ),
   })
 }
@@ -405,7 +420,7 @@ export const retryLoad = (
 ): Setlist =>
   Option.match(setlist.maybeNowPlaying, {
     onNone: () => setlist,
-    onSome: ({ phase, attempt }) =>
+    onSome: ({ phase, attempt, origin }) =>
       Phase.matchOrElse(
         phase,
         {
@@ -415,6 +430,7 @@ export const retryLoad = (
                 Option.some({
                   song,
                   playId: setlist.playCount + 1,
+                  origin,
                   phase: Phase.Loading({
                     intent: by === 'Visitor' ? 'Playing' : intent,
                   }),
@@ -450,6 +466,7 @@ export const playNext = (setlist: Setlist, repeat: Repeat = 'Off'): Setlist => {
       play(
         modifyFields(looped, { queue: queue => Array.drop(queue, 1) }),
         nextSong,
+        'Visitor',
       ),
   })
 }
@@ -464,6 +481,7 @@ export const playPrevious = (setlist: Setlist): Setlist =>
           queue: queue => [...Option.toArray(leftSong(setlist)), ...queue],
         }),
         previousSong,
+        'Visitor',
       ),
   })
 
@@ -548,7 +566,7 @@ export const applyAdvance = (
     Replay: () =>
       Option.match(setlist.maybeNowPlaying, {
         onNone: () => setlist,
-        onSome: ({ song }) => startPlay(setlist, song),
+        onSome: ({ song }) => startPlay(setlist, song, 'Visitor'),
       }),
     PickRandomVideo: () => setlist,
     Stop: () => pause(setlist),

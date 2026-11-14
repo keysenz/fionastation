@@ -125,7 +125,7 @@ test('replacing the queue holds only the playlist and starts its first song', ()
 })
 
 test('replacing keeps the song that was playing in history', () => {
-  const playing = play(emptySetlist, a!)
+  const playing = play(emptySetlist, a!, 'Visitor')
   const loaded = loadPlaylist(playing, [c!, d!], 'Replace', listId)
   expect(idsOf(loaded.history)).toEqual(['a'])
 })
@@ -138,7 +138,7 @@ test('adding keeps the queue first, then the playlist in order, and starts nothi
 })
 
 test('adding drops songs already queued or playing', () => {
-  const queued = play(enqueueAll(emptySetlist, [a!, b!]), c!)
+  const queued = play(enqueueAll(emptySetlist, [a!, b!]), c!, 'Visitor')
   const loaded = loadPlaylist(queued, [b!, c!, d!], 'Append', listId)
   expect(idsOf(loaded.queue)).toEqual(['a', 'b', 'd'])
 })
@@ -199,7 +199,14 @@ const sessionOf = (
   played: ReadonlyArray<PlayableSong>,
   playing: PlayableSong,
   queued: ReadonlyArray<PlayableSong>,
-) => enqueueAll([...played, playing].reduce(play, emptySetlist), queued)
+) =>
+  enqueueAll(
+    [...played, playing].reduce(
+      (setlist, song) => play(setlist, song, 'Visitor'),
+      emptySetlist,
+    ),
+    queued,
+  )
 
 test('Up next saves the queue in order and Played saves the history oldest first', () => {
   const setlist = sessionOf([a!, b!], c!, [d!, makeSong('e')])
