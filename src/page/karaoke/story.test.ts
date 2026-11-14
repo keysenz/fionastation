@@ -2,6 +2,7 @@ import { DateTime, Option, Schema } from 'effect'
 import { Command, given, message, model, story } from 'foldkit/story'
 import { expect, test } from 'vitest'
 
+import { WriteFailure } from '../../api.ts'
 import type { PlayableSong } from '../../domain.ts'
 import { LyricCursor, type Lyrics } from '../../lyrics.ts'
 import { Playlist, PlaylistId } from '../../playlist.ts'
@@ -9,23 +10,31 @@ import { PlayerEvent } from '../../youtube'
 import {
   ApplyPlayback,
   ApplyVolume,
+  CopyLink,
+  CreatePlaylist,
   FetchLyrics,
   FetchPlaylist,
   FetchSongs,
   FocusInfoButton,
   FocusInfoPanel,
+  FocusPlaylistDialog,
   FocusPlaylistPrompt,
   FocusQueueHandle,
   LoadAutoplay,
   LoadLyricNudges,
+  LoadMyPlaylists,
   LoadRepeat,
   LoadSavedSetlist,
   LoadVolume,
   Message,
   type Model,
   PickRandomVideo,
+  RefreshPlaylist,
+  RemovePlaylist,
+  ReplacePlaylist,
   SaveAutoplay,
   SaveLyricNudges,
+  SaveMyPlaylists,
   SaveRepeat,
   SaveSetlist,
   SaveVolume,
@@ -42,9 +51,11 @@ import {
   init,
   nowSingingOf,
   openedPlaylistNameOf,
+  ownedOpenedOf,
   update as pageUpdate,
 } from './karaoke'
 import { layersToUrl, parseLayers } from './layers.ts'
+import { EditToken, PlaylistForm } from './playlists.ts'
 import {
   defaultVolume,
   emptySetlist,
@@ -305,6 +316,7 @@ test('opening the page rereads saved data and fetches, and does not fetch twice'
   const opened = entered(init())
   expect(opened.commands?.map(({ name }) => name)).toEqual([
     LoadSavedSetlist.name,
+    LoadMyPlaylists.name,
     LoadAutoplay.name,
     LoadRepeat.name,
     LoadVolume.name,
@@ -313,6 +325,7 @@ test('opening the page rereads saved data and fetches, and does not fetch twice'
   ])
   expect(entered(opened.model).commands?.map(({ name }) => name)).toEqual([
     LoadSavedSetlist.name,
+    LoadMyPlaylists.name,
     LoadAutoplay.name,
     LoadRepeat.name,
     LoadVolume.name,
@@ -2347,7 +2360,9 @@ test('opening a link with nothing queued plays the playlist at once and names th
   story(
     update,
     given(init()),
-    message(Message.OpenedPlaylist({ id: openingId })),
+    message(
+      Message.OpenedPlaylist({ id: openingId, maybeEditToken: Option.none() }),
+    ),
     message(noSavedQueue),
     fetchedPlaylist(playlistOf(b, a, c)),
     message(archiveLoaded([a, b, c])),
@@ -2364,7 +2379,9 @@ test('the archive may load before the playlist and the result is the same', () =
   story(
     update,
     given(init()),
-    message(Message.OpenedPlaylist({ id: openingId })),
+    message(
+      Message.OpenedPlaylist({ id: openingId, maybeEditToken: Option.none() }),
+    ),
     message(archiveLoaded([a, b, c])),
     message(noSavedQueue),
     fetchedPlaylist(playlistOf(b, a, c)),
@@ -2377,7 +2394,10 @@ test('the archive may load before the playlist and the result is the same', () =
 })
 
 test('the playlist is not fetched until the saved queue is known', () => {
-  const opened = update(init(), Message.OpenedPlaylist({ id: openingId }))
+  const opened = update(
+    init(),
+    Message.OpenedPlaylist({ id: openingId, maybeEditToken: Option.none() }),
+  )
   expect(opened.commands).toBeUndefined()
   const restored = update(opened.model, noSavedQueue)
   expect(restored.commands?.map(({ name }) => name)).toEqual([
@@ -2389,7 +2409,9 @@ test('a saved queue makes the link ask, and nothing changes until the visitor an
   story(
     update,
     given(init()),
-    message(Message.OpenedPlaylist({ id: openingId })),
+    message(
+      Message.OpenedPlaylist({ id: openingId, maybeEditToken: Option.none() }),
+    ),
     message(savedQueue(a, b)),
     fetchedPlaylist(playlistOf(c)),
     message(archiveLoaded([a, b, c])),
@@ -2406,7 +2428,7 @@ const asked = (first: PlayableSong, ...more: ReadonlyArray<PlayableSong>) =>
   through(
     update,
     Message.SucceededFetchSongs({ songs: [a, b, c], goneVideoIds: [] }),
-    Message.OpenedPlaylist({ id: openingId }),
+    Message.OpenedPlaylist({ id: openingId, maybeEditToken: Option.none() }),
     savedQueue(a, b),
     Message.SucceededFetchPlaylist({ playlist: playlistOf(first, ...more) }),
   )
@@ -2456,7 +2478,7 @@ test('an answer with no question open changes nothing', () => {
 const toastOfFailure = (failure: 'Deleted' | 'NotFound' | 'Unreachable') =>
   through(
     update,
-    Message.OpenedPlaylist({ id: openingId }),
+    Message.OpenedPlaylist({ id: openingId, maybeEditToken: Option.none() }),
     noSavedQueue,
     Message.FailedFetchPlaylist({ id: openingId, failure }),
   )
@@ -2465,7 +2487,9 @@ test('a deleted playlist shows its own toast, returns the address to the radio a
   story(
     update,
     given(init()),
-    message(Message.OpenedPlaylist({ id: openingId })),
+    message(
+      Message.OpenedPlaylist({ id: openingId, maybeEditToken: Option.none() }),
+    ),
     message(noSavedQueue),
     failedPlaylist('Deleted'),
     synced,
@@ -2508,7 +2532,7 @@ test('a failure after the link was left behind is ignored', () => {
 test('songs whose video is gone are skipped and the toast counts them', () => {
   const opened = through(
     update,
-    Message.OpenedPlaylist({ id: openingId }),
+    Message.OpenedPlaylist({ id: openingId, maybeEditToken: Option.none() }),
     noSavedQueue,
     Message.SucceededFetchPlaylist({ playlist: playlistOf(a, b, c) }),
     archiveLoaded([a, b, c], [b.video_url]),
@@ -2524,7 +2548,7 @@ test('songs whose video is gone are skipped and the toast counts them', () => {
 test('a playlist whose songs are all unavailable loads nothing and says so', () => {
   const opened = through(
     update,
-    Message.OpenedPlaylist({ id: openingId }),
+    Message.OpenedPlaylist({ id: openingId, maybeEditToken: Option.none() }),
     noSavedQueue,
     Message.SucceededFetchPlaylist({ playlist: playlistOf(a, b) }),
     archiveLoaded([a, b], [a.video_url, b.video_url]),
@@ -2549,7 +2573,7 @@ test('a playlist that arrives for a link the visitor left is ignored', () => {
 test('the playlist waits for a failed archive and opens once a retry succeeds', () => {
   const waiting = through(
     update,
-    Message.OpenedPlaylist({ id: openingId }),
+    Message.OpenedPlaylist({ id: openingId, maybeEditToken: Option.none() }),
     noSavedQueue,
     Message.SucceededFetchPlaylist({ playlist: playlistOf(a) }),
     Message.FailedFetchSongs({ error: 'down' }),
@@ -2563,7 +2587,7 @@ const openedAndPlaying = () =>
   through(
     update,
     archiveLoaded([a, b, c]),
-    Message.OpenedPlaylist({ id: openingId }),
+    Message.OpenedPlaylist({ id: openingId, maybeEditToken: Option.none() }),
     noSavedQueue,
     Message.SucceededFetchPlaylist({ playlist: playlistOf(a, b, c) }),
   )
@@ -2571,12 +2595,15 @@ const openedAndPlaying = () =>
 test('entering the route of the playlist already opened changes nothing and asks nothing', () => {
   const opened = openedAndPlaying()
   expect(queueIdsOf(opened.model)).toEqual(['b', 'c'])
-  const again = update(opened.model, Message.OpenedPlaylist({ id: openingId }))
+  const again = update(
+    opened.model,
+    Message.OpenedPlaylist({ id: openingId, maybeEditToken: Option.none() }),
+  )
   expect(again.model).toEqual(opened.model)
   expect(again.commands).toBeUndefined()
   const reread = through(
     update,
-    Message.OpenedPlaylist({ id: openingId }),
+    Message.OpenedPlaylist({ id: openingId, maybeEditToken: Option.none() }),
     Message.CompletedLoadSavedSetlist({
       maybeJson: Option.some(toPersistedJson(opened.model.setlist)),
     }),
@@ -2585,10 +2612,13 @@ test('entering the route of the playlist already opened changes nothing and asks
 })
 
 test('entering the route of the same playlist while it loads does not start a second load', () => {
-  const awaiting = update(init(), Message.OpenedPlaylist({ id: openingId }))
+  const awaiting = update(
+    init(),
+    Message.OpenedPlaylist({ id: openingId, maybeEditToken: Option.none() }),
+  )
   const again = update(
     awaiting.model,
-    Message.OpenedPlaylist({ id: openingId }),
+    Message.OpenedPlaylist({ id: openingId, maybeEditToken: Option.none() }),
   )
   expect(again.model).toEqual(awaiting.model)
 })
@@ -2598,7 +2628,7 @@ test('a reload of the opened playlist link while its songs are queued does not a
   const reloaded = through(
     update,
     archiveLoaded([a, b, c]),
-    Message.OpenedPlaylist({ id: openingId }),
+    Message.OpenedPlaylist({ id: openingId, maybeEditToken: Option.none() }),
     Message.CompletedLoadSavedSetlist({
       maybeJson: Option.some(toPersistedJson(opened.model.setlist)),
     }),
@@ -2617,7 +2647,7 @@ const reopenedAfter = (...changes: ReadonlyArray<Message>) => {
   return {
     changed,
     reopened: [
-      Message.OpenedPlaylist({ id: openingId }),
+      Message.OpenedPlaylist({ id: openingId, maybeEditToken: Option.none() }),
       Message.CompletedLoadSavedSetlist({
         maybeJson: Option.some(toPersistedJson(changed.model.setlist)),
       }),
@@ -2665,7 +2695,7 @@ test('a reload on a different playlist link still asks', () => {
   const reloaded = through(
     update,
     archiveLoaded([a, b, c]),
-    Message.OpenedPlaylist({ id: otherId }),
+    Message.OpenedPlaylist({ id: otherId, maybeEditToken: Option.none() }),
     Message.CompletedLoadSavedSetlist({
       maybeJson: Option.some(toPersistedJson(opened.model.setlist)),
     }),
@@ -2678,7 +2708,7 @@ test('a slow playlist asks when the visitor started a song meanwhile', () => {
   const slow = through(
     update,
     archiveLoaded([a, b, c]),
-    Message.OpenedPlaylist({ id: openingId }),
+    Message.OpenedPlaylist({ id: openingId, maybeEditToken: Option.none() }),
     noSavedQueue,
     Message.ClickedSong({ song: a }),
     Message.SucceededFetchPlaylist({ playlist: playlistOf(c) }),
@@ -2691,7 +2721,7 @@ test('a playlist that arrives after the visitor left the link is dropped', () =>
   const left = through(
     update,
     archiveLoaded([a, b, c]),
-    Message.OpenedPlaylist({ id: openingId }),
+    Message.OpenedPlaylist({ id: openingId, maybeEditToken: Option.none() }),
     noSavedQueue,
     Message.LeftPlaylist(),
     Message.SucceededFetchPlaylist({ playlist: playlistOf(c) }),
@@ -2704,7 +2734,7 @@ test('a playlist that arrives after the visitor left the link is dropped', () =>
 test('leaving the link before the saved queue is read starts no fetch', () => {
   const left = through(
     update,
-    Message.OpenedPlaylist({ id: openingId }),
+    Message.OpenedPlaylist({ id: openingId, maybeEditToken: Option.none() }),
     Message.LeftPlaylist(),
   )
   expect(update(left.model, noSavedQueue).commands).toBeUndefined()
@@ -2727,9 +2757,9 @@ test('a late failure of one link does not cancel the link now loading', () => {
   const other = through(
     update,
     archiveLoaded([a, b, c]),
-    Message.OpenedPlaylist({ id: openingId }),
+    Message.OpenedPlaylist({ id: openingId, maybeEditToken: Option.none() }),
     noSavedQueue,
-    Message.OpenedPlaylist({ id: otherId }),
+    Message.OpenedPlaylist({ id: otherId, maybeEditToken: Option.none() }),
     noSavedQueue,
     Message.FailedFetchPlaylist({ id: openingId, failure: 'NotFound' }),
   )
@@ -2753,4 +2783,541 @@ test('every answer to the question returns focus to the page', () => {
       FocusInfoButton.name,
     )
   }
+})
+const token = Schema.decodeSync(EditToken)('tok_ABC-123')
+const sessionBefore = (...more: ReadonlyArray<Message>): UpdateReturn =>
+  through(
+    update,
+    Message.SucceededFetchSongs({ songs: [a, b, c], goneVideoIds: [] }),
+    Message.ClickedSong({ song: a }),
+    Message.ClickedSong({ song: b }),
+    Message.ClickedAddToQueue({ song: c }),
+    ...more,
+  )
+const commandNamed = (result: UpdateReturn, name: string) =>
+  result.commands?.find(command => command.name === name)
+const dialogOf = (current: Model) => current.playlistDialog
+const formOf = (current: Model) =>
+  current.playlistDialog._tag === 'Editing' ||
+  current.playlistDialog._tag === 'Sending'
+    ? current.playlistDialog.form
+    : undefined
+const writeFailureOf = (current: Model) =>
+  current.playlistDialog._tag === 'Editing'
+    ? Option.getOrUndefined(current.playlistDialog.maybeFailure)?._tag
+    : undefined
+
+const submitSave = (
+  source: 'Queue' | 'History' | 'Session',
+  name: string,
+): UpdateReturn =>
+  sessionBefore(
+    Message.ClickedSavePlaylist(),
+    Message.SelectedSaveSource({ source }),
+    Message.UpdatedPlaylistName({ value: name }),
+    Message.SubmittedPlaylistForm(),
+  )
+
+test.each([
+  ['Queue', ['c']],
+  ['History', ['a']],
+  ['Session', ['a', 'b', 'c']],
+] as const)(
+  'saving %s sends the songs of that source in play order',
+  (source, ids) => {
+    const sent = submitSave(source, 'Rainy day Fio')
+    expect(dialogOf(sent.model)._tag).toBe('Sending')
+    expect(commandNamed(sent, CreatePlaylist.name)?.args).toEqual({
+      name: 'Rainy day Fio',
+      songIds: ids,
+    })
+  },
+)
+
+test('the save dialog starts on the first source that has songs', () => {
+  const opened = through(
+    update,
+    Message.SucceededFetchSongs({ songs: [a, b, c], goneVideoIds: [] }),
+    Message.ClickedSong({ song: a }),
+    Message.ClickedSong({ song: b }),
+    Message.ClickedSavePlaylist(),
+  )
+  expect(formOf(opened.model)).toEqual(
+    PlaylistForm.Save({ source: 'History', name: '' }),
+  )
+  expect(opened.commands?.map(({ name }) => name)).toContain(
+    FocusPlaylistDialog.name,
+  )
+})
+
+test('a name is cleaned before it is sent and an empty one becomes the default', () => {
+  expect(
+    commandNamed(submitSave('Queue', '  𝓕𝓲𝓸𝓷𝓪  '), CreatePlaylist.name)?.args?.[
+      'name'
+    ],
+  ).toBe('Fiona')
+  expect(
+    commandNamed(submitSave('Queue', '   '), CreatePlaylist.name)?.args?.[
+      'name'
+    ],
+  ).toBe('Untitled playlist')
+})
+
+test('a name that is too long or a source with no songs sends nothing', () => {
+  const tooLong = submitSave('Queue', 'x'.repeat(61))
+  expect(tooLong.commands).toBeUndefined()
+  expect(dialogOf(tooLong.model)._tag).toBe('Editing')
+  const empty = through(
+    update,
+    Message.ClickedSavePlaylist(),
+    Message.SubmittedPlaylistForm(),
+  )
+  expect(empty.commands).toBeUndefined()
+  expect(dialogOf(empty.model)._tag).toBe('Editing')
+})
+
+const createdId = Schema.decodeSync(Playlist)({
+  id: 'Zz9Yy8Xx',
+  name: 'Rainy day Fio',
+  entries: [{ songId: 'c', videoUrl: 'v', timestamp: 't', title: 'T' }],
+  version: 1,
+  createdAt: 'x',
+  updatedAt: 'x',
+}).id
+const created = Message.SucceededCreatePlaylist({
+  id: createdId,
+  editToken: token,
+  name: 'Rainy day Fio',
+  songIds: ['c'],
+})
+
+test('a saved playlist is remembered with its token and shown with its links', () => {
+  const done = update(submitSave('Queue', 'Rainy day Fio').model, created)
+  expect(done.model.mine).toEqual([
+    { id: createdId, name: 'Rainy day Fio', editToken: token },
+  ])
+  expect(commandNamed(done, SaveMyPlaylists.name)?.args?.['json']).toContain(
+    token,
+  )
+  expect(dialogOf(done.model)).toMatchObject({
+    _tag: 'Shared',
+    id: createdId,
+    remembered: 'Pending',
+    maybeEditToken: Option.some(token),
+  })
+  expect(ownedOpenedOf(done.model)._tag).toBe('Some')
+})
+
+test('the dialog learns whether this browser kept the token', () => {
+  const done = update(submitSave('Queue', 'x').model, created)
+  const kept = update(done.model, Message.SucceededSaveMyPlaylists())
+  expect(dialogOf(kept.model)).toMatchObject({ remembered: 'Yes' })
+  const lost = update(done.model, Message.FailedSaveMyPlaylists())
+  expect(dialogOf(lost.model)).toMatchObject({ remembered: 'No' })
+  expect(lost.model.mine).toHaveLength(1)
+})
+
+test('copy puts only the view link on the clipboard, and the edit link on request', () => {
+  const origin = 'https://fio.example'
+  const done = update(
+    update(
+      sessionBefore(
+        Message.CompletedLoadMyPlaylists({ maybeJson: Option.none(), origin }),
+        Message.ClickedSavePlaylist(),
+        Message.SubmittedPlaylistForm(),
+      ).model,
+      created,
+    ).model,
+    Message.ClickedCopyLink({ target: 'View' }),
+  )
+  expect(commandNamed(done, CopyLink.name)?.args).toEqual({
+    text: `${origin}/p/${createdId}`,
+    target: 'View',
+  })
+  const edit = update(done.model, Message.ClickedCopyLink({ target: 'Edit' }))
+  expect(commandNamed(edit, CopyLink.name)?.args?.['text']).toBe(
+    `${origin}/p/${createdId}#edit=${token}`,
+  )
+  const copied = update(
+    edit.model,
+    Message.SucceededCopyLink({ target: 'Edit' }),
+  )
+  expect(dialogOf(copied.model)).toMatchObject({
+    maybeCopyResult: Option.some({ _tag: 'Copied', target: 'Edit' }),
+  })
+})
+
+test('a failed save keeps the dialog open with the reason and leaves the queue alone', () => {
+  const sent = submitSave('Queue', 'x')
+  const limited = update(
+    sent.model,
+    Message.FailedWritePlaylist({ failure: WriteFailure.RateLimited() }),
+  )
+  expect(dialogOf(limited.model)._tag).toBe('Editing')
+  expect(writeFailureOf(limited.model)).toBe('RateLimited')
+  expect(queueIdsOf(limited.model)).toEqual(['c'])
+  expect(limited.model.mine).toEqual([])
+  const retry = update(limited.model, Message.SubmittedPlaylistForm())
+  expect(commandNamed(retry, CreatePlaylist.name)).toBeDefined()
+})
+
+test.each(['Unreachable', 'TooLarge', 'Unavailable'] as const)(
+  'a %s save is reported in the dialog',
+  tag => {
+    const failed = update(
+      submitSave('Queue', 'x').model,
+      Message.FailedWritePlaylist({ failure: WriteFailure[tag]() }),
+    )
+    expect(writeFailureOf(failed.model)).toBe(tag)
+  },
+)
+
+test('the dialog cannot be closed while a save is on its way, and Cancel closes it otherwise', () => {
+  const sent = submitSave('Queue', 'x')
+  expect(
+    dialogOf(update(sent.model, Message.ClickedClosePlaylistDialog()).model)
+      ._tag,
+  ).toBe('Sending')
+  const opened = through(update, Message.ClickedSavePlaylist())
+  expect(
+    dialogOf(update(opened.model, Message.ClickedClosePlaylistDialog()).model)
+      ._tag,
+  ).toBe('Closed')
+})
+
+const ownedJson = (value: string) => Option.some(value)
+const openedAs = (
+  maybeEditToken: Option.Option<EditToken>,
+  playlist: Playlist = playlistOf(a, b),
+) =>
+  through(
+    update,
+    Message.SucceededFetchSongs({ songs: [a, b, c], goneVideoIds: [] }),
+    Message.OpenedPlaylist({ id: openingId, maybeEditToken }),
+    noSavedQueue,
+    Message.SucceededFetchPlaylist({ playlist }),
+  )
+const urlSyncs = (result: UpdateReturn) =>
+  result.commands
+    ?.filter(({ name }) => name === SyncUrl.name)
+    .map(({ args }) => args?.['url'])
+
+test('opening an edit link remembers the token, then drops the fragment from the address bar', () => {
+  const opened = openedAs(Option.some(token))
+  expect(opened.model.mine).toEqual([
+    { id: openingId, name: 'Road trip', editToken: token },
+  ])
+  expect(commandNamed(opened, SaveMyPlaylists.name)).toBeDefined()
+  expect(urlSyncs(opened)).toContain(`/p/${openingId}`)
+  expect(ownedOpenedOf(opened.model)._tag).toBe('Some')
+})
+
+test('opening a plain link remembers nothing and offers no edit rights', () => {
+  const opened = openedAs(Option.none())
+  expect(opened.model.mine).toEqual([])
+  expect(commandNamed(opened, SaveMyPlaylists.name)).toBeUndefined()
+  expect(ownedOpenedOf(opened.model)._tag).toBe('None')
+})
+
+test('an edit link entered while its playlist is already open is picked up', () => {
+  const plain = openedAs(Option.none())
+  const picked = update(
+    plain.model,
+    Message.PickedUpEditToken({ id: openingId, editToken: token }),
+  )
+  expect(picked.model.mine).toHaveLength(1)
+  expect(urlSyncs(picked)).toContain(`/p/${openingId}`)
+  expect(ownedOpenedOf(picked.model)._tag).toBe('Some')
+})
+
+test('an edit link for another playlist is ignored', () => {
+  const plain = openedAs(Option.none())
+  const other = Schema.decodeSync(Playlist)({
+    id: 'Qq1Ww2Ee',
+    name: 'x',
+    entries: [{ songId: 'x', videoUrl: 'v', timestamp: 't', title: 'T' }],
+    version: 1,
+    createdAt: 'x',
+    updatedAt: 'x',
+  }).id
+  const picked = update(
+    plain.model,
+    Message.PickedUpEditToken({ id: other, editToken: token }),
+  )
+  expect(picked.model.mine).toEqual([])
+})
+
+test('a token stored from an earlier visit gives edit rights without any fragment', () => {
+  const stored = update(
+    openedAs(Option.none()).model,
+    Message.CompletedLoadMyPlaylists({
+      maybeJson: ownedJson(
+        JSON.stringify([
+          { id: openingId, name: 'Road trip', editToken: token },
+        ]),
+      ),
+      origin: 'https://fio.example',
+    }),
+  )
+  expect(ownedOpenedOf(stored.model)._tag).toBe('Some')
+})
+
+const ownerOf = () => openedAs(Option.some(token)).model
+const settledOwner = () =>
+  update(ownerOf(), Message.SucceededSaveMyPlaylists()).model
+
+test('renaming sends the new name with the stored songs, the version and the token', () => {
+  const renaming = update(settledOwner(), Message.ClickedRenamePlaylist())
+  expect(formOf(renaming.model)).toEqual(
+    PlaylistForm.Rename({ name: 'Road trip' }),
+  )
+  const submitted = update(
+    update(
+      renaming.model,
+      Message.UpdatedPlaylistName({ value: 'Night drive' }),
+    ).model,
+    Message.SubmittedPlaylistForm(),
+  )
+  expect(commandNamed(submitted, ReplacePlaylist.name)?.args).toEqual({
+    id: openingId,
+    editToken: token,
+    name: 'Night drive',
+    songIds: ['a', 'b'],
+    version: 1,
+  })
+})
+
+test('a rename that succeeds updates the page, the stored name and the version', () => {
+  const submitted = update(
+    update(
+      update(settledOwner(), Message.ClickedRenamePlaylist()).model,
+      Message.UpdatedPlaylistName({ value: 'Night drive' }),
+    ).model,
+    Message.SubmittedPlaylistForm(),
+  )
+  const done = update(
+    submitted.model,
+    Message.SucceededReplacePlaylist({
+      name: 'Night drive',
+      songIds: ['a', 'b'],
+      version: 2,
+    }),
+  )
+  expect(openedPlaylistNameOf(done.model)).toEqual(Option.some('Night drive'))
+  expect(done.model.mine[0]?.name).toBe('Night drive')
+  expect(dialogOf(done.model)._tag).toBe('Closed')
+  expect(toastOf(done.model)?._tag).toBe('PlaylistUpdated')
+  const again = update(done.model, Message.ClickedUpdatePlaylist())
+  const next = update(
+    update(done.model, Message.ClickedRenamePlaylist()).model,
+    Message.SubmittedPlaylistForm(),
+  )
+  expect(commandNamed(next, ReplacePlaylist.name)?.args?.['version']).toBe(2)
+  expect(formOf(again.model)?._tag).toBe('Update')
+})
+
+test('updating from the queue sends the queued songs under the same name', () => {
+  const withQueue = through(
+    update,
+    Message.SucceededFetchSongs({ songs: [a, b, c], goneVideoIds: [] }),
+    Message.OpenedPlaylist({
+      id: openingId,
+      maybeEditToken: Option.some(token),
+    }),
+    noSavedQueue,
+    Message.SucceededFetchPlaylist({ playlist: playlistOf(a, b) }),
+    Message.ClickedAddToQueue({ song: c }),
+    Message.ClickedUpdatePlaylist(),
+    Message.SubmittedPlaylistForm(),
+  )
+  expect(commandNamed(withQueue, ReplacePlaylist.name)?.args).toMatchObject({
+    name: 'Road trip',
+    songIds: ['b', 'c'],
+    version: 1,
+  })
+})
+
+test('updating with an empty queue sends nothing', () => {
+  const single = update(
+    openedAs(Option.some(token), playlistOf(a)).model,
+    Message.SucceededSaveMyPlaylists(),
+  ).model
+  const empty = update(
+    update(single, Message.ClickedUpdatePlaylist()).model,
+    Message.SubmittedPlaylistForm(),
+  )
+  expect(commandNamed(empty, ReplacePlaylist.name)).toBeUndefined()
+})
+
+test('a stale edit reloads the playlist, tells the visitor, and holds the newer version', () => {
+  const submitted = update(
+    update(settledOwner(), Message.ClickedRenamePlaylist()).model,
+    Message.SubmittedPlaylistForm(),
+  )
+  const conflict = update(
+    submitted.model,
+    Message.FailedWritePlaylist({ failure: WriteFailure.Conflict() }),
+  )
+  expect(toastOf(conflict.model)?._tag).toBe('PlaylistConflict')
+  expect(dialogOf(conflict.model)._tag).toBe('Closed')
+  expect(commandNamed(conflict, RefreshPlaylist.name)?.args).toEqual({
+    id: openingId,
+  })
+  const newer = Schema.decodeSync(Playlist)({
+    id: openingId,
+    name: 'Changed elsewhere',
+    entries: [entryOf(c)],
+    version: 5,
+    createdAt: 'x',
+    updatedAt: 'x',
+  })
+  const reloaded = update(
+    conflict.model,
+    Message.SucceededRefreshPlaylist({ playlist: newer }),
+  )
+  expect(openedPlaylistNameOf(reloaded.model)).toEqual(
+    Option.some('Changed elsewhere'),
+  )
+  expect(reloaded.model.mine[0]?.name).toBe('Changed elsewhere')
+  const retried = update(
+    update(reloaded.model, Message.ClickedRenamePlaylist()).model,
+    Message.SubmittedPlaylistForm(),
+  )
+  expect(commandNamed(retried, ReplacePlaylist.name)?.args).toMatchObject({
+    version: 5,
+    songIds: ['c'],
+  })
+})
+
+test('a playlist that vanished while reloading after a conflict sends the visitor home', () => {
+  const failed = update(
+    settledOwner(),
+    Message.FailedRefreshPlaylist({ failure: 'Deleted' }),
+  )
+  expect(failed.model.playlistOpen._tag).toBe('Idle')
+  expect(toastOf(failed.model)?._tag).toBe('PlaylistDeleted')
+  expect(urlSyncs(failed)).toContain('/')
+})
+
+test('deleting asks first, then removes the playlist and forgets its token', () => {
+  const asked = update(settledOwner(), Message.ClickedDeletePlaylist())
+  expect(formOf(asked.model)?._tag).toBe('Delete')
+  const sent = update(asked.model, Message.SubmittedPlaylistForm())
+  expect(commandNamed(sent, RemovePlaylist.name)?.args).toEqual({
+    id: openingId,
+    editToken: token,
+  })
+  const done = update(sent.model, Message.SucceededRemovePlaylist())
+  expect(done.model.playlistOpen._tag).toBe('Idle')
+  expect(done.model.mine).toEqual([])
+  expect(dialogOf(done.model)._tag).toBe('Closed')
+  expect(toastOf(done.model)?._tag).toBe('PlaylistDeleted')
+  expect(commandNamed(done, SaveMyPlaylists.name)?.args?.['json']).toBe('[]')
+})
+
+test('a visitor without the token cannot rename, update or delete', () => {
+  const visitor = openedAs(Option.none()).model
+  for (const click of [
+    Message.ClickedRenamePlaylist(),
+    Message.ClickedUpdatePlaylist(),
+    Message.ClickedDeletePlaylist(),
+  ]) {
+    const clicked = update(visitor, click)
+    expect(dialogOf(clicked.model)._tag).toBe('Closed')
+  }
+})
+
+test('a wrong token is reported in the dialog', () => {
+  const submitted = update(
+    update(settledOwner(), Message.ClickedDeletePlaylist()).model,
+    Message.SubmittedPlaylistForm(),
+  )
+  const failed = update(
+    submitted.model,
+    Message.FailedWritePlaylist({ failure: WriteFailure.Forbidden() }),
+  )
+  expect(writeFailureOf(failed.model)).toBe('Forbidden')
+})
+
+test("saving a copy of someone else's playlist creates a new one and leaves the original alone", () => {
+  const visitor = openedAs(Option.none()).model
+  const asked = update(visitor, Message.ClickedSaveCopyOfPlaylist())
+  expect(formOf(asked.model)).toEqual(
+    PlaylistForm.Copy({ name: 'Road trip (copy)' }),
+  )
+  const sent = update(asked.model, Message.SubmittedPlaylistForm())
+  expect(commandNamed(sent, CreatePlaylist.name)?.args).toEqual({
+    name: 'Road trip (copy)',
+    songIds: ['a', 'b'],
+  })
+  const done = update(
+    sent.model,
+    Message.SucceededCreatePlaylist({
+      id: createdId,
+      editToken: token,
+      name: 'Road trip (copy)',
+      songIds: ['a', 'b'],
+    }),
+  )
+  expect(done.model.mine).toEqual([
+    { id: createdId, name: 'Road trip (copy)', editToken: token },
+  ])
+  expect(ownedOpenedOf(done.model)).toMatchObject({
+    value: { opened: { id: createdId, version: 1, songIds: ['a', 'b'] } },
+  })
+})
+
+test('sharing an open playlist shows the view link, and the edit link only to its owner', () => {
+  const visitor = update(
+    openedAs(Option.none()).model,
+    Message.ClickedSharePlaylist(),
+  )
+  expect(dialogOf(visitor.model)).toMatchObject({
+    _tag: 'Shared',
+    maybeEditToken: Option.none(),
+  })
+  const owner = update(settledOwner(), Message.ClickedSharePlaylist())
+  expect(dialogOf(owner.model)).toMatchObject({
+    maybeEditToken: Option.some(token),
+  })
+})
+
+test('playlist dialogs do not change the queue or the song playing', () => {
+  const before = sessionBefore()
+  const opened = update(before.model, Message.ClickedSavePlaylist())
+  expect(opened.model.setlist).toEqual(before.model.setlist)
+})
+
+test('a saved playlist counts as the opened one, so a reload of its link does not ask', () => {
+  const done = update(submitSave('Queue', 'Rainy day Fio').model, created)
+  expect(done.model.setlist.maybeOpenedPlaylistId).toEqual(
+    Option.some(createdId),
+  )
+  expect(commandNamed(done, SaveSetlist.name)).toBeDefined()
+})
+
+test('opening the saved link again after a save neither asks nor refetches', () => {
+  const done = update(submitSave('Queue', 'Rainy day Fio').model, created)
+  const again = update(
+    done.model,
+    Message.OpenedPlaylist({ id: createdId, maybeEditToken: Option.none() }),
+  )
+  expect(again.model.playlistOpen._tag).toBe('Opened')
+  expect(again.commands ?? []).toEqual([])
+})
+
+test('an #edit link for the opened playlist is picked up even though re-entry is a no-op', () => {
+  const done = update(submitSave('Queue', 'Rainy day Fio').model, created)
+  const forgotten = { ...done.model, mine: [] }
+  const again = update(
+    forgotten,
+    Message.OpenedPlaylist({
+      id: createdId,
+      maybeEditToken: Option.some(token),
+    }),
+  )
+  expect(again.model.playlistOpen._tag).toBe('Opened')
+  expect(again.model.mine).toEqual([
+    { id: createdId, name: 'Rainy day Fio', editToken: token },
+  ])
 })

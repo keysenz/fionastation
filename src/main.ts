@@ -7,6 +7,7 @@ import { modifyFields } from 'foldkit/struct'
 import { Url, toString as urlToString } from 'foldkit/url'
 
 import * as Karaoke from './page/karaoke/karaoke'
+import { editTokenOfHash } from './page/karaoke/playlists'
 import { view as karaokeView } from './page/karaoke/view'
 import * as Songs from './page/songs/songs'
 import { view as songsView } from './page/songs/view'
@@ -107,17 +108,38 @@ const isSameRoute = (previous: AppRoute, next: AppRoute): boolean =>
   (previous._tag !== 'Playlist' ||
     (next._tag === 'Playlist' && previous.id === next.id))
 
-const enterRoute = (model: Model): UpdateReturn =>
-  AppRoute.match<UpdateReturn>(model.route, {
-    NotFound: () => ({ model }),
-    Radio: () => foldKaraokeEntered(model),
-    Playlist: ({ id }) =>
-      Update.combine(model, [
-        foldKaraokeStep(karaoke => Karaoke.openedPlaylist(karaoke, id)),
-        foldKaraokeEntered,
-      ]),
-    Songs: () => foldSongsEntered(model),
-  })
+const enterRoute =
+  (url: Url) =>
+  (model: Model): UpdateReturn =>
+    AppRoute.match<UpdateReturn>(model.route, {
+      NotFound: () => ({ model }),
+      Radio: () => foldKaraokeEntered(model),
+      Playlist: ({ id }) =>
+        Update.combine(model, [
+          foldKaraokeStep(karaoke =>
+            Karaoke.openedPlaylist(karaoke, id, editTokenOfHash(url.hash)),
+          ),
+          foldKaraokeEntered,
+        ]),
+      Songs: () => foldSongsEntered(model),
+    })
+
+const pickUpEditToken =
+  (url: Url) =>
+  (model: Model): UpdateReturn =>
+    AppRoute.match<UpdateReturn>(model.route, {
+      Playlist: ({ id }) =>
+        Option.match(editTokenOfHash(url.hash), {
+          onNone: () => ({ model }),
+          onSome: editToken =>
+            foldKaraokeStep(karaoke =>
+              Karaoke.pickedUpEditToken(karaoke, id, editToken),
+            )(model),
+        }),
+      Radio: () => ({ model }),
+      Songs: () => ({ model }),
+      NotFound: () => ({ model }),
+    })
 
 export const update = (model: Model, message: Message) =>
   Message.match<UpdateReturn>(message, {
@@ -150,12 +172,12 @@ export const update = (model: Model, message: Message) =>
       const enter = (next: Model): UpdateReturn =>
         isRadioRoute(nextRoute)
           ? Update.combine(next, [
-              isStaying ? (staying: Model) => ({ model: staying }) : enterRoute,
+              isStaying ? pickUpEditToken(url) : enterRoute(url),
               layers,
             ])
           : isStaying
             ? { model: next }
-            : enterRoute(next)
+            : enterRoute(url)(next)
       return Update.combine(nextModel, [leftPlaylist, enter])
     },
 
@@ -173,10 +195,10 @@ export const init: Runtime.RoutingApplicationInit<Model, Message> = url => {
   }
   return isRadioRoute(start.route)
     ? Update.combine(start, [
-        enterRoute,
+        enterRoute(url),
         foldKaraokeStep(model => Karaoke.openedFromUrl(model, searchOf(url))),
       ])
-    : enterRoute(start)
+    : enterRoute(url)(start)
 }
 
 // VIEW

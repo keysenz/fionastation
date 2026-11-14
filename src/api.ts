@@ -1,4 +1,4 @@
-import { Effect, Schema } from 'effect'
+import { Effect, Option, Schema } from 'effect'
 import { defineTaggedUnion } from 'foldkit/schema'
 
 export const FetchFailure = defineTaggedUnion({
@@ -43,3 +43,81 @@ export const fetchJson = <A>(
   schema: Schema.Decoder<A>,
 ): Effect.Effect<A, string> =>
   fetchJsonOrFailure(path, schema).pipe(Effect.mapError(fetchFailureMessage))
+
+export const WriteFailure = defineTaggedUnion({
+  Unreachable: {},
+  Unreadable: {},
+  Forbidden: {},
+  NotFound: {},
+  Deleted: {},
+  Conflict: {},
+  TooLarge: {},
+  RateLimited: {},
+  Unavailable: {},
+  Rejected: { status: Schema.Number },
+})
+export type WriteFailure = typeof WriteFailure.Type
+
+export const writeFailureOfStatus = (status: number): WriteFailure => {
+  switch (status) {
+    case 403:
+      return WriteFailure.Forbidden()
+    case 404:
+      return WriteFailure.NotFound()
+    case 409:
+      return WriteFailure.Conflict()
+    case 410:
+      return WriteFailure.Deleted()
+    case 413:
+      return WriteFailure.TooLarge()
+    case 429:
+      return WriteFailure.RateLimited()
+    case 503:
+      return WriteFailure.Unavailable()
+    default:
+      return WriteFailure.Rejected({ status })
+  }
+}
+
+export type JsonWrite = Readonly<{
+  method: 'POST' | 'PUT' | 'DELETE'
+  path: string
+  maybeBody: Option.Option<unknown>
+  maybeBearer: Option.Option<string>
+}>
+
+export const sendJson = <A>(
+  write: JsonWrite,
+  schema: Schema.Decoder<A>,
+): Effect.Effect<A, WriteFailure> =>
+  Effect.gen(function* () {
+    const headers = new Headers()
+    Option.map(write.maybeBody, () =>
+      headers.set('content-type', 'application/json'),
+    )
+    Option.map(write.maybeBearer, token =>
+      headers.set('authorization', `Bearer ${token}`),
+    )
+    const response = yield* Effect.tryPromise({
+      try: () =>
+        fetch(write.path, {
+          method: write.method,
+          headers,
+          body: Option.match(write.maybeBody, {
+            onNone: () => null,
+            onSome: body => JSON.stringify(body),
+          }),
+        }),
+      catch: () => WriteFailure.Unreachable(),
+    })
+    if (!response.ok) {
+      return yield* Effect.fail(writeFailureOfStatus(response.status))
+    }
+    const body = yield* Effect.tryPromise({
+      try: () => response.json(),
+      catch: () => WriteFailure.Unreadable(),
+    })
+    return yield* Schema.decodeUnknownEffect(schema)(body).pipe(
+      Effect.mapError(() => WriteFailure.Unreadable()),
+    )
+  })

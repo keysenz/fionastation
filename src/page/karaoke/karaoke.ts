@@ -22,7 +22,12 @@ import { defineMessageUnion } from 'foldkit/message'
 import { defineTaggedUnion } from 'foldkit/schema'
 import { modifyFields } from 'foldkit/struct'
 
-import { fetchJson, fetchJsonOrFailure } from '../../api'
+import {
+  WriteFailure,
+  fetchJson,
+  fetchJsonOrFailure,
+  sendJson,
+} from '../../api'
 import {
   KaraokeVideo,
   PlayableSong,
@@ -67,17 +72,40 @@ import {
   parseLayers,
 } from './layers.ts'
 import {
+  type OpenedPlaylist,
   PlaylistFailure,
   PlaylistOpen,
   playlistFailureOf,
   playlistIdOf,
 } from './playlistOpen.ts'
 import {
+  CopyResult,
+  CopyTarget,
+  EditToken,
+  Owned,
+  PlaylistDialog,
+  PlaylistForm,
+  Remembered,
+  SAVE_SOURCES,
+  copyName,
+  editTokenOf,
+  forget,
+  mergeOwned,
+  ownedToJson,
+  parseOwned,
+  playlistPath,
+  remember,
+  rename,
+  writtenName,
+} from './playlists.ts'
+import {
   Advance,
   type Continuation,
   type NowPlaying,
   type PlaylistLoadMode,
   Repeat,
+  type SaveSelection,
+  SaveSource,
   Setlist,
   Volume,
   applyAdvance,
@@ -86,6 +114,7 @@ import {
   emptySetlist,
   enqueue,
   enqueueAll,
+  entrySongIds,
   failLoad,
   firstSongOfEachOtherLiveVideo,
   intentOf,
@@ -101,6 +130,7 @@ import {
   playFromQueue,
   playNext,
   playPrevious,
+  playlistSongIds,
   removeFromQueue,
   reportPaused,
   reportPlaying,
@@ -120,6 +150,7 @@ const STORAGE_KEY = 'karaoke-storage'
 const AUTOPLAY_KEY = 'karaoke-autoplay'
 const REPEAT_KEY = 'karaoke-repeat'
 const VOLUME_KEY = 'karaoke-volume'
+const MY_PLAYLISTS_KEY = 'karaoke-my-playlists'
 const LYRIC_NUDGES_KEY = 'karaoke-lyric-nudges'
 const PLAYER_HOST_ID = 'karaoke'
 export const SONG_LIST_ID = 'karaoke-song-list'
@@ -129,6 +160,7 @@ export const INFO_BUTTON_ID = 'karaoke-info-button'
 export const PLAYLIST_PROMPT_ID = 'karaoke-playlist-prompt'
 export const REPLACE_CHOICE = '[data-playlist-choice="Replace"]'
 export const CANCEL_CHOICE = '[data-playlist-choice="Cancel"]'
+export const PLAYLIST_DIALOG_ID = 'karaoke-playlist-dialog'
 
 // MODEL
 
@@ -152,6 +184,8 @@ export const Toast = defineTaggedUnion({
   PlaylistNotFound: { dismissId: Schema.Number },
   PlaylistUnreachable: { dismissId: Schema.Number },
   PlaylistSongsUnavailable: { count: Schema.Number, dismissId: Schema.Number },
+  PlaylistConflict: { dismissId: Schema.Number },
+  PlaylistUpdated: { dismissId: Schema.Number },
 })
 export type Toast = typeof Toast.Type
 
@@ -175,6 +209,9 @@ export const Model = Schema.Struct({
   isInfoOpen: Schema.Boolean,
   maybeSkipToast: Schema.Option(Toast),
   playlistOpen: PlaylistOpen,
+  mine: Schema.Array(Owned),
+  siteOrigin: Schema.String,
+  playlistDialog: PlaylistDialog,
   goneVideoIds: Schema.Array(Schema.String),
   isAutoplay: Schema.Boolean,
   repeat: Repeat,
@@ -198,8 +235,44 @@ export const Message = defineMessageUnion({
   FailedFetchSongs: { error: Schema.String },
   SucceededFetchPlaylist: { playlist: Playlist },
   FailedFetchPlaylist: { id: PlaylistId, failure: PlaylistFailure },
-  OpenedPlaylist: { id: PlaylistId },
+  OpenedPlaylist: { id: PlaylistId, maybeEditToken: Schema.Option(EditToken) },
   LeftPlaylist: {},
+  PickedUpEditToken: { id: PlaylistId, editToken: EditToken },
+  CompletedLoadMyPlaylists: {
+    maybeJson: Schema.Option(Schema.String),
+    origin: Schema.String,
+  },
+  SucceededSaveMyPlaylists: {},
+  FailedSaveMyPlaylists: {},
+  ClickedSavePlaylist: {},
+  ClickedSaveCopyOfPlaylist: {},
+  ClickedRenamePlaylist: {},
+  ClickedUpdatePlaylist: {},
+  ClickedDeletePlaylist: {},
+  ClickedSharePlaylist: {},
+  SelectedSaveSource: { source: SaveSource },
+  UpdatedPlaylistName: { value: Schema.String },
+  SubmittedPlaylistForm: {},
+  ClickedClosePlaylistDialog: {},
+  SucceededCreatePlaylist: {
+    id: PlaylistId,
+    editToken: EditToken,
+    name: Schema.String,
+    songIds: Schema.NonEmptyArray(Schema.String),
+  },
+  SucceededReplacePlaylist: {
+    name: Schema.String,
+    songIds: Schema.NonEmptyArray(Schema.String),
+    version: Schema.Int,
+  },
+  SucceededRemovePlaylist: {},
+  FailedWritePlaylist: { failure: WriteFailure },
+  SucceededRefreshPlaylist: { playlist: Playlist },
+  FailedRefreshPlaylist: { failure: PlaylistFailure },
+  ClickedCopyLink: { target: CopyTarget },
+  SucceededCopyLink: { target: CopyTarget },
+  FailedCopyLink: { target: CopyTarget },
+  CompletedFocusPlaylistDialog: {},
   ClickedReplaceQueueWithPlaylist: {},
   ClickedAddPlaylistToQueue: {},
   ClickedCancelPlaylist: {},
@@ -307,6 +380,160 @@ export const FetchPlaylist = Command.define('FetchPlaylist', {
         onSuccess: playlist => Message.SucceededFetchPlaylist({ playlist }),
       }),
     ),
+})
+
+export const RefreshPlaylist = Command.define('RefreshPlaylist', {
+  args: { id: PlaylistId },
+  messages: [Message.SucceededRefreshPlaylist, Message.FailedRefreshPlaylist],
+  execute: ({ id }) =>
+    fetchJsonOrFailure(`/api/playlists/${id}`, Playlist).pipe(
+      Effect.match({
+        onFailure: failure =>
+          Message.FailedRefreshPlaylist({
+            failure: playlistFailureOf(failure),
+          }),
+        onSuccess: playlist => Message.SucceededRefreshPlaylist({ playlist }),
+      }),
+    ),
+})
+
+const CreatedPlaylist = Schema.Struct({
+  id: PlaylistId,
+  editToken: EditToken,
+  version: Schema.Int,
+})
+
+export const CreatePlaylist = Command.define('CreatePlaylist', {
+  args: {
+    name: Schema.String,
+    songIds: Schema.NonEmptyArray(Schema.String),
+  },
+  messages: [Message.SucceededCreatePlaylist, Message.FailedWritePlaylist],
+  execute: ({ name, songIds }) =>
+    sendJson(
+      {
+        method: 'POST',
+        path: '/api/playlists',
+        maybeBody: Option.some({ name, songIds }),
+        maybeBearer: Option.none(),
+      },
+      CreatedPlaylist,
+    ).pipe(
+      Effect.match({
+        onFailure: failure => Message.FailedWritePlaylist({ failure }),
+        onSuccess: ({ id, editToken }) =>
+          Message.SucceededCreatePlaylist({ id, editToken, name, songIds }),
+      }),
+    ),
+})
+
+const ReplacedPlaylist = Schema.Struct({ version: Schema.Int })
+
+export const ReplacePlaylist = Command.define('ReplacePlaylist', {
+  args: {
+    id: PlaylistId,
+    editToken: EditToken,
+    name: Schema.String,
+    songIds: Schema.NonEmptyArray(Schema.String),
+    version: Schema.Int,
+  },
+  messages: [Message.SucceededReplacePlaylist, Message.FailedWritePlaylist],
+  execute: ({ id, editToken, name, songIds, version }) =>
+    sendJson(
+      {
+        method: 'PUT',
+        path: `/api/playlists/${id}`,
+        maybeBody: Option.some({ name, songIds, version }),
+        maybeBearer: Option.some(editToken),
+      },
+      ReplacedPlaylist,
+    ).pipe(
+      Effect.match({
+        onFailure: failure => Message.FailedWritePlaylist({ failure }),
+        onSuccess: replaced =>
+          Message.SucceededReplacePlaylist({
+            name,
+            songIds,
+            version: replaced.version,
+          }),
+      }),
+    ),
+})
+
+export const RemovePlaylist = Command.define('RemovePlaylist', {
+  args: { id: PlaylistId, editToken: EditToken },
+  messages: [Message.SucceededRemovePlaylist, Message.FailedWritePlaylist],
+  execute: ({ id, editToken }) =>
+    sendJson(
+      {
+        method: 'DELETE',
+        path: `/api/playlists/${id}`,
+        maybeBody: Option.none(),
+        maybeBearer: Option.some(editToken),
+      },
+      Schema.Struct({ id: Schema.String }),
+    ).pipe(
+      Effect.match({
+        onFailure: failure => Message.FailedWritePlaylist({ failure }),
+        onSuccess: () => Message.SucceededRemovePlaylist(),
+      }),
+    ),
+})
+
+// NOTE: browsers throw on any localStorage access when site data is blocked, so LoadMyPlaylists and SaveMyPlaylists catch it.
+export const LoadMyPlaylists = Command.define('LoadMyPlaylists', {
+  messages: [Message.CompletedLoadMyPlaylists],
+  execute: Effect.try({
+    try: () =>
+      Option.fromNullishOr(window.localStorage.getItem(MY_PLAYLISTS_KEY)),
+    catch: () => 'storage is blocked',
+  }).pipe(
+    Effect.orElseSucceed(() => Option.none<string>()),
+    Effect.map(maybeJson =>
+      Message.CompletedLoadMyPlaylists({
+        maybeJson,
+        origin: window.location.origin,
+      }),
+    ),
+  ),
+})
+
+export const SaveMyPlaylists = Command.define('SaveMyPlaylists', {
+  args: { json: Schema.String },
+  messages: [Message.SucceededSaveMyPlaylists, Message.FailedSaveMyPlaylists],
+  execute: ({ json }) =>
+    Effect.try({
+      try: () => window.localStorage.setItem(MY_PLAYLISTS_KEY, json),
+      catch: () => 'storage is blocked or full',
+    }).pipe(
+      Effect.match({
+        onFailure: () => Message.FailedSaveMyPlaylists(),
+        onSuccess: () => Message.SucceededSaveMyPlaylists(),
+      }),
+    ),
+})
+
+export const CopyLink = Command.define('CopyLink', {
+  args: { text: Schema.String, target: CopyTarget },
+  messages: [Message.SucceededCopyLink, Message.FailedCopyLink],
+  execute: ({ text, target }) =>
+    Effect.tryPromise({
+      try: () => navigator.clipboard.writeText(text),
+      catch: () => 'the clipboard is not available',
+    }).pipe(
+      Effect.match({
+        onFailure: () => Message.FailedCopyLink({ target }),
+        onSuccess: () => Message.SucceededCopyLink({ target }),
+      }),
+    ),
+})
+
+export const FocusPlaylistDialog = Command.define('FocusPlaylistDialog', {
+  messages: [Message.CompletedFocusPlaylistDialog],
+  execute: Dom.focus(`#${PLAYLIST_DIALOG_ID}`).pipe(
+    Effect.ignore,
+    Effect.as(Message.CompletedFocusPlaylistDialog()),
+  ),
 })
 
 export const FetchLyrics = Command.define('FetchLyrics', {
@@ -713,6 +940,9 @@ export const init = (): Model => ({
   isInfoOpen: false,
   maybeSkipToast: Option.none(),
   playlistOpen: PlaylistOpen.Idle(),
+  mine: [],
+  siteOrigin: '',
+  playlistDialog: PlaylistDialog.Closed(),
   goneVideoIds: [],
   isAutoplay: true,
   repeat: 'Off',
@@ -743,16 +973,25 @@ export const openedPlaylistNameOf = (model: Model): Option.Option<string> =>
   PlaylistOpen.matchOrElse(
     model.playlistOpen,
     {
-      Opened: ({ id, name }) =>
-        Option.contains(model.setlist.maybeOpenedPlaylistId, id)
-          ? Option.some<string>(name)
+      Opened: ({ opened }) =>
+        Option.contains(model.setlist.maybeOpenedPlaylistId, opened.id)
+          ? Option.some<string>(opened.name)
           : Option.none(),
     },
     () => Option.none(),
   )
 
-export const openedPlaylist = (model: Model, id: PlaylistId): UpdateReturn =>
-  update(model, Message.OpenedPlaylist({ id }))
+export const openedPlaylist = (
+  model: Model,
+  id: PlaylistId,
+  maybeEditToken: Option.Option<EditToken>,
+): UpdateReturn => update(model, Message.OpenedPlaylist({ id, maybeEditToken }))
+
+export const pickedUpEditToken = (
+  model: Model,
+  id: PlaylistId,
+  editToken: EditToken,
+): UpdateReturn => update(model, Message.PickedUpEditToken({ id, editToken }))
 
 export const leftPlaylist = (model: Model): UpdateReturn =>
   update(model, Message.LeftPlaylist())
@@ -764,6 +1003,7 @@ export const entered = (model: Model): UpdateReturn => {
     model: fetched.model,
     commands: [
       LoadSavedSetlist(),
+      LoadMyPlaylists(),
       LoadAutoplay(),
       LoadRepeat(),
       LoadVolume(),
@@ -1211,19 +1451,305 @@ const failureToasts: Record<PlaylistFailure, (dismissId: number) => Toast> = {
   Unreachable: dismissId => Toast.PlaylistUnreachable({ dismissId }),
 }
 
-const failPlaylist = (model: Model, failure: PlaylistFailure): UpdateReturn => {
+const leavePlaylist = (
+  model: Model,
+  makeToast: (dismissId: number) => Toast,
+): UpdateReturn => {
   const idle = modifyFields(model, { playlistOpen: () => PlaylistOpen.Idle() })
   return withToast(
-    failure === 'Unreachable'
-      ? { model: idle }
-      : {
-          model: idle,
-          commands: [
-            SyncUrl({ url: layersToUrl(layersOf(idle)), change: 'Replace' }),
-          ],
-        },
-    failureToasts[failure],
+    {
+      model: idle,
+      commands: [
+        SyncUrl({ url: layersToUrl(layersOf(idle)), change: 'Replace' }),
+      ],
+    },
+    makeToast,
   )
+}
+
+const failPlaylist = (model: Model, failure: PlaylistFailure): UpdateReturn =>
+  failure === 'Unreachable'
+    ? withToast(
+        {
+          model: modifyFields(model, {
+            playlistOpen: () => PlaylistOpen.Idle(),
+          }),
+        },
+        failureToasts[failure],
+      )
+    : leavePlaylist(model, failureToasts[failure])
+
+const openedOf = (model: Model): Option.Option<OpenedPlaylist> =>
+  PlaylistOpen.matchOrElse(
+    model.playlistOpen,
+    { Opened: ({ opened }) => Option.some(opened) },
+    () => Option.none(),
+  )
+
+type OwnedOpened = Readonly<{ opened: OpenedPlaylist; editToken: EditToken }>
+
+export const ownedOpenedOf = (model: Model): Option.Option<OwnedOpened> =>
+  Option.flatMap(openedOf(model), opened =>
+    Option.map(editTokenOf(model.mine, opened.id), editToken => ({
+      opened,
+      editToken,
+    })),
+  )
+
+const withMine = (
+  result: UpdateReturn,
+  change: (mine: ReadonlyArray<Owned>) => ReadonlyArray<Owned>,
+): UpdateReturn => {
+  const mine = change(result.model.mine)
+  return {
+    model: modifyFields(result.model, { mine: () => mine }),
+    commands: [
+      ...(result.commands ?? []),
+      SaveMyPlaylists({ json: ownedToJson(mine) }),
+    ],
+  }
+}
+
+const rememberEditToken = (
+  result: UpdateReturn,
+  id: PlaylistId,
+  name: string,
+  editToken: EditToken,
+): UpdateReturn => {
+  const remembered = withMine(result, mine =>
+    remember(mine, { id, name, editToken }),
+  )
+  return {
+    ...remembered,
+    commands: [
+      ...(remembered.commands ?? []),
+      SyncUrl({ url: playlistPath(id), change: 'Replace' }),
+    ],
+  }
+}
+
+const pickUpEditToken = (
+  model: Model,
+  id: PlaylistId,
+  editToken: EditToken,
+): UpdateReturn => {
+  const withToken = (open: PlaylistOpen): UpdateReturn => ({
+    model: modifyFields(model, { playlistOpen: () => open }),
+  })
+  return PlaylistOpen.matchOrElse(
+    model.playlistOpen,
+    {
+      AwaitingSavedSetlist: open =>
+        open.id === id
+          ? withToken(
+              PlaylistOpen.AwaitingSavedSetlist({
+                id,
+                maybeEditToken: Option.some(editToken),
+              }),
+            )
+          : { model },
+      Fetching: open =>
+        open.id === id
+          ? withToken(
+              PlaylistOpen.Fetching({
+                id,
+                maybeEditToken: Option.some(editToken),
+              }),
+            )
+          : { model },
+      Fetched: ({ playlist }) =>
+        playlist.id === id
+          ? rememberEditToken({ model }, id, playlist.name, editToken)
+          : { model },
+      Asking: ({ opened }) =>
+        opened.id === id
+          ? rememberEditToken({ model }, id, opened.name, editToken)
+          : { model },
+      Opened: ({ opened }) =>
+        opened.id === id
+          ? rememberEditToken({ model }, id, opened.name, editToken)
+          : { model },
+    },
+    () => ({ model }),
+  )
+}
+
+export const saveSelectionOf = (
+  model: Model,
+  source: SaveSource,
+): SaveSelection =>
+  playlistSongIds(model.setlist, source, continuationOf(model).isGone)
+
+const defaultSaveSource = (model: Model): SaveSource =>
+  Option.getOrElse(
+    Array.findFirst(SAVE_SOURCES, source =>
+      Array.isReadonlyArrayNonEmpty(saveSelectionOf(model, source).songIds),
+    ),
+    () => 'Queue',
+  )
+
+const openPlaylistDialog = (
+  model: Model,
+  form: PlaylistForm,
+): UpdateReturn => ({
+  model: modifyFields(model, {
+    playlistDialog: () =>
+      PlaylistDialog.Editing({ form, maybeFailure: Option.none() }),
+  }),
+  commands: [FocusPlaylistDialog()],
+})
+
+const editForm = (
+  model: Model,
+  change: (form: PlaylistForm) => PlaylistForm,
+): UpdateReturn =>
+  PlaylistDialog.matchOrElse(
+    model.playlistDialog,
+    {
+      Editing: ({ form }) => ({
+        model: modifyFields(model, {
+          playlistDialog: () =>
+            PlaylistDialog.Editing({
+              form: change(form),
+              maybeFailure: Option.none(),
+            }),
+        }),
+      }),
+    },
+    () => ({ model }),
+  )
+
+const submitPlaylistForm = (model: Model, form: PlaylistForm): UpdateReturn => {
+  const sending: Model = modifyFields(model, {
+    playlistDialog: () => PlaylistDialog.Sending({ form }),
+  })
+  const create = (
+    name: string,
+    songIds: ReadonlyArray<string>,
+  ): UpdateReturn => {
+    const written = writtenName(name)
+    return written.kind === 'Valid' && Array.isReadonlyArrayNonEmpty(songIds)
+      ? {
+          model: sending,
+          commands: [CreatePlaylist({ name: written.name, songIds })],
+        }
+      : { model }
+  }
+  const replace = (
+    name: string,
+    songIds: ReadonlyArray<string>,
+  ): UpdateReturn => {
+    const written = writtenName(name)
+    return Option.match(ownedOpenedOf(model), {
+      onNone: () => ({ model }),
+      onSome: ({ opened, editToken }) =>
+        written.kind === 'Valid' && Array.isReadonlyArrayNonEmpty(songIds)
+          ? {
+              model: sending,
+              commands: [
+                ReplacePlaylist({
+                  id: opened.id,
+                  editToken,
+                  name: written.name,
+                  songIds,
+                  version: opened.version,
+                }),
+              ],
+            }
+          : { model },
+    })
+  }
+  return PlaylistForm.match<UpdateReturn>(form, {
+    Save: ({ source, name }) =>
+      create(name, saveSelectionOf(model, source).songIds),
+    Copy: ({ name }) =>
+      Option.match(openedOf(model), {
+        onNone: () => ({ model }),
+        onSome: ({ songIds }) => create(name, songIds),
+      }),
+    Rename: ({ name }) =>
+      Option.match(openedOf(model), {
+        onNone: () => ({ model }),
+        onSome: ({ songIds }) => replace(name, songIds),
+      }),
+    Update: () =>
+      Option.match(openedOf(model), {
+        onNone: () => ({ model }),
+        onSome: ({ name }) =>
+          replace(name, saveSelectionOf(model, 'Queue').songIds),
+      }),
+    Delete: () =>
+      Option.match(ownedOpenedOf(model), {
+        onNone: () => ({ model }),
+        onSome: ({ opened, editToken }) => ({
+          model: sending,
+          commands: [RemovePlaylist({ id: opened.id, editToken })],
+        }),
+      }),
+  })
+}
+
+const reloadAfterConflict = (model: Model): UpdateReturn =>
+  Option.match(openedOf(model), {
+    onNone: () => ({ model }),
+    onSome: ({ id }) =>
+      withToast(
+        {
+          model: modifyFields(model, {
+            playlistDialog: () => PlaylistDialog.Closed(),
+          }),
+          commands: [RefreshPlaylist({ id })],
+        },
+        dismissId => Toast.PlaylistConflict({ dismissId }),
+      ),
+  })
+
+const settleRemembered = (model: Model, remembered: Remembered): UpdateReturn =>
+  PlaylistDialog.matchOrElse(
+    model.playlistDialog,
+    {
+      Shared: shared =>
+        shared.remembered === 'Pending'
+          ? {
+              model: modifyFields(model, {
+                playlistDialog: () =>
+                  PlaylistDialog.Shared({ ...shared, remembered }),
+              }),
+            }
+          : { model },
+    },
+    () => ({ model }),
+  )
+
+const settleCopy = (model: Model, result: CopyResult): UpdateReturn =>
+  PlaylistDialog.matchOrElse(
+    model.playlistDialog,
+    {
+      Shared: shared => ({
+        model: modifyFields(model, {
+          playlistDialog: () =>
+            PlaylistDialog.Shared({
+              ...shared,
+              maybeCopyResult: Option.some(result),
+            }),
+        }),
+      }),
+    },
+    () => ({ model }),
+  )
+
+export const linkText = (
+  origin: string,
+  id: PlaylistId,
+  target: CopyTarget,
+  maybeEditToken: Option.Option<EditToken>,
+): string => {
+  const view = `${origin}${playlistPath(id)}`
+  return Option.match(maybeEditToken, {
+    onNone: () => view,
+    onSome: editToken =>
+      target === 'Edit' ? `${view}#edit=${editToken}` : view,
+  })
 }
 
 const startPlaylist = (
@@ -1232,11 +1758,11 @@ const startPlaylist = (
   mode: PlaylistLoadMode,
 ): UpdateReturn => {
   const opened = modifyFields(model, {
-    playlistOpen: () => PlaylistOpen.Opened({ id: open.id, name: open.name }),
+    playlistOpen: () => PlaylistOpen.Opened({ opened: open.opened }),
   })
   const loaded = changeSetlist(
     opened,
-    loadPlaylist(opened.setlist, open.songs, mode, open.id),
+    loadPlaylist(opened.setlist, open.songs, mode, open.opened.id),
   )
   return open.unavailableCount > 0
     ? withToast(loaded, dismissId =>
@@ -1285,8 +1811,12 @@ const settlePlaylist = (model: Model): UpdateReturn =>
                 ),
               onNonEmpty: nonEmptySongs => {
                 const asking = PlaylistOpen.Asking({
-                  id: playlist.id,
-                  name: playlist.name,
+                  opened: {
+                    id: playlist.id,
+                    name: playlist.name,
+                    version: playlist.version,
+                    songIds: entrySongIds(playlist.entries, archive),
+                  },
                   songs: nonEmptySongs,
                   unavailableCount,
                 })
@@ -1300,10 +1830,7 @@ const settlePlaylist = (model: Model): UpdateReturn =>
                   ? {
                       model: modifyFields(model, {
                         playlistOpen: () =>
-                          PlaylistOpen.Opened({
-                            id: playlist.id,
-                            name: playlist.name,
-                          }),
+                          PlaylistOpen.Opened({ opened: asking.opened }),
                       }),
                     }
                   : {
@@ -1346,14 +1873,18 @@ const updateModel = (model: Model, message: Message) =>
       }),
     }),
 
-    OpenedPlaylist: ({ id }) =>
+    OpenedPlaylist: ({ id, maybeEditToken }) =>
       Option.contains(playlistIdOf(model.playlistOpen), id) &&
       (!PlaylistOpen.guards.Opened(model.playlistOpen) ||
         Option.contains(model.setlist.maybeOpenedPlaylistId, id))
-        ? { model }
+        ? Option.match(maybeEditToken, {
+            onNone: () => ({ model }),
+            onSome: editToken => pickUpEditToken(model, id, editToken),
+          })
         : {
             model: modifyFields(model, {
-              playlistOpen: () => PlaylistOpen.AwaitingSavedSetlist({ id }),
+              playlistOpen: () =>
+                PlaylistOpen.AwaitingSavedSetlist({ id, maybeEditToken }),
             }),
           },
 
@@ -1366,18 +1897,28 @@ const updateModel = (model: Model, message: Message) =>
             }),
           },
 
+    PickedUpEditToken: ({ id, editToken }) =>
+      pickUpEditToken(model, id, editToken),
+
     SucceededFetchPlaylist: ({ playlist }) =>
       PlaylistOpen.matchOrElse(
         model.playlistOpen,
         {
-          Fetching: ({ id }) =>
-            id === playlist.id
-              ? settlePlaylist(
-                  modifyFields(model, {
-                    playlistOpen: () => PlaylistOpen.Fetched({ playlist }),
-                  }),
-                )
-              : { model },
+          Fetching: ({ id, maybeEditToken }) => {
+            if (id !== playlist.id) {
+              return { model }
+            }
+            const settled = settlePlaylist(
+              modifyFields(model, {
+                playlistOpen: () => PlaylistOpen.Fetched({ playlist }),
+              }),
+            )
+            return Option.match(maybeEditToken, {
+              onNone: () => settled,
+              onSome: editToken =>
+                rememberEditToken(settled, id, playlist.name, editToken),
+            })
+          },
         },
         () => ({ model }),
       ),
@@ -1696,9 +2237,9 @@ const updateModel = (model: Model, message: Message) =>
       return PlaylistOpen.matchOrElse(
         model.playlistOpen,
         {
-          AwaitingSavedSetlist: ({ id }) => ({
+          AwaitingSavedSetlist: ({ id, maybeEditToken }) => ({
             model: modifyFields(restored, {
-              playlistOpen: () => PlaylistOpen.Fetching({ id }),
+              playlistOpen: () => PlaylistOpen.Fetching({ id, maybeEditToken }),
             }),
             commands: [FetchPlaylist({ id })],
           }),
@@ -1828,6 +2369,252 @@ const updateModel = (model: Model, message: Message) =>
     CompletedFocusInfoPanel: () => ({ model }),
     CompletedFocusInfoButton: () => ({ model }),
     CompletedFocusPlaylistPrompt: () => ({ model }),
+
+    CompletedLoadMyPlaylists: ({ maybeJson, origin }) => ({
+      model: modifyFields(model, {
+        mine: current => mergeOwned(parseOwned(maybeJson), current),
+        siteOrigin: () => origin,
+      }),
+    }),
+
+    SucceededSaveMyPlaylists: () => settleRemembered(model, 'Yes'),
+    FailedSaveMyPlaylists: () => settleRemembered(model, 'No'),
+
+    ClickedSavePlaylist: () =>
+      openPlaylistDialog(
+        model,
+        PlaylistForm.Save({ source: defaultSaveSource(model), name: '' }),
+      ),
+
+    ClickedSaveCopyOfPlaylist: () =>
+      Option.match(openedOf(model), {
+        onNone: () => ({ model }),
+        onSome: ({ name }) =>
+          openPlaylistDialog(
+            model,
+            PlaylistForm.Copy({ name: copyName(name) }),
+          ),
+      }),
+
+    ClickedRenamePlaylist: () =>
+      Option.match(ownedOpenedOf(model), {
+        onNone: () => ({ model }),
+        onSome: ({ opened }) =>
+          openPlaylistDialog(model, PlaylistForm.Rename({ name: opened.name })),
+      }),
+
+    ClickedUpdatePlaylist: () =>
+      Option.match(ownedOpenedOf(model), {
+        onNone: () => ({ model }),
+        onSome: () => openPlaylistDialog(model, PlaylistForm.Update()),
+      }),
+
+    ClickedDeletePlaylist: () =>
+      Option.match(ownedOpenedOf(model), {
+        onNone: () => ({ model }),
+        onSome: () => openPlaylistDialog(model, PlaylistForm.Delete()),
+      }),
+
+    ClickedSharePlaylist: () =>
+      Option.match(openedOf(model), {
+        onNone: () => ({ model }),
+        onSome: ({ id, name }) => ({
+          model: modifyFields(model, {
+            playlistDialog: () =>
+              PlaylistDialog.Shared({
+                id,
+                name,
+                maybeEditToken: editTokenOf(model.mine, id),
+                remembered: 'Yes',
+                maybeCopyResult: Option.none(),
+              }),
+          }),
+          commands: [FocusPlaylistDialog()],
+        }),
+      }),
+
+    SelectedSaveSource: ({ source }) =>
+      editForm(model, form =>
+        PlaylistForm.matchOrElse(
+          form,
+          { Save: ({ name }) => PlaylistForm.Save({ source, name }) },
+          () => form,
+        ),
+      ),
+
+    UpdatedPlaylistName: ({ value }) =>
+      editForm(model, form =>
+        PlaylistForm.matchOrElse(
+          form,
+          {
+            Save: ({ source }) => PlaylistForm.Save({ source, name: value }),
+            Copy: () => PlaylistForm.Copy({ name: value }),
+            Rename: () => PlaylistForm.Rename({ name: value }),
+          },
+          () => form,
+        ),
+      ),
+
+    SubmittedPlaylistForm: () =>
+      PlaylistDialog.matchOrElse(
+        model.playlistDialog,
+        { Editing: ({ form }) => submitPlaylistForm(model, form) },
+        () => ({ model }),
+      ),
+
+    ClickedClosePlaylistDialog: () =>
+      PlaylistDialog.guards.Sending(model.playlistDialog)
+        ? { model }
+        : {
+            model: modifyFields(model, {
+              playlistDialog: () => PlaylistDialog.Closed(),
+            }),
+          },
+
+    SucceededCreatePlaylist: ({ id, editToken, name, songIds }) => {
+      const marked = changeSetlist(
+        model,
+        modifyFields(model.setlist, {
+          maybeOpenedPlaylistId: () => Option.some(id),
+        }),
+      )
+      return rememberEditToken(
+        {
+          model: modifyFields(marked.model, {
+            playlistOpen: () =>
+              PlaylistOpen.Opened({
+                opened: { id, name, version: 1, songIds },
+              }),
+            playlistDialog: () =>
+              PlaylistDialog.Shared({
+                id,
+                name,
+                maybeEditToken: Option.some(editToken),
+                remembered: 'Pending',
+                maybeCopyResult: Option.none(),
+              }),
+          }),
+          commands: [...(marked.commands ?? []), FocusPlaylistDialog()],
+        },
+        id,
+        name,
+        editToken,
+      )
+    },
+
+    SucceededReplacePlaylist: ({ name, songIds, version }) =>
+      Option.match(openedOf(model), {
+        onNone: () => ({ model }),
+        onSome: ({ id }) =>
+          withMine(
+            withToast(
+              {
+                model: modifyFields(model, {
+                  playlistOpen: () =>
+                    PlaylistOpen.Opened({
+                      opened: { id, name, version, songIds },
+                    }),
+                  playlistDialog: () => PlaylistDialog.Closed(),
+                }),
+              },
+              dismissId => Toast.PlaylistUpdated({ dismissId }),
+            ),
+            mine => rename(mine, id, name),
+          ),
+      }),
+
+    SucceededRemovePlaylist: () =>
+      Option.match(openedOf(model), {
+        onNone: () => ({ model }),
+        onSome: ({ id }) =>
+          withMine(
+            leavePlaylist(
+              modifyFields(model, {
+                playlistDialog: () => PlaylistDialog.Closed(),
+              }),
+              dismissId => Toast.PlaylistDeleted({ dismissId }),
+            ),
+            mine => forget(mine, id),
+          ),
+      }),
+
+    FailedWritePlaylist: ({ failure }) =>
+      PlaylistDialog.matchOrElse(
+        model.playlistDialog,
+        {
+          Sending: ({ form }) =>
+            failure._tag === 'Conflict'
+              ? reloadAfterConflict(model)
+              : {
+                  model: modifyFields(model, {
+                    playlistDialog: () =>
+                      PlaylistDialog.Editing({
+                        form,
+                        maybeFailure: Option.some(failure),
+                      }),
+                  }),
+                },
+        },
+        () => ({ model }),
+      ),
+
+    SucceededRefreshPlaylist: ({ playlist }) =>
+      Option.match(openedOf(model), {
+        onNone: () => ({ model }),
+        onSome: ({ id }) =>
+          id !== playlist.id
+            ? { model }
+            : withMine(
+                {
+                  model: modifyFields(model, {
+                    playlistOpen: () =>
+                      PlaylistOpen.Opened({
+                        opened: {
+                          id,
+                          name: playlist.name,
+                          version: playlist.version,
+                          songIds: entrySongIds(
+                            playlist.entries,
+                            allSongs(model),
+                          ),
+                        },
+                      }),
+                  }),
+                },
+                mine => rename(mine, id, playlist.name),
+              ),
+      }),
+
+    FailedRefreshPlaylist: ({ failure }) =>
+      failure === 'Unreachable'
+        ? withToast({ model }, dismissId =>
+            Toast.PlaylistUnreachable({ dismissId }),
+          )
+        : leavePlaylist(model, failureToasts[failure]),
+
+    ClickedCopyLink: ({ target }) =>
+      PlaylistDialog.matchOrElse(
+        model.playlistDialog,
+        {
+          Shared: ({ id, maybeEditToken }) => ({
+            model,
+            commands: [
+              CopyLink({
+                text: linkText(model.siteOrigin, id, target, maybeEditToken),
+                target,
+              }),
+            ],
+          }),
+        },
+        () => ({ model }),
+      ),
+
+    SucceededCopyLink: ({ target }) =>
+      settleCopy(model, CopyResult.Copied({ target })),
+    FailedCopyLink: ({ target }) =>
+      settleCopy(model, CopyResult.CopyFailed({ target })),
+
+    CompletedFocusPlaylistDialog: () => ({ model }),
   })
 
 /** Every new play starts its own load timeout, whatever started the play, so a

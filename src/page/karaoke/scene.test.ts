@@ -237,7 +237,7 @@ const askedAfter = (...setup: ReadonlyArray<Message>): Model =>
   after(
     fetched(a, b),
     ...setup,
-    Message.OpenedPlaylist({ id: playlistAB.id }),
+    Message.OpenedPlaylist({ id: playlistAB.id, maybeEditToken: Option.none() }),
     Message.CompletedLoadSavedSetlist({ maybeJson: Option.none() }),
     Message.SucceededFetchPlaylist({ playlist: playlistAB }),
   )

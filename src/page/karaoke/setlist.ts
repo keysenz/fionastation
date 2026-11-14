@@ -3,7 +3,11 @@ import { defineTaggedUnion } from 'foldkit/schema'
 import { modifyFields } from 'foldkit/struct'
 
 import { PlayableSong } from '../../domain.ts'
-import { type PlaylistEntry, PlaylistId } from '../../playlist.ts'
+import {
+  MAX_PLAYLIST_ENTRIES,
+  type PlaylistEntry,
+  PlaylistId,
+} from '../../playlist.ts'
 import { LoadFailure } from '../../youtube.ts'
 
 const HISTORY_LIMIT = 50
@@ -192,6 +196,55 @@ export const resolvePlaylist = (
       (first, second) => first.id === second.id,
     ),
     unavailableCount: entries.length - resolved.length,
+  }
+}
+
+export const entrySongIds = (
+  entries: Array.NonEmptyReadonlyArray<PlaylistEntry>,
+  archive: ReadonlyArray<PlayableSong>,
+): Array.NonEmptyReadonlyArray<string> =>
+  Array.dedupe(
+    Array.map(entries, entry =>
+      Option.match(archiveSongOf(archive, entry), {
+        onNone: () => entry.songId,
+        onSome: song => song.id,
+      }),
+    ),
+  )
+
+export const SaveSource = Schema.Literals(['Queue', 'History', 'Session'])
+export type SaveSource = typeof SaveSource.Type
+
+export type SaveSelection = {
+  songIds: ReadonlyArray<string>
+  omittedCount: number
+}
+
+export const playlistSongIds = (
+  setlist: Setlist,
+  source: SaveSource,
+  isGone: (song: PlayableSong) => boolean,
+): SaveSelection => {
+  const played = Array.reverse(setlist.history)
+  const playing = Array.flatMap(
+    Option.toArray(setlist.maybeNowPlaying),
+    ({ song, phase }) => (isStreamGone(phase) ? [] : [song]),
+  )
+  const songs: ReadonlyArray<PlayableSong> =
+    source === 'Queue'
+      ? setlist.queue
+      : source === 'History'
+        ? played
+        : [...played, ...playing, ...setlist.queue]
+  const ids = Array.dedupe(
+    Array.map(
+      Array.filter(songs, song => !isGone(song)),
+      ({ id }) => id,
+    ),
+  )
+  return {
+    songIds: Array.take(ids, MAX_PLAYLIST_ENTRIES),
+    omittedCount: Math.max(0, ids.length - MAX_PLAYLIST_ENTRIES),
   }
 }
 

@@ -1,4 +1,4 @@
-import { DateTime, Option, Schema } from 'effect'
+import { Array, DateTime, Option, Schema } from 'effect'
 import { expect, test } from 'vitest'
 
 import type { PlayableSong } from '../../domain.ts'
@@ -7,10 +7,12 @@ import {
   emptySetlist,
   enqueue,
   enqueueAll,
+  entrySongIds,
   loadPlaylist,
   moveInQueue,
   play,
   playFromQueue,
+  playlistSongIds,
   playNext,
   removeFromQueue,
   resolvePlaylist,
@@ -191,4 +193,86 @@ test('a visitor queue edit forgets the opened playlist, and playing through does
   ]) {
     expect(edited.maybeOpenedPlaylistId).toEqual(Option.none())
   }
+})
+
+const sessionOf = (
+  played: ReadonlyArray<PlayableSong>,
+  playing: PlayableSong,
+  queued: ReadonlyArray<PlayableSong>,
+) => enqueueAll([...played, playing].reduce(play, emptySetlist), queued)
+
+test('Up next saves the queue in order and Played saves the history oldest first', () => {
+  const setlist = sessionOf([a!, b!], c!, [d!, makeSong('e')])
+  expect(playlistSongIds(setlist, 'Queue', noneGone).songIds).toEqual([
+    'd',
+    'e',
+  ])
+  expect(playlistSongIds(setlist, 'History', noneGone).songIds).toEqual([
+    'a',
+    'b',
+  ])
+})
+
+test('Whole session saves played, then playing, then queued', () => {
+  const setlist = sessionOf([a!, b!], c!, [d!, makeSong('e')])
+  expect(playlistSongIds(setlist, 'Session', noneGone).songIds).toEqual([
+    'a',
+    'b',
+    'c',
+    'd',
+    'e',
+  ])
+})
+
+test('a song played twice is saved once, at its first place', () => {
+  const setlist = sessionOf([a!, b!], a!, [b!, c!])
+  expect(playlistSongIds(setlist, 'Session', noneGone).songIds).toEqual([
+    'a',
+    'b',
+    'c',
+  ])
+})
+
+test('a gone video is left out of every source', () => {
+  const setlist = sessionOf([a!, b!], c!, [d!])
+  const goneB = (song: PlayableSong) => song.video_url === b!.video_url
+  expect(playlistSongIds(setlist, 'Session', goneB).songIds).toEqual([
+    'a',
+    'c',
+    'd',
+  ])
+  expect(playlistSongIds(setlist, 'History', goneB).songIds).toEqual(['a'])
+})
+
+test('a source with no songs yields none', () => {
+  const setlist = sessionOf([], a!, [])
+  expect(playlistSongIds(setlist, 'Queue', noneGone).songIds).toEqual([])
+  expect(playlistSongIds(setlist, 'History', noneGone).songIds).toEqual([])
+})
+
+test('a playlist keeps its first 100 songs and counts the rest', () => {
+  const many = Array.makeBy(130, index => makeSong(`s${index}`))
+  const selection = playlistSongIds(
+    enqueueAll(emptySetlist, many),
+    'Queue',
+    noneGone,
+  )
+  expect(selection.songIds).toHaveLength(100)
+  expect(selection.songIds[0]).toBe('s0')
+  expect(selection.omittedCount).toBe(30)
+})
+
+test('entry song ids follow renamed songs and keep entries the archive lost', () => {
+  const renamed = { ...entryOf(b!), songId: 'old-id' }
+  const lost = {
+    songId: 'lost',
+    videoUrl: 'video-lost',
+    timestamp: '00:00:01',
+    title: 'Lost',
+  }
+  expect(entrySongIds([entryOf(a!), renamed, lost], archive)).toEqual([
+    'a',
+    'b',
+    'lost',
+  ])
 })

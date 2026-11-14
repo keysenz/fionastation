@@ -34,6 +34,11 @@ import {
 } from './lyricsView.ts'
 import { PlaylistOpen } from './playlistOpen.ts'
 import {
+  openPlaylistBarView,
+  playlistDialogView,
+  savePlaylistButtonView,
+} from './playlistsView.ts'
+import {
   type NowPlaying,
   Phase,
   type PlaybackIntent,
@@ -748,23 +753,37 @@ const headerView = (model: Model, h: HtmlBuilder<Message>): Html =>
               h.h1(
                 [
                   h.Class(
-                    'text-xl font-bold tracking-tight text-[#446e92] uppercase drop-shadow-md',
+                    'text-xl font-bold tracking-tight text-[#446e92] uppercase drop-shadow-md whitespace-nowrap',
                   ),
                 ],
                 ['Fio Radio'],
               ),
             ],
           ),
-          h.a(
+          h.div(
+            [h.Class('flex items-center gap-2')],
             [
-              h.Href(songsRouter()),
-              h.Class(
-                'flex items-center gap-2 min-h-10 px-4 rounded-full border border-white/15 bg-black/40 text-sm font-semibold text-gray-100 hover:bg-white/10 drop-shadow-md transition',
+              savePlaylistButtonView(h),
+              h.a(
+                [
+                  h.Href(songsRouter()),
+                  h.Class(
+                    'flex items-center gap-2 min-h-10 px-4 rounded-full border border-white/15 bg-black/40 text-sm font-semibold text-gray-100 hover:bg-white/10 drop-shadow-md transition',
+                  ),
+                ],
+                [
+                  h.i([h.Class('fas fa-music'), h.AriaHidden(true)]),
+                  'Song list',
+                ],
               ),
             ],
-            [h.i([h.Class('fas fa-music'), h.AriaHidden(true)]), 'Song list'],
           ),
         ],
+      ),
+      PlaylistOpen.matchOrElse(
+        model.playlistOpen,
+        { Opened: ({ opened }) => openPlaylistBarView(model, opened, h) },
+        () => h.empty,
       ),
       h.div(
         [h.Class('mb-2 relative')],
@@ -1834,6 +1853,9 @@ const toastMessage = (toast: Toast): string =>
     PlaylistNotFound: () => 'That playlist link does not lead anywhere.',
     PlaylistUnreachable: () =>
       'Could not load the playlist. Reload to try again.',
+    PlaylistConflict: () =>
+      'Someone else changed this playlist first. It was reloaded, so look it over and try again.',
+    PlaylistUpdated: () => 'Playlist saved.',
     PlaylistSongsUnavailable: ({ count }) =>
       `${songCountText(count)} from the playlist ${count === 1 ? 'is' : 'are'} not available and ${count === 1 ? 'was' : 'were'} skipped.`,
   })
@@ -1927,7 +1949,7 @@ const playlistPromptView = (
               h.Id(`${PLAYLIST_PROMPT_ID}-title`),
               h.Class('text-lg font-bold break-words'),
             ],
-            [asking.name],
+            [asking.opened.name],
           ),
           h.p(
             [
@@ -2045,6 +2067,7 @@ export const view = Submodel.defineView<Model, Message>((model, h): Html =>
         { Asking: asking => playlistPromptView(asking, model.setlist, h) },
         () => h.empty,
       ),
+      playlistDialogView(model, h),
       model.isInfoOpen ? infoPanelView(h) : h.empty,
     ],
   ),

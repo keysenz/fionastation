@@ -3,7 +3,8 @@ import { defineTaggedUnion } from 'foldkit/schema'
 
 import type { FetchFailure } from '../../api.ts'
 import { PlayableSong } from '../../domain.ts'
-import { Playlist, PlaylistId, PlaylistName } from '../../playlist.ts'
+import { Playlist, PlaylistId } from '../../playlist.ts'
+import { EditToken } from './playlists.ts'
 
 export const PlaylistFailure = Schema.Literals([
   'Deleted',
@@ -19,18 +20,28 @@ export const playlistFailureOf = (failure: FetchFailure): PlaylistFailure =>
       ? 'NotFound'
       : 'Unreachable'
 
+export const OpenedPlaylist = Schema.Struct({
+  id: PlaylistId,
+  name: Schema.String,
+  version: Schema.Int,
+  songIds: Schema.NonEmptyArray(Schema.String),
+})
+export type OpenedPlaylist = typeof OpenedPlaylist.Type
+
 export const PlaylistOpen = defineTaggedUnion({
   Idle: {},
-  AwaitingSavedSetlist: { id: PlaylistId },
-  Fetching: { id: PlaylistId },
+  AwaitingSavedSetlist: {
+    id: PlaylistId,
+    maybeEditToken: Schema.Option(EditToken),
+  },
+  Fetching: { id: PlaylistId, maybeEditToken: Schema.Option(EditToken) },
   Fetched: { playlist: Playlist },
   Asking: {
-    id: PlaylistId,
-    name: PlaylistName,
+    opened: OpenedPlaylist,
     songs: Schema.NonEmptyArray(PlayableSong),
     unavailableCount: Schema.Number,
   },
-  Opened: { id: PlaylistId, name: PlaylistName },
+  Opened: { opened: OpenedPlaylist },
 })
 export type PlaylistOpen = typeof PlaylistOpen.Type
 
@@ -40,6 +51,6 @@ export const playlistIdOf = (open: PlaylistOpen): Option.Option<PlaylistId> =>
     AwaitingSavedSetlist: ({ id }) => Option.some(id),
     Fetching: ({ id }) => Option.some(id),
     Fetched: ({ playlist }) => Option.some(playlist.id),
-    Asking: ({ id }) => Option.some(id),
-    Opened: ({ id }) => Option.some(id),
+    Asking: ({ opened }) => Option.some(opened.id),
+    Opened: ({ opened }) => Option.some(opened.id),
   })
