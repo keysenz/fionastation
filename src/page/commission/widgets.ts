@@ -602,6 +602,7 @@ const formView = (props: WizardView, h: HtmlBuilder<Message>): Html => {
   return h.form(
     [
       h.OnSubmit(isReview ? Message.ClickedSend() : Message.ClickedNext()),
+      h.Novalidate(true),
       h.Class('space-y-4'),
     ],
     [
