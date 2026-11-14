@@ -36,20 +36,22 @@ const syncedOf = (singing: NowSinging): Option.Option<SyncedLyrics> =>
     }),
   )
 
-export const currentLineOf = (singing: NowSinging): Option.Option<string> =>
-  Option.flatMap(syncedOf(singing), ({ lines }) =>
-    Option.flatMap(singing.maybeCursor, cursor =>
+/** The line the bar shows: the one being sung, or through an intro or a break, the next one. */
+export const barLineOf = (singing: NowSinging): Option.Option<string> =>
+  Option.flatMap(syncedOf(singing), ({ lines }) => {
+    const sungFrom = (index: number) =>
+      Option.map(
+        Array.findFirst(lines.slice(index), ({ text }) => text !== ''),
+        ({ text }) => text,
+      )
+    return Option.flatMap(singing.maybeCursor, cursor =>
       LyricCursor.match(cursor, {
-        Before: () => Option.none(),
+        Before: () => sungFrom(0),
         After: () => Option.none(),
-        OnLine: ({ index }) =>
-          Option.filter(
-            Option.map(Array.get(lines, index), ({ text }) => text),
-            text => text !== '',
-          ),
+        OnLine: ({ index }) => sungFrom(index),
       }),
-    ),
-  )
+    )
+  })
 
 export const hasLyricsPanel = (singing: NowSinging): boolean =>
   Option.match(Option.flatMap(singing.maybeLyrics, loadedLyricsOf), {

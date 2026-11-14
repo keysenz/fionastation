@@ -351,3 +351,45 @@ test('a display name with markup is shown as text and never becomes an element',
     expect(connectButton).toBeAbsent(),
   )
 })
+
+const firstLyricsLoaded = Message.SucceededFetchLyrics({
+  songId: 'first',
+  lyrics: {
+    _tag: 'Synced',
+    lines: [
+      { atMs: 20000, text: 'opening line' },
+      { atMs: 30000, text: '' },
+      { atMs: 40000, text: 'after the break' },
+    ],
+    offsetMs: 0,
+    credit: { source: 'LRCLIB', track: 'Song first', artist: '' },
+  },
+})
+const singingFirstAt = (seconds: number) =>
+  after(
+    fetched(first, second),
+    Message.ClickedSong({ song: first }),
+    reported(PlayerEvent.Ready()),
+    reported(PlayerEvent.Progressed({ seconds: 60 })),
+    firstLyricsLoaded,
+    reported(PlayerEvent.Progressed({ seconds })),
+  )
+const barLyric = selector('[data-bar-lyric]')
+
+test('the collapsed bar shows the first line during the intro, before it is sung', () => {
+  scene(
+    { update, view },
+    given(singingFirstAt(65)),
+    playerMounted,
+    expect(barLyric).toHaveText('opening line'),
+  )
+})
+
+test('the collapsed bar shows the next line through an instrumental break', () => {
+  scene(
+    { update, view },
+    given(singingFirstAt(95)),
+    playerMounted,
+    expect(barLyric).toHaveText('after the break'),
+  )
+})
