@@ -211,7 +211,7 @@ test('a play the radio picked itself counts as Autoplay, and a click as Visitor'
   )
   const picked = send(
     pending,
-    Message.CompletedPickRandomVideo({ playId: 1, song: solo }),
+    Message.CompletedPickRandomVideo({ playId: 1, song: solo, poolSize: 1 }),
   )
   const next = send(picked, playing(2))
   expect(next.stats.at(-1)).toEqual({

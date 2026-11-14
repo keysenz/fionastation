@@ -257,7 +257,7 @@ function transitions(state) {
   pending.forEach((item, index) => {
     if (item.kind === 'pick') {
       for (const song of item.candidates) {
-        out.push({ message: K.Message.CompletedPickRandomVideo({ playId: item.playId, song }), label: `CompletedPickRandomVideo(playId ${item.playId}, ${song.id})`, kind: 'pick', playId: item.playId, song, consumes: index });
+        out.push({ message: K.Message.CompletedPickRandomVideo({ playId: item.playId, song, poolSize: item.candidates.length }), label: `CompletedPickRandomVideo(playId ${item.playId}, ${song.id})`, kind: 'pick', playId: item.playId, song, consumes: index });
       }
     } else if (item.kind === 'retry') {
       out.push({ message: K.Message.CompletedWaitBeforeRetryLoad({ playId: item.playId }), label: `CompletedWaitBeforeRetryLoad(playId ${item.playId})`, kind: 'retry', playId: item.playId, consumes: index });
@@ -270,10 +270,12 @@ function transitions(state) {
   return out;
 }
 
+const NO_TRAIL = K.init().maybeTrail;
+
 function withoutPlayStats(updated) {
   return {
-    model: { ...updated.model, listens: [] },
-    commands: (updated.commands ?? []).filter((command) => command.name !== 'RecordStat'),
+    model: { ...updated.model, listens: [], maybeTrail: NO_TRAIL },
+    commands: (updated.commands ?? []).filter((command) => !['RecordStat', 'RecordDecision'].includes(command.name)),
   };
 }
 
@@ -767,7 +769,7 @@ function walk(config, names, seed) {
 
 // MUTANTS: broken copies of the real code. Each must make its property fail.
 const MUTANTS = [
-  { property: "stale-results-never-act", file: "src/page/karaoke/karaoke.ts", from: "CompletedPickRandomVideo: ({ playId, song }) =>\n      Option.match(\n        Option.filter(\n          model.setlist.maybeNowPlaying,\n          nowPlaying => nowPlaying.playId === playId,", to: "CompletedPickRandomVideo: ({ playId, song }) =>\n      Option.match(\n        Option.filter(\n          model.setlist.maybeNowPlaying,\n          () => true," },
+  { property: "stale-results-never-act", file: "src/page/karaoke/karaoke.ts", from: "CompletedPickRandomVideo: ({ playId, song, poolSize }) =>\n      Option.match(\n        Option.filter(\n          model.setlist.maybeNowPlaying,\n          nowPlaying => nowPlaying.playId === playId,", to: "CompletedPickRandomVideo: ({ playId, song, poolSize }) =>\n      Option.match(\n        Option.filter(\n          model.setlist.maybeNowPlaying,\n          () => true," },
   { property: 'stale-results-never-act', file: 'src/page/karaoke/karaoke.ts', from: 'ReceivedPlayerEvent: ({ playId, event }) =>\n      Option.match(\n        Option.filter(\n          model.setlist.maybeNowPlaying,\n          nowPlaying => nowPlaying.playId === playId,', to: 'ReceivedPlayerEvent: ({ playId, event }) =>\n      Option.match(\n        Option.filter(\n          model.setlist.maybeNowPlaying,\n          () => true,' },
   { property: 'next-plays-queue-then-stream-then-other-video', file: 'src/page/karaoke/karaoke.ts', from: 'ClickedNext: () =>\n      Array.isReadonlyArrayNonEmpty(model.setlist.queue)\n        ? changeSetlist(model, playNext(model.setlist, model.repeat))\n        : seekBeside(model, 1, () =>', to: 'ClickedNext: () =>\n      false\n        ? changeSetlist(model, playNext(model.setlist, model.repeat))\n        : seekBeside(model, 1, () =>' },
   { property: 'next-plays-queue-then-stream-then-other-video', file: 'src/page/karaoke/setlist.ts', from: 'song => !isGone(song) && song.video_url !== current.video_url,', to: 'song => !isGone(song),' },
