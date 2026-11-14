@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
+import { spawn } from 'node:child_process';
 import http from 'node:http';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -466,6 +467,46 @@ const distinctByTitle = (songs, count) => {
   return songs.filter((song) => !seen.has(song.song_title) && seen.add(song.song_title)).slice(0, count);
 };
 const noSidewaysScroll = (page) => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
+
+const dialogButton = (page, action) => page.locator(`[data-playlist-dialog] [data-playlist-action="${action}"]`);
+const playlistAction = (page, action) => page.locator(`[data-playlist-bar] [data-playlist-action="${action}"]`);
+const sourceButton = (page, source) => page.locator(`[data-playlist-source="${source}"]`);
+const openSaveDialog = async (page) => {
+  await page.locator('[data-playlist-action="Save"]').click();
+  await page.locator('[data-playlist-dialog="Editing"]').waitFor();
+};
+const sharedLink = async (page) => {
+  await page.locator('[data-playlist-dialog="Shared"]').waitFor();
+  return page.locator('[data-playlist-link="View"] .select-all').innerText();
+};
+const saveFrom = async (page, source, name) => {
+  await sourceButton(page, source).click();
+  await page.locator('[data-playlist-field="name"]').fill(name);
+  await dialogButton(page, 'Submit').click();
+  const link = await sharedLink(page);
+  const editLink = await page.locator('[data-playlist-link="Edit"] .select-all').innerText();
+  return { id: link.split('/p/')[1], link, editLink };
+};
+const storedIds = async (id) => {
+  const body = await (await fetch(`${BASE}/api/playlists/${id}`)).json();
+  return body.entries.map((entry) => entry.songId);
+};
+const rename = async (page, name) => {
+  await playlistAction(page, 'Rename').click();
+  await page.locator('[data-playlist-field="name"]').fill(name);
+  await dialogButton(page, 'Submit').click();
+  await page.locator('[data-toast="PlaylistUpdated"]').waitFor();
+};
+const seedSession = (page, history, queue) =>
+  page.evaluate(([h, q]) => localStorage.setItem('karaoke-storage', JSON.stringify({ state: { queue: q, history: h }, version: 0 })), [history, queue]);
+const fitsPhone = async (page) => {
+  if (!(await noSidewaysScroll(page))) throw new Error('the page scrolls sideways');
+  const box = await page.locator('[data-playlist-dialog], [data-playlist-bar]').first().boundingBox();
+  if (box.x < 0 || box.x + box.width > 375) throw new Error(JSON.stringify(box));
+};
+const expectId = (id) => {
+  if (!/^[0-9A-Za-z]{8}$/.test(id)) throw new Error(`odd id ${id}`);
+};
 
 const journeys = {
   async site(page) {
@@ -2361,6 +2402,409 @@ const journeys = {
     console.log(`TIMING radio median ${median(radioSamples)} ms ${JSON.stringify(radioSamples)}`);
     console.log(`TIMING playlist median ${median(playlistSamples)} ms ${JSON.stringify(playlistSamples)}`);
     check('playlist-timing', 'both paths reach Playing', radioSamples.length === runs && playlistSamples.length === runs, `radio ${median(radioSamples)} ms, playlist ${median(playlistSamples)} ms`);
+  },
+
+  async playlistSave(page) {
+    const songs = distinctByTitle(await livePlayables(), 6);
+    const [h1, h2, playing, q1, q2, q3] = songs;
+    const videos = (await pageVideos()).body;
+    await page.goto(BASE + '/');
+    await seedSession(page, [h2, h1], [q1, q2, q3]);
+    await page.goto(BASE + '/');
+    await videoRows(page).first().waitFor();
+    await (await songRowOf(page, videos, playing)).click();
+    await waitForBarSong(page, playing);
+    await openSaveDialog(page);
+    await step(
+      'playlist-save',
+      'each source stores its own songs in play order',
+      async () => {
+        await page.screenshot({ path: join(out, 'save-dialog.png') });
+        const want = {
+          Queue: [q1, q2, q3],
+          History: [h1, h2],
+          Session: [h1, h2, playing, q1, q2, q3],
+        };
+        for (const [source, expected] of Object.entries(want)) {
+          const { id } = await saveFrom(page, source, `Verify ${source}`);
+          const stored = await storedIds(id);
+          if (stored.join() !== expected.map((s) => s.id).join()) throw new Error(`${source} stored ${stored.join()}`);
+          if (source === 'Session') await page.screenshot({ path: join(out, 'save-shared.png') });
+          await dialogButton(page, 'Done').click();
+          await openSaveDialog(page);
+        }
+      },
+      page,
+    );
+    await step(
+      'playlist-save',
+      'a fancy name is cleaned and the saved playlist is remembered with its token',
+      async () => {
+        const { id } = await saveFrom(page, 'Queue', '  𝓕𝓲𝓸𝓷𝓪  ');
+        const body = await (await fetch(`${BASE}/api/playlists/${id}`)).json();
+        if (body.name !== 'Fiona') throw new Error(body.name);
+        const mine = await page.evaluate(() => JSON.parse(localStorage.getItem('karaoke-my-playlists') ?? '[]'));
+        if (!mine.some((o) => o.id === id && o.editToken)) throw new Error(JSON.stringify(mine));
+      },
+      page,
+    );
+    await dialogButton(page, 'Done').click();
+    await step(
+      'playlist-save',
+      'a source with no songs is disabled and nothing is sent for it',
+      async () => {
+        const fresh = makeSession('save-empty').page();
+        await fresh.goto(BASE + '/');
+        await fresh.evaluate(() => localStorage.clear());
+        await fresh.goto(BASE + '/');
+        await openSaveDialog(fresh);
+        for (const source of ['Queue', 'History', 'Session'])
+          if (!(await sourceButton(fresh, source).isDisabled())) throw new Error(`${source} is enabled with no songs`);
+        if (!(await dialogButton(fresh, 'Submit').isDisabled())) throw new Error('Save is enabled with no songs');
+      },
+      page,
+    );
+  },
+
+  async playlistShare(page) {
+    const songs = distinctByTitle(await livePlayables(), 3);
+    await page.goto(BASE + '/');
+    await setSavedQueue(page, songs);
+    await page.goto(BASE + '/');
+    await openSaveDialog(page);
+    const { id, link } = await saveFrom(page, 'Queue', 'Rainy day Fio');
+    await step(
+      'playlist-share',
+      'Copy puts only the view link on the clipboard',
+      async () => {
+        await page.evaluate(() => {
+          window.__copied = [];
+          const write = navigator.clipboard.writeText.bind(navigator.clipboard);
+          navigator.clipboard.writeText = (text) => {
+            window.__copied.push(text);
+            return write(text).catch(() => {});
+          };
+        });
+        await page.locator('[data-playlist-copy-target="View"]').click();
+        await page.waitForFunction(() => window.__copied.length === 1);
+        const copied = await page.evaluate(() => window.__copied);
+        if (copied[0] !== link || copied[0].includes('#edit')) throw new Error(copied[0]);
+        await page.locator('[data-playlist-copy="Copied"]').first().waitFor({ timeout: 5000 });
+        await page.screenshot({ path: join(out, 'copy-link.png') });
+      },
+      page,
+    );
+    await step(
+      'playlist-share',
+      'the shown edit link carries the token and the view link does not',
+      async () => {
+        const edit = await page.locator('[data-playlist-link="Edit"] .select-all').innerText();
+        if (!edit.startsWith(`${link}#edit=`)) throw new Error(edit);
+      },
+      page,
+    );
+    const other = makeSession('share-other').page();
+    await other.goto(link);
+    await step(
+      'playlist-share',
+      'a fresh browser opens the link and plays the same songs',
+      async () => {
+        await waitForBarSong(other, songs[0]);
+        await other.waitForFunction(() => JSON.parse(localStorage.getItem('karaoke-storage')).state.queue.length === 2);
+        const queued = await savedQueueIds(other);
+        if (
+          queued.join() !==
+          songs
+            .slice(1)
+            .map((s) => s.id)
+            .join()
+        )
+          throw new Error(queued.join());
+        const owns = await other.evaluate(() => localStorage.getItem('karaoke-my-playlists'));
+        if (owns) throw new Error('a plain link gave edit rights');
+        if (await playlistAction(other, 'Rename').isVisible()) throw new Error('Rename is offered without the token');
+      },
+      other,
+    );
+    expectId(id);
+  },
+
+  async playlistEdit(page) {
+    const songs = distinctByTitle(await livePlayables(), 4);
+    await page.goto(BASE + '/');
+    await setSavedQueue(page, songs.slice(0, 3));
+    await page.goto(BASE + '/');
+    await openSaveDialog(page);
+    const { id, link, editLink } = await saveFrom(page, 'Queue', 'Edit me');
+    await dialogButton(page, 'Done').click();
+    const second = makeSession('edit-b').page();
+    await second.goto(editLink);
+    await step(
+      'playlist-edit',
+      'the edit link in a fresh session offers Rename and Delete, and the address bar drops the fragment',
+      async () => {
+        await playlistAction(second, 'Rename').waitFor();
+        await playlistAction(second, 'Delete').waitFor();
+        await second.waitForFunction(() => !location.hash);
+        const url = await second.url();
+        if (url.includes('edit=') || !url.endsWith(`/p/${id}`)) throw new Error(url);
+        await second.screenshot({ path: join(out, 'edit-link.png') });
+      },
+      second,
+    );
+    await step(
+      'playlist-edit',
+      'Rename in one session shows in another after a reload',
+      async () => {
+        await rename(page, 'Renamed on A');
+        await second.reload();
+        await second.waitForFunction(() => document.title.includes('Renamed on A'));
+        if (await choiceButton(second, 'Replace').isVisible()) throw new Error('the opened link asked again');
+        await page.screenshot({ path: join(out, 'rename.png') });
+      },
+      second,
+    );
+    await step(
+      'playlist-edit',
+      'a stale edit shows the conflict toast and then holds the newer version',
+      async () => {
+        await rename(second, 'Renamed on B');
+        await playlistAction(page, 'Rename').click();
+        await page.locator('[data-playlist-field="name"]').fill('Stale from A');
+        await dialogButton(page, 'Submit').click();
+        await page.locator('[data-toast="PlaylistConflict"]').waitFor();
+        await page.screenshot({ path: join(out, 'conflict.png') });
+        await playlistAction(page, 'Rename').click();
+        const shown = await page.locator('[data-playlist-field="name"]').inputValue();
+        if (shown !== 'Renamed on B') throw new Error(`holds ${shown}`);
+        await dialogButton(page, 'Cancel').click();
+        const body = await (await fetch(`${BASE}/api/playlists/${id}`)).json();
+        if (body.name !== 'Renamed on B') throw new Error(body.name);
+      },
+      page,
+    );
+    await step(
+      'playlist-edit',
+      'Update from queue replaces the stored songs with the queue',
+      async () => {
+        await playlistAction(second, 'Update').click();
+        await second.screenshot({ path: join(out, 'update.png') });
+        await dialogButton(second, 'Submit').click();
+        await second.locator('[data-toast="PlaylistUpdated"]').waitFor();
+        const queued = await savedQueueIds(second);
+        const stored = await storedIds(id);
+        if (queued.length === 0 || stored.join() !== queued.join()) throw new Error(`stored ${stored.join()} queue ${queued.join()}`);
+      },
+      second,
+    );
+    await step(
+      'playlist-edit',
+      'Delete in one session sends the other to / with the deleted toast',
+      async () => {
+        await playlistAction(second, 'Delete').click();
+        await second.screenshot({ path: join(out, 'delete-confirm.png') });
+        await dialogButton(second, 'Submit').click();
+        await second.locator('[data-toast="PlaylistDeleted"]').waitFor();
+        await page.goto(link);
+        await page.locator('[data-toast="PlaylistDeleted"]').waitFor();
+        if ((await pathOf(page)) !== '/') throw new Error(await pathOf(page));
+        await page.screenshot({ path: join(out, 'delete.png') });
+      },
+      page,
+    );
+  },
+
+  async playlistCopy(page) {
+    const songs = distinctByTitle(await livePlayables(), 3);
+    const original = await createPlaylist('Someone elses', songs);
+    await page.goto(`${BASE}/p/${original.id}`);
+    await playlistAction(page, 'SaveCopy').waitFor();
+    await step(
+      'playlist-copy',
+      'Save a copy makes a new playlist the visitor owns and leaves the original alone',
+      async () => {
+        await page.screenshot({ path: join(out, 'copy-playlist-open.png') });
+        await playlistAction(page, 'SaveCopy').click();
+        const field = page.locator('[data-playlist-field="name"]');
+        const name = await field.inputValue();
+        if (name !== 'Someone elses (copy)') throw new Error(name);
+        await page.screenshot({ path: join(out, 'copy-playlist.png') });
+        await dialogButton(page, 'Submit').click();
+        const link = await sharedLink(page);
+        const id = link.split('/p/')[1];
+        if (id === original.id) throw new Error('same id');
+        const body = await (await fetch(`${BASE}/api/playlists/${id}`)).json();
+        if (body.name !== name) throw new Error(body.name);
+        if ((await storedIds(id)).join() !== songs.map((s) => s.id).join()) throw new Error('songs differ');
+        const mine = await page.evaluate(() => JSON.parse(localStorage.getItem('karaoke-my-playlists') ?? '[]'));
+        if (!mine.some((o) => o.id === id)) throw new Error('not remembered');
+        if (mine.some((o) => o.id === original.id)) throw new Error('original is remembered');
+        const old = await (await fetch(`${BASE}/api/playlists/${original.id}`)).json();
+        if (old.name !== 'Someone elses' || old.version !== 1) throw new Error(`original changed: ${old.name} v${old.version}`);
+        await page.screenshot({ path: join(out, 'copy-playlist-shared.png') });
+      },
+      page,
+    );
+  },
+
+  async playlistNoStorage() {
+    const page = blockedStoragePage('playlist-save');
+    const songs = distinctByTitle(await livePlayables(), 1);
+    const videos = (await pageVideos()).body;
+    await page.goto(BASE + '/');
+    await videoRows(page).first().waitFor();
+    await (await songRowOf(page, videos, songs[0])).click();
+    await waitForBarSong(page, songs[0]);
+    await openSaveDialog(page);
+    await step(
+      'playlist-no-storage',
+      'with storage blocked the save succeeds, the link shows, and the page says the edit link must be copied',
+      async () => {
+        const { link } = await saveFrom(page, 'Session', 'No storage');
+        if (!link.includes('/p/')) throw new Error(link);
+        await page.locator('[data-playlist-problem="NotRemembered"]').waitFor();
+        await page.screenshot({ path: join(out, 'no-storage.png') });
+      },
+      page,
+    );
+  },
+
+  async playlistLimit(page) {
+    const port = 4619;
+    const db = join(mkdtempSync(join(tmpdir(), 'verify-limit-')), 'p.db');
+    const child = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', 'server/main.ts'], {
+      cwd: join(dirname(fileURLToPath(import.meta.url)), '../../..'),
+      env: {
+        ...process.env,
+        PORT: String(port),
+        HOSTNAME: '127.0.0.1',
+        PLAYLISTS_DB_PATH: db,
+        PLAYLISTS_IP_LIMIT_PER_HOUR: '1',
+        DATABASE_PATH: join(dirname(fileURLToPath(import.meta.url)), '.run', 'karaoke.db'),
+      },
+      stdio: 'ignore',
+    });
+    try {
+      const limited = `http://localhost:${port}`;
+      for (let i = 0; i < 90; i++) {
+        if ((await fetch(`${limited}/api/get-karaoke`).catch(() => null))?.ok) break;
+        await new Promise((r) => setTimeout(r, 1000));
+      }
+      const songs = distinctByTitle(await livePlayables(), 2);
+      await page.goto(limited + '/');
+      await setSavedQueue(page, songs);
+      await page.goto(limited + '/');
+      await openSaveDialog(page);
+      await saveFrom(page, 'Queue', 'First');
+      await dialogButton(page, 'Done').click();
+      await openSaveDialog(page);
+      await step(
+        'playlist-limit',
+        'past the per-IP limit the dialog reports it and the queue is untouched',
+        async () => {
+          await page.locator('[data-playlist-source="Queue"]').click();
+          await page.locator('[data-playlist-field="name"]').fill('Second');
+          await dialogButton(page, 'Submit').click();
+          await page.locator('[data-playlist-failure="RateLimited"]').waitFor();
+          await page.screenshot({ path: join(out, 'limit.png') });
+          const queued = await savedQueueIds(page);
+          if (queued.join() !== songs.map((s) => s.id).join()) throw new Error('the queue changed');
+          if (!(await dialogButton(page, 'Submit').isVisible())) throw new Error('the dialog closed');
+        },
+        page,
+      );
+    } finally {
+      child.kill();
+    }
+  },
+
+  async playlistSaveMobile(page) {
+    await page.setViewportSize({ width: 375, height: 667 });
+    const songs = distinctByTitle(await livePlayables(), 3);
+    await page.goto(BASE + '/');
+    await step(
+      'playlist-save-mobile',
+      'the header keeps Song list on one line beside Save, and an empty Save dialog says what to do first',
+      async () => {
+        await page.locator('[data-playlist-action="Save"]').waitFor();
+        const lines = await page.evaluate(() => {
+          const link = [...document.querySelectorAll('a')].find((a) => a.textContent.trim() === 'Song list');
+          const save = document.querySelector('[data-playlist-action="Save"]');
+          const title = document.querySelector('h1').getBoundingClientRect();
+          return {
+            link: link.getBoundingClientRect().height,
+            titleRight: title.right,
+            titleWidth: title.width,
+            saveLeft: save.getBoundingClientRect().left,
+            titleClipped: document.querySelector('h1').scrollWidth > document.querySelector('h1').clientWidth,
+          };
+        });
+        if (lines.link > 48) throw new Error(`Song list wraps: ${JSON.stringify(lines)}`);
+        if (lines.titleRight + 8 > lines.saveLeft || lines.titleClipped) throw new Error(`title collides: ${JSON.stringify(lines)}`);
+        await page.screenshot({ path: join(out, 'header-375.png') });
+        await openSaveDialog(page);
+        await page.locator('[data-playlist-problem="NothingToSave"]').waitFor();
+        await dialogButton(page, 'Cancel').click();
+      },
+      page,
+    );
+    await setSavedQueue(page, songs);
+    await page.goto(BASE + '/');
+    await step(
+      'playlist-save-mobile',
+      'the save dialog, the shared dialog and the playlist bar fit a 375px phone',
+      async () => {
+        await openSaveDialog(page);
+        await fitsPhone(page);
+        await page.screenshot({ path: join(out, 'save-375.png') });
+        await saveFrom(page, 'Queue', 'A rather long playlist name to wrap on a phone screen');
+        await fitsPhone(page);
+        await page.screenshot({ path: join(out, 'shared-375.png') });
+        await dialogButton(page, 'Done').click();
+        await page.locator('[data-playlist-bar]').waitFor();
+        await fitsPhone(page);
+        await page.screenshot({ path: join(out, 'bar-375.png') });
+      },
+      page,
+    );
+  },
+
+  async playlistSaveTiming(page) {
+    const runs = Number(process.env.TIMING_RUNS ?? 10);
+    const songs = distinctByTitle(await livePlayables(), 5);
+    const samples = [];
+    for (let i = 0; i < runs; i++) {
+      await page.goto(BASE + '/');
+      await setSavedQueue(page, songs);
+      await page.goto(BASE + '/');
+      await openSaveDialog(page);
+      await page.locator('[data-playlist-source="Queue"]').click();
+      await page.locator('[data-playlist-field="name"]').fill(`Timing ${i}`);
+      samples.push(
+        await page.evaluate(
+          () =>
+            new Promise((resolve) => {
+              const start = performance.now();
+              new MutationObserver((_, observer) => {
+                if (document.querySelector('[data-playlist-dialog="Shared"]')) {
+                  observer.disconnect();
+                  resolve(performance.now() - start);
+                }
+              }).observe(document.body, { childList: true, subtree: true });
+              document.querySelector('[data-playlist-action="Submit"]').click();
+            }),
+        ),
+      );
+    }
+    const sorted = [...samples].sort((a, b) => a - b);
+    const median = sorted[Math.floor(sorted.length / 2)];
+    console.log(`TIMING save-to-link median ${Math.round(median)} ms ${JSON.stringify(samples.map(Math.round))}`);
+    check(
+      'playlist-save-timing',
+      'every Save to link stays under 300 ms',
+      Math.max(...samples) < 300,
+      `median ${Math.round(median)} ms, max ${Math.round(sorted.at(-1))} ms`,
+    );
   },
 
   async api() {
