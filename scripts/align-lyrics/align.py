@@ -43,8 +43,16 @@ def seconds(timestamp: str) -> int:
 
 
 def songs_from(videos: list[dict]) -> list[dict]:
+    """Every song the batch could time.
+
+    A video YouTube has taken down is skipped, and the site marks those with
+    is_gone. Without this the batch retries their songs on every run, because
+    neither downloading them nor leaving them empty ever writes an entry.
+    """
     songs = []
     for video in videos:
+        if video.get("is_gone"):
+            continue
         ordered = sorted(video["karaoke_song"], key=lambda s: seconds(s["timestamp"]))
         for song, after in zip(ordered, ordered[1:] + [None]):
             songs.append({
