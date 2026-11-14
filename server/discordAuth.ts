@@ -5,6 +5,8 @@ import type { Account, SessionStore, Viewer } from './playlists.ts'
 
 export const SESSION_COOKIE = 'fs_session'
 export const STATE_COOKIE = 'fs_oauth_state'
+export const RETURN_COOKIE = 'fs_oauth_return'
+const MAX_RETURN_LENGTH = 200
 const SESSION_SECONDS = 30 * 24 * 60 * 60
 const STATE_SECONDS = 10 * 60
 const LOGIN_WINDOW_MS = 10 * 60 * 1000
@@ -62,6 +64,13 @@ const landOnPage = (
   location: `/?login=${reason}`,
   cookies,
 })
+
+export const safeReturnPath = (path: string | null | undefined) =>
+  typeof path === 'string' &&
+  path.length <= MAX_RETURN_LENGTH &&
+  /^\/(?![/\\])[\x21-\x7e]*$/.test(path)
+    ? path
+    : undefined
 
 const sha256 = (value: string) => createHash('sha256').update(value)
 
@@ -177,7 +186,20 @@ export const createDiscordAuth = ({
     return user && parseAccount(user)
   }
 
-  const start = (app: DiscordApp): AuthReply => {
+  const returnCookie = (path: string, seconds: number) =>
+    cookie(RETURN_COOKIE, encodeURIComponent(path), '/api/auth', seconds)
+
+  const returnPathOf = (header: string | undefined) => {
+    const raw = readCookie(header, RETURN_COOKIE)
+    try {
+      return safeReturnPath(raw && decodeURIComponent(raw))
+    } catch {
+      return undefined
+    }
+  }
+
+  const start = (app: DiscordApp, query: URLSearchParams): AuthReply => {
+    const back = safeReturnPath(query.get('return'))
     const state = newSecret()
     const authorize = new URL(`${app.apiBase}/oauth2/authorize`)
     authorize.search = new URLSearchParams({
@@ -190,7 +212,10 @@ export const createDiscordAuth = ({
     return {
       kind: 'Redirect',
       location: authorize.href,
-      cookies: [stateCookie(state, STATE_SECONDS)],
+      cookies: [
+        stateCookie(state, STATE_SECONDS),
+        ...(back ? [returnCookie(back, STATE_SECONDS)] : []),
+      ],
     }
   }
 
@@ -199,6 +224,13 @@ export const createDiscordAuth = ({
     { query, cookie: cookieHeader }: AuthRequest,
   ): Promise<AuthReply> => {
     const forgetState = stateCookie('', 0)
+    const back = returnPathOf(cookieHeader)
+    const forgetAll = [
+      forgetState,
+      ...(readCookie(cookieHeader, RETURN_COOKIE) === undefined
+        ? []
+        : [returnCookie('', 0)]),
+    ]
     const sent = readCookie(cookieHeader, STATE_COOKIE)
     const returned = query.get('state')
     if (
@@ -206,15 +238,15 @@ export const createDiscordAuth = ({
       returned === null ||
       !timingSafeEqual(sha256(sent).digest(), sha256(returned).digest())
     ) {
-      return landOnPage('state', [forgetState])
+      return landOnPage('state', forgetAll)
     }
     const code = query.get('code')
     if (!code) {
-      return { kind: 'Redirect', location: '/', cookies: [forgetState] }
+      return { kind: 'Redirect', location: back ?? '/', cookies: forgetAll }
     }
     const member = await signIn(app, code)
     if (!member) {
-      return landOnPage('refused', [forgetState])
+      return landOnPage('refused', forgetAll)
     }
     const previous = sessionHash(cookieHeader)
     if (previous !== undefined) sessions.end(previous)
@@ -226,8 +258,8 @@ export const createDiscordAuth = ({
     )
     return {
       kind: 'Redirect',
-      location: '/',
-      cookies: [sessionCookie(id, SESSION_SECONDS), forgetState],
+      location: back ?? '/',
+      cookies: [sessionCookie(id, SESSION_SECONDS), ...forgetAll],
     }
   }
 
@@ -249,7 +281,9 @@ export const createDiscordAuth = ({
     }
     switch (request.route) {
       case 'discord/start':
-        return allowLogin(request.ip) ? start(discord) : landOnPage('limit')
+        return allowLogin(request.ip)
+          ? start(discord, request.query)
+          : landOnPage('limit')
       case 'discord/callback':
         return allowLogin(request.ip)
           ? callback(discord, request)

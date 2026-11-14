@@ -701,6 +701,14 @@ const OWNER_ROUTE =
   /^\/admin\/owner\/playlists(?:\/([^/]+)(?:\/(name|songs)(?:\/([^/]+))?)?)?$/
 const digest = (value: string) => createHash('sha256').update(value).digest()
 
+export const bearerHolder = (secret: string) => {
+  const expected = digest(secret)
+  return (authorization: string | undefined) => {
+    const given = bearerToken(authorization)
+    return given !== undefined && timingSafeEqual(digest(given), expected)
+  }
+}
+
 export const createAdminApi = ({
   store,
   secret,
@@ -716,14 +724,10 @@ export const createAdminApi = ({
   createsPerMemberPerHour?: number
   editsPerHour?: number
 }>) => {
-  const expected = digest(secret)
   const allowCreate = windowLimiter(createsPerMemberPerHour, HOUR_MS, now)
   const allowEdit = windowLimiter(editsPerHour, HOUR_MS, now)
 
-  const holdsSecret = (authorization: string | undefined) => {
-    const given = bearerToken(authorization)
-    return given !== undefined && timingSafeEqual(digest(given), expected)
-  }
+  const holdsSecret = bearerHolder(secret)
 
   const moderate = (method: string, id: string | undefined) => {
     if (id === undefined || (method !== 'GET' && method !== 'DELETE')) {

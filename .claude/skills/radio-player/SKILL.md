@@ -37,6 +37,7 @@ The run uses one worker thread for each autoplay and repeat setting, and one mor
 
 - `--only <property>` checks one property.
 - `--depth <n>` changes the bound. The default is 6, and each extra step costs about 5 times more time. The stale-timer case of `skip-toast-always-clears` needs exactly six steps, so a lower depth leaves it to the random walks. The fourth failed load, where the automatic retries stop, needs eight steps, so only the random walks reach it. The karaoke-queue check and a story test cover that stop directly.
+- `--jobs <n>` runs at most n workers at once. Each worker holds its own state set, so peak memory is roughly n times one worker's. Use `--jobs 1` on a machine with a memory cap.
 - `--lyrics-depth <n>` changes the bound of the lyrics scope. The default is 8, which reaches the fourth failed fetch, where the automatic retries stop. Depth 9 takes about 135 s.
 - `--walks <n>` sets the number of random walks for each setting. The default is 300.
 

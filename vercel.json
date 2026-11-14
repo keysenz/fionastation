@@ -12,6 +12,10 @@
   ],
   "rewrites": [
     {
+      "source": "/stats",
+      "destination": "/stats.html"
+    },
+    {
       "source": "/songs",
       "destination": "/index.html"
     },

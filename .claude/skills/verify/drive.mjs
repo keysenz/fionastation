@@ -521,7 +521,7 @@ const waitUntilUp = async (url, ok) => {
   throw new Error(`${url} did not come up`);
 };
 
-const startDiscordStack = async () => {
+const startDiscordStack = async (extraEnv = {}) => {
   const first = Number(process.env.VERIFY_PORT ?? 3456) + 1;
   const [serverPort, fakePort, adminPort] = [first, first + 1, first + 2];
   const base = `http://127.0.0.1:${serverPort}`;
@@ -553,6 +553,7 @@ const startDiscordStack = async () => {
           SITE_ORIGIN: base,
           ADMIN_SECRET: secret,
           ADMIN_PORT: String(adminPort),
+          ...extraEnv,
         },
         stdio: 'ignore',
       }),
@@ -633,7 +634,141 @@ const openFromList = async (page, id) => {
 
 const barKind = (page) => page.locator('[data-playlist-bar]').getAttribute('data-playlist-bar');
 
+const STATS_MOD = { id: '244661517356761089', name: 'Mod Person' };
+const STATS_FIONA = { id: '927090060480905276', name: 'Fiona' };
+const STATS_STRANGER = { id: '111111111111111111', name: 'Stranger' };
+
+const seedStats = async (path, songs) => {
+  const { openStatStore } = await import('../../../server/stats.ts');
+  const [first, second] = songs;
+  const daysAgo = (days) => new Date(Date.now() - days * 86400000);
+  const at = (days) => openStatStore({ path, now: () => daysAgo(days) });
+  const today = at(0);
+  const repeat = (times, event) => Array.from({ length: times }, () => event);
+  [
+    ...repeat(3, { kind: 'Click', songId: first.id, origin: 'Visitor' }),
+    ...repeat(5, { kind: 'Play', songId: first.id, origin: 'Visitor' }),
+    ...repeat(2, { kind: 'Play', songId: first.id, origin: 'Autoplay' }),
+    ...repeat(2, { kind: 'Finish', songId: first.id, origin: 'Visitor' }),
+    { kind: 'Play', songId: second.id, origin: 'Visitor' },
+    { kind: 'Skip', songId: first.id, origin: 'Visitor', secondsIntoSong: 12 },
+    { kind: 'Skip', songId: first.id, origin: 'Visitor', secondsIntoSong: 14 },
+    { kind: 'Skip', songId: first.id, origin: 'Visitor', secondsIntoSong: 95 },
+  ].forEach((event) => today.record(event));
+  const tenAgo = at(10);
+  repeat(4, { kind: 'Play', songId: first.id, origin: 'Visitor' }).forEach((event) => tenAgo.record(event));
+  tenAgo.record({ kind: 'Skip', songId: first.id, origin: 'Visitor', secondsIntoSong: 200 });
+  const fortyAgo = at(40);
+  repeat(10, { kind: 'Play', songId: second.id, origin: 'Visitor' }).forEach((event) => fortyAgo.record(event));
+};
+
 const journeys = {
+  async statsPage(page, context) {
+    const f = 'stats-page';
+    const [first, second] = distinctByTitle(await livePlayables(), 2);
+    const statsPath = join(mkdtempSync(join(tmpdir(), 'verify-stats-')), 'stats.db');
+    await seedStats(statsPath, [first, second]);
+    const stack = await startDiscordStack({ STATS_DB_PATH: statsPath, STATS_USER_IDS: `${STATS_MOD.id},${STATS_FIONA.id}` });
+    const tile = (key) => page.locator(`[data-tile="${key}"] [data-value]`).innerText();
+    const shows = async (key, want) => {
+      await page.waitForFunction(([k, w]) => document.querySelector(`[data-tile="${k}"] [data-value]`)?.textContent === w, [key, want]);
+    };
+    const signInAs = async (user) => {
+      await stack.actAs(user);
+      await page.goto(stack.base + '/stats');
+      await page.locator('[data-action="sign-in"]').click();
+      await page.waitForFunction(() => location.pathname === '/stats');
+    };
+    try {
+      await page.setViewportSize({ width: 1280, height: 800 });
+      await step(f, 'a signed-out visitor sees only the sign-in screen and no numbers', async () => {
+        await page.goto(stack.base + '/stats');
+        await page.locator('[data-action="sign-in"]').waitFor();
+        if ((await page.locator('[data-tile]').count()) !== 0) throw new Error('tiles shown while signed out');
+        const direct = await page.evaluate(() => fetch('/api/stats-page/report').then((res) => res.status));
+        if (direct !== 401) throw new Error(`report answered ${direct}`);
+        await page.screenshot({ path: join(out, 'stats-signed-out.png') });
+      }, page);
+      await step(f, 'signing in as a listed moderator returns to /stats and shows the seeded numbers', async () => {
+        await signInAs(STATS_MOD);
+        await shows('plays', '8');
+        if ((await tile('share')) !== '75%') throw new Error(`share ${await tile('share')}`);
+        if ((await tile('finishes')) !== '2') throw new Error(`finishes ${await tile('finishes')}`);
+        if ((await tile('skips')) !== '3') throw new Error(`skips ${await tile('skips')}`);
+        if ((await tile('finish-rate')) !== '25%') throw new Error(`rate ${await tile('finish-rate')}`);
+        const user = await page.locator('[data-user]').innerText();
+        if (user !== STATS_MOD.name) throw new Error(user);
+        await page.screenshot({ path: join(out, 'stats-dashboard-desktop.png'), fullPage: true });
+      }, page);
+      await step(f, 'the range picker changes the numbers', async () => {
+        for (const [days, plays] of [['30', '12'], ['90', '22'], ['1', '8']]) {
+          await page.locator(`[data-range="${days}"]`).click();
+          await page.waitForFunction((d) => document.querySelector(`[data-range="${d}"]`)?.getAttribute('aria-pressed') === 'true', days);
+          await shows('plays', plays);
+        }
+        await page.locator('[data-range="90"]').click();
+        await shows('plays', '22');
+        await page.screenshot({ path: join(out, 'stats-dashboard-90d.png'), fullPage: true });
+      }, page);
+      await step(f, 'the daily chart has a bar group for each UTC day and the table lists the seeded songs', async () => {
+        const days = await page.locator('[data-chart="daily"] [data-day]').count();
+        if (days !== 90) throw new Error(`${days} days`);
+        const rows = await page.locator('[data-table="songs"] tbody tr').count();
+        if (rows !== 2) throw new Error(`${rows} song rows`);
+        const videos = await page.locator('[data-table="videos"] tbody tr').count();
+        if (videos < 1) throw new Error('no video rows');
+      }, page);
+      await step(f, 'picking a song narrows the skip histogram and sorting reorders the table', async () => {
+        const all = await page.locator('[data-skip-total]').getAttribute('data-skip-total');
+        if (all !== '4') throw new Error(`all songs ${all}`);
+        await page.locator(`[data-pick="${first.id}"]`).first().click();
+        await page.waitForFunction(() => document.querySelector('[data-skip-total]')?.getAttribute('data-skip-total') === '4');
+        await page.locator(`[data-pick="${second.id}"]`).first().click();
+        await page.waitForFunction(() => document.querySelector('[data-skip-total]')?.getAttribute('data-skip-total') === '0');
+        await page.locator('[data-sort="title"]').click();
+        await page.locator('[data-sort="title"]').click();
+        await page.screenshot({ path: join(out, 'stats-histogram-one-song.png'), fullPage: true });
+      }, page);
+      await step(f, 'a phone has no sideways scroll', async () => {
+        await page.setViewportSize({ width: 375, height: 667 });
+        await shows('plays', '22');
+        if (!(await noSidewaysScroll(page))) throw new Error('the page scrolls sideways');
+        await page.screenshot({ path: join(out, 'stats-dashboard-phone.png'), fullPage: true });
+        await page.setViewportSize({ width: 1280, height: 800 });
+      }, page);
+      await step(f, 'logout returns to the sign-in screen and the report is closed again', async () => {
+        await page.locator('[data-action="logout"]').click();
+        await page.locator('[data-action="sign-in"]').waitFor();
+        const direct = await page.evaluate(() => fetch('/api/stats-page/report').then((res) => res.status));
+        if (direct !== 401) throw new Error(`report answered ${direct}`);
+      }, page);
+      await step(f, 'a signed-in person who is not listed sees no access and no numbers', async () => {
+        await signInAs(STATS_STRANGER);
+        await page.getByRole('heading', { name: 'No access' }).waitFor();
+        if ((await page.locator('[data-tile]').count()) !== 0) throw new Error('tiles shown without access');
+        const direct = await page.evaluate(() => fetch('/api/stats-page/report').then((res) => res.status));
+        if (direct !== 403) throw new Error(`report answered ${direct}`);
+        await page.screenshot({ path: join(out, 'stats-no-access.png') });
+        await page.locator('[data-action="logout"]').click();
+        await page.locator('[data-action="sign-in"]').waitFor();
+      }, page);
+      await step(f, 'Fiona, listed by user id, gets in', async () => {
+        await signInAs(STATS_FIONA);
+        await shows('plays', '8');
+        await page.locator('[data-action="logout"]').click();
+        await page.locator('[data-action="sign-in"]').waitFor();
+      }, page);
+      await step(f, 'an off-site return path is ignored and the login lands on the home page', async () => {
+        await stack.actAs(STATS_MOD);
+        await page.goto(stack.base + '/api/auth/discord/start?return=' + encodeURIComponent('https://evil.test/'));
+        await page.waitForFunction(() => location.pathname === '/');
+        if (new URL(await page.url()).origin !== stack.base) throw new Error(await page.url());
+      }, page);
+    } finally {
+      stack.close();
+    }
+  },
+
   async site(page) {
     await page.goto(BASE + '/');
     await page.getByRole('heading', { name: 'Fio Radio' }).waitFor();
@@ -1162,6 +1297,78 @@ const journeys = {
       await page.locator('[data-player-bar]').getByRole('heading', { name: last.song_title }).first().waitFor({ timeout: 20000 });
       await timeNear(secondsOf(last.timestamp));
     }, page);
+  },
+  async playStats(page) {
+    const adminPort = process.env.ADMIN_PORT ?? '3911';
+    const adminSecret = process.env.ADMIN_SECRET ?? 'verify-admin-secret';
+    const report = async () => (await fetch(`http://127.0.0.1:${adminPort}/stats?days=1`, { headers: { authorization: `Bearer ${adminSecret}` } })).json();
+    const songStat = async (song) => (await report()).songs.find((s) => s.songId === song.id);
+    const until = async (what, ready) => {
+      for (let i = 0; i < 40; i++) {
+        const seen = await ready();
+        if (seen) return seen;
+        await page.waitForTimeout(500);
+      }
+      throw new Error(`never saw ${what}: ${JSON.stringify((await report()).songs)}`);
+    };
+    const { body: videos } = await pageVideos();
+    const live = videos.filter((v) => !v.is_gone);
+    const video = live.find((v) => v.karaoke_song.length >= 3 && secondsOf(v.karaoke_song[1].timestamp) - secondsOf(v.karaoke_song[0].timestamp) > 20);
+    if (!video) throw new Error('no live video with three songs and a long first song');
+    const sorted = songRows([video]).toSorted((a, b) => secondsOf(a.timestamp) - secondsOf(b.timestamp));
+    const [first, second, third] = sorted;
+    const last = sorted.at(-1);
+    const seekTo = (seconds) =>
+      page.evaluate((to) => window.YT.get(document.querySelector('iframe[src*="youtube"]').id).seekTo(to, true), seconds);
+    const playheadPast = (seconds) =>
+      page.waitForFunction((want) => window.YT.get(document.querySelector('iframe[src*="youtube"]').id).getCurrentTime() >= want, seconds, { timeout: 30000 });
+    await page.goto(BASE + '/');
+    await videoRows(page).first().waitFor();
+
+    await step('playStats', 'a clicked song counts one click and, once it plays, one visitor play', async () => {
+      await (await songRowOf(page, videos, first)).click();
+      await playerReady(page);
+      await playVideo(page);
+      await videoLoads(page, [video.video_url], { startSeconds: secondsOf(first.timestamp), isPlaying: true });
+      const stat = await until('the first play', async () => (await songStat(first))?.plays.Visitor === 1 && (await songStat(first)));
+      if (stat.clicks !== 1 || stat.plays.Autoplay !== 0) throw new Error(JSON.stringify(stat));
+    }, page);
+
+    await step('playStats', 'a stream playing into its second song by itself finishes the first and plays the second', async () => {
+      await seekTo(secondsOf(second.timestamp) - 4);
+      await playheadPast(secondsOf(second.timestamp) + 1);
+      const stat = await until('the second play', async () => (await songStat(second))?.plays.Visitor === 1 && (await songStat(second)));
+      const before = await songStat(first);
+      if (before.finishes.Visitor !== 1 || before.plays.Visitor !== 1) throw new Error(JSON.stringify(before));
+      if (stat.clicks !== 0) throw new Error(`a play by itself counted a click: ${JSON.stringify(stat)}`);
+    }, page);
+
+    await step('playStats', 'Next partway through a song records one skip with the seconds into that song', async () => {
+      await page.waitForTimeout(3000);
+      await barButton(page, 'fa-step-forward').click();
+      const stat = await until('the skip', async () => (await songStat(second))?.skips.Visitor === 1 && (await songStat(second)));
+      const seconds = stat.medianSecondsIntoSkip;
+      if (!(seconds >= 3 && seconds <= 20)) throw new Error(`seconds into the song: ${seconds}`);
+      if (stat.finishes.Visitor !== 0) throw new Error('a skipped song counted as finished');
+      await until('the third song playing', async () => (await songStat(third))?.plays.Visitor === 1);
+    }, page);
+
+    await step('playStats', 'Next on the last song lets the radio pick the next video, which counts as an autoplay play', async () => {
+      await (await songRowOf(page, videos, last)).click();
+      await page.locator('[data-player-bar]').getByRole('heading', { name: last.song_title }).first().waitFor({ timeout: 10000 });
+      await playerReady(page);
+      await playVideo(page);
+      await videoLoads(page, [video.video_url], { startSeconds: secondsOf(last.timestamp), isPlaying: true });
+      await page.waitForTimeout(2000);
+      await barButton(page, 'fa-step-forward').click();
+      const others = live.filter((v) => v.video_url !== video.video_url).map((v) => v.video_url);
+      await videoLoads(page, others, { isPlaying: true, timeout: 40000 });
+      const autoplayed = await until('an autoplay play', async () => (await report()).songs.find((s) => s.plays.Autoplay === 1));
+      if (autoplayed.plays.Visitor !== 0) throw new Error(JSON.stringify(autoplayed));
+      const lastStat = await songStat(last);
+      if (lastStat.skips.Visitor !== 1) throw new Error(JSON.stringify(lastStat));
+    }, page);
+    console.log(JSON.stringify(await report(), null, 2));
   },
   async coverEnd(page) {
     const { body: videos } = await pageVideos();

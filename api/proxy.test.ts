@@ -28,6 +28,22 @@ afterEach(() => {
   vi.unstubAllEnvs()
 })
 
+describe('statistics', () => {
+  it('forwards a stat post and passes the empty 204 back', async () => {
+    const sent = stubUpstream(() => new Response(null, { status: 204 }))
+    const response = await POST(
+      new Request('https://site.test/api/proxy?path=stats', {
+        method: 'POST',
+        body: '{"songId":"a","kind":"Play","origin":"Visitor"}',
+        headers: { 'content-type': 'application/json' },
+      }),
+    )
+    expect(sent[0]?.url).toBe('http://upstream.test/api/stats')
+    expect(response.status).toBe(204)
+    expect(await response.text()).toBe('')
+  })
+})
+
 describe('writes', () => {
   it('forwards method, body, content-type, authorization and the visitor IP', async () => {
     const sent = stubUpstream(ok)
@@ -188,6 +204,24 @@ describe('login', () => {
       new Request('https://site.test/api/proxy?path=auth/me'),
     )
     expect(response.headers.has(CDN)).toBe(false)
+  })
+})
+
+describe('stats page', () => {
+  it('never gives the stats report the CDN cache header and passes the session cookie up', async () => {
+    const sent = stubUpstream(ok)
+    const response = await GET(
+      new Request('https://site.test/api/proxy?path=stats-page/report&days=7', {
+        headers: { cookie: 'fs_stats_session=abc.def' },
+      }),
+    )
+    expect(response.headers.has(CDN)).toBe(false)
+    expect(sent[0]?.url).toBe(
+      'http://upstream.test/api/stats-page/report?days=7',
+    )
+    expect(new Headers(sent[0]?.init.headers).get('cookie')).toBe(
+      'fs_stats_session=abc.def',
+    )
   })
 })
 

@@ -105,6 +105,60 @@ const harness = (
 const statusOf = (reply: AuthReply) =>
   reply.kind === 'Json' ? reply.status : 302
 
+describe('return path', () => {
+  const returnTo = async (path: string) => {
+    const { send } = harness()
+    const started = await send('discord/start', {
+      query: `return=${encodeURIComponent(path)}`,
+    })
+    const held = started.cookies.find(cookie =>
+      cookie.startsWith('fs_oauth_return='),
+    )
+    if (!held) return { held, location: undefined }
+    const reply = await send('discord/callback', {
+      query: 'code=code-1&state=state-1',
+      cookie: `fs_oauth_state=state-1; ${held.split(';')[0]}`,
+    })
+    return {
+      held,
+      location: reply.kind === 'Redirect' ? reply.location : undefined,
+      cleared: reply.cookies.some(cookie =>
+        cookie.startsWith('fs_oauth_return=; '),
+      ),
+    }
+  }
+
+  test('a login that started with a same-site path comes back to it and forgets it', async () => {
+    const result = await returnTo('/stats')
+    expect(result.location).toBe('/stats')
+    expect(result.cleared).toBe(true)
+    expect(result.held).toContain('Path=/api/auth')
+    expect(result.held).toContain('HttpOnly')
+  })
+
+  test.each([
+    'https://evil.test/',
+    '//evil.test/x',
+    '/\\evil.test',
+    'stats',
+    '/a b',
+    `/${'x'.repeat(250)}`,
+  ])('refuses %s and lands on the home page', async path => {
+    const result = await returnTo(path)
+    expect(result.held).toBeUndefined()
+  })
+
+  test('a tampered return cookie never redirects off the site', async () => {
+    const { send } = harness()
+    await send('discord/start')
+    const reply = await send('discord/callback', {
+      query: 'code=code-1&state=state-1',
+      cookie: 'fs_oauth_state=state-1; fs_oauth_return=%2F%2Fevil.test',
+    })
+    expect(reply).toMatchObject({ kind: 'Redirect', location: '/' })
+  })
+})
+
 describe('login', () => {
   test('start sets a short-lived state cookie and sends the browser to Discord', async () => {
     const { send } = harness()
