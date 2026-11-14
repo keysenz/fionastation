@@ -11,6 +11,7 @@ import {
 } from '../../domain.ts'
 import { songsRouter } from '../../route'
 import { type LoadFailure, thumbnailUrl } from '../../youtube'
+import type { LoginFailure } from './account.ts'
 import { infoButtonView, infoPanelView } from './info.ts'
 import {
   CANCEL_CHOICE,
@@ -34,6 +35,7 @@ import {
 } from './lyricsView.ts'
 import { PlaylistOpen } from './playlistOpen.ts'
 import {
+  myPlaylistsButtonView,
   openPlaylistBarView,
   playlistDialogView,
   savePlaylistButtonView,
@@ -763,6 +765,7 @@ const headerView = (model: Model, h: HtmlBuilder<Message>): Html =>
           h.div(
             [h.Class('flex shrink-0 items-center gap-2')],
             [
+              myPlaylistsButtonView(h),
               savePlaylistButtonView(h),
               h.a(
                 [
@@ -1846,6 +1849,14 @@ const playerView = (
   )
 }
 
+const loginFailureText: Record<LoginFailure, string> = {
+  state:
+    'That Discord login did not start in this browser. Press Connect Discord to try again.',
+  limit: 'Too many login attempts. Wait a few minutes, then try again.',
+  refused:
+    'Discord did not complete the login. Press Connect Discord to try again.',
+}
+
 const toastMessage = (toast: Toast): string =>
   Toast.match<string>(toast, {
     SkippedSongs: ({ firstSkippedTitle, skippedCount }) =>
@@ -1859,6 +1870,9 @@ const toastMessage = (toast: Toast): string =>
     PlaylistConflict: () =>
       'Someone else changed this playlist first. It was reloaded, so look it over and try again.',
     PlaylistUpdated: () => 'Playlist saved.',
+    LoginFailed: ({ reason }) => loginFailureText[reason],
+    DisconnectFailed: () =>
+      'Could not disconnect Discord. Check your connection and try again.',
     PlaylistSongsUnavailable: ({ count }) =>
       `${songCountText(count)} from the playlist ${count === 1 ? 'is' : 'are'} not available and ${count === 1 ? 'was' : 'were'} skipped.`,
   })
@@ -1869,6 +1883,9 @@ const toastView = (toast: Toast, h: HtmlBuilder<Message>): Html =>
       h.Role('status'),
       h.AriaLive('polite'),
       h.DataAttribute('toast', toast._tag),
+      ...(toast._tag === 'LoginFailed'
+        ? [h.DataAttribute('toast-reason', toast.reason)]
+        : []),
       h.Class(
         'fixed bottom-24 left-1/2 -translate-x-1/2 z-[60] w-[calc(100vw-2rem)] max-w-md flex items-start gap-3 bg-black/80 backdrop-blur-xl border border-white/10 text-white rounded-xl shadow-2xl p-3',
       ),

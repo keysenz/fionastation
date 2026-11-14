@@ -105,6 +105,8 @@ test('only tokens of playlists the account lacks are claimed', () => {
 
 test('claims go out at most 100 tokens at a time', () => {
   const tokens = Array.from({ length: 250 }, (_, index) => `t${index}`)
-  expect(claimBatches(tokens).map(batch => batch.length)).toEqual([100, 100, 50])
+  expect(claimBatches(tokens).map(batch => batch.length)).toEqual([
+    100, 100, 50,
+  ])
   expect(claimBatches([])).toEqual([])
 })

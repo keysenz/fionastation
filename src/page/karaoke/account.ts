@@ -39,6 +39,8 @@ export const loginFailureOfSearch = (
     Schema.decodeUnknownOption(LoginFailure),
   )
 
+export const MeReply = Schema.Struct({ name: Schema.String })
+
 export const MineReply = Schema.Struct({
   playlists: Schema.Array(
     Schema.Struct({

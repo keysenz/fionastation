@@ -137,6 +137,7 @@ export type Remembered = typeof Remembered.Type
 
 export const PlaylistDialog = defineTaggedUnion({
   Closed: {},
+  Account: {},
   Editing: { form: PlaylistForm, maybeFailure: Schema.Option(WriteFailure) },
   Sending: { form: PlaylistForm },
   Shared: {

@@ -22,6 +22,7 @@ import {
   FocusQueueHandle,
   LoadAutoplay,
   LoadLyricNudges,
+  LoadAccount,
   LoadMyPlaylists,
   LoadRepeat,
   LoadSavedSetlist,
@@ -323,13 +324,18 @@ test('opening the page rereads saved data and fetches, and does not fetch twice'
   expect(opened.commands?.map(({ name }) => name)).toEqual([
     LoadSavedSetlist.name,
     LoadMyPlaylists.name,
+    LoadAccount.name,
     LoadAutoplay.name,
     LoadRepeat.name,
     LoadVolume.name,
     LoadLyricNudges.name,
     FetchSongs.name,
   ])
-  expect(entered(opened.model).commands?.map(({ name }) => name)).toEqual([
+  const known = update(
+    opened.model,
+    Message.FailedLoadAccount({ kind: 'SignedOut' }),
+  )
+  expect(entered(known.model).commands?.map(({ name }) => name)).toEqual([
     LoadSavedSetlist.name,
     LoadMyPlaylists.name,
     LoadAutoplay.name,
@@ -3094,7 +3100,7 @@ test('renaming sends the new name with the stored songs, the version and the tok
   )
   expect(commandNamed(submitted, ReplacePlaylist.name)?.args).toEqual({
     id: openingId,
-    editToken: token,
+    maybeEditToken: Option.some(token),
     name: 'Night drive',
     songIds: ['a', 'b'],
     version: 1,
@@ -3115,7 +3121,7 @@ test('a rename that succeeds updates the page, the stored name and the version',
       name: 'Night drive',
       songIds: ['a', 'b'],
       version: 2,
-      editToken: token,
+      maybeEditToken: Option.some(token),
     }),
   )
   expect(openedPlaylistNameOf(done.model)).toEqual(Option.some('Night drive'))
@@ -3223,7 +3229,7 @@ test('deleting asks first, then removes the playlist and forgets its token', () 
   const sent = update(asked.model, Message.SubmittedPlaylistForm())
   expect(commandNamed(sent, RemovePlaylist.name)?.args).toEqual({
     id: openingId,
-    editToken: token,
+    maybeEditToken: Option.some(token),
   })
   const done = update(sent.model, Message.SucceededRemovePlaylist())
   expect(done.model.playlistOpen._tag).toBe('Idle')
@@ -3372,8 +3378,14 @@ const renameSubmitted = (current: Model) =>
     ).model,
     Message.SubmittedPlaylistForm(),
   )
-const tokenSent = (result: UpdateReturn) =>
-  commandNamed(result, ReplacePlaylist.name)?.args?.['editToken']
+const tokenSent = (result: UpdateReturn) => {
+  const maybeToken = commandNamed(result, ReplacePlaylist.name)?.args?.[
+    'maybeEditToken'
+  ]
+  return Option.isOption(maybeToken)
+    ? Option.getOrUndefined(maybeToken)
+    : undefined
+}
 
 test('a save in one tab keeps the entries another tab stored meanwhile', async () => {
   const other = { id: createdId, name: 'Other tab', editToken: forgedToken }
@@ -3447,7 +3459,7 @@ test('a stored token that the server rejects falls back to the edit link token, 
       name: 'Night drive',
       songIds: ['a', 'b'],
       version: 2,
-      editToken: real,
+      maybeEditToken: Option.some(real),
     }),
   )
   expect(done.model.mine).toEqual([
