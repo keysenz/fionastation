@@ -91,6 +91,14 @@ def agreement(rows: list[dict], labels: list[dict]) -> list[str]:
     ]
 
 
+def panel_section() -> list[str]:
+    from panel import PANEL, PANEL_DIR, sheet_ids, table
+    ids = sheet_ids()
+    if not all((PANEL_DIR / m / f"{i}.json").exists() for m in PANEL for i in ids):
+        return ["Not run yet. Run `panel.py`."]
+    return table(ids)
+
+
 def main() -> None:
     data = json.loads((RESULTS / "moods.json").read_text())
     rows, run = data["rows"], data["run"]
@@ -129,6 +137,14 @@ def main() -> None:
         "## Agreement with labels",
         "",
         *agreement(rows, read_labels()),
+        "",
+        "## Model panel (not ground truth)",
+        "",
+        "Opus 5.5, Fable 5.2 and Sonnet 5.5 each tagged the labeling-sheet songs blind, from the same prompt and lyrics Haiku got. "
+        "This shows whether cheap Haiku agrees with stronger models, and how much strong models agree with each other. "
+        "None of them hears the singing, so it does not replace human labels.",
+        "",
+        *panel_section(),
         "",
         "## Cost and runtime",
         "",

@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "ceria",
+  "romantis"
+ ],
+ "energy": 0.55,
+ "positivity": 0.75,
+ "reason": "Song unknown and no lyrics; a guess from the title ('the brightness of my day'), which suggests a warm, upbeat, possibly affectionate song.",
+ "usage": {
+  "model": "claude-opus-5-5",
+  "inputTokens": 1559,
+  "outputTokens": 483,
+  "usd": 0.014675,
+  "seconds": 6.95
+ }
+}

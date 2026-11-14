@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "sendu",
+  "galau"
+ ],
+ "energy": 0.35,
+ "positivity": 0.55,
+ "reason": "Bernadya's gentle mid-tempo pop ballad reflecting on a breakup a year later; melancholic but grateful and hopeful about life moving on.",
+ "usage": {
+  "model": "claude-fable-5-2",
+  "inputTokens": 1949,
+  "outputTokens": 183,
+  "usd": 0.023399000000000003,
+  "seconds": 5.11
+ }
+}

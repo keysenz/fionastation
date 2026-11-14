@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "romantis",
+  "sendu"
+ ],
+ "energy": 0.3,
+ "positivity": 0.55,
+ "reason": "Soft, tender folk ballad by Nadin Amizah about healing and relief together with a loved one after a long struggle; gentle and bittersweet with a hopeful ending.",
+ "usage": {
+  "model": "claude-sonnet-5-5",
+  "inputTokens": 1975,
+  "outputTokens": 189,
+  "usd": 0.006061500000000001,
+  "seconds": 4.21
+ }
+}

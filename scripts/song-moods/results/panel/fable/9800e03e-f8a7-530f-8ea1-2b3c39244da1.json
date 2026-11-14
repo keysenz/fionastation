@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "romantis",
+  "ceria"
+ ],
+ "energy": 0.5,
+ "positivity": 0.7,
+ "reason": "Low-confidence guess from the title alone: no lyrics were provided and I don't recognise this song or artist; \"Gentari Hariku\" reads like an affectionate \"you brighten my day\" phrase, suggesting a warm, tender love song.",
+ "usage": {
+  "model": "claude-fable-5-2",
+  "inputTokens": 1559,
+  "outputTokens": 331,
+  "usd": 0.023079000000000002,
+  "seconds": 6.8
+ }
+}

@@ -3,7 +3,7 @@ import json
 import re
 
 from audio import audio_energy, features
-from moods import SONG_SYSTEM, THEME_SYSTEM, Haiku, SongMood, StreamTheme, clamp, song_prompt, theme_prompt
+from moods import SONG_SYSTEM, THEME_SYSTEM, Claude, SongMood, StreamTheme, clamp, song_prompt, theme_prompt
 from songs import RESULTS, all_songs, audio_dir, catalogue, lyrics
 
 REPEATS = {"tampar", "monokrom"}
@@ -54,7 +54,7 @@ def main() -> None:
     for row, energy in zip(rows, audio_energy([r["audio"] for r in rows])):
         row["audioEnergy"] = energy
 
-    haiku = None if args.audio_only else Haiku()
+    haiku = None if args.audio_only else Claude()
     if haiku:
         for row in rows:
             def ask(row=row):

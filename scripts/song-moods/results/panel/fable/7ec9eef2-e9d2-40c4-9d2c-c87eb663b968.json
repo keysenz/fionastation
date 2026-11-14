@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "galau",
+  "romantis"
+ ],
+ "energy": 0.5,
+ "positivity": 0.45,
+ "reason": "Low-confidence guess: no lyrics were available and I don't recognise this track, so the tags rest only on the title \"Janji\" (promise), which usually signals an emotional love/longing theme; energy and positivity are neutral placeholders.",
+ "usage": {
+  "model": "claude-fable-5-2",
+  "inputTokens": 1556,
+  "outputTokens": 342,
+  "usd": 0.023471000000000002,
+  "seconds": 7.05
+ }
+}

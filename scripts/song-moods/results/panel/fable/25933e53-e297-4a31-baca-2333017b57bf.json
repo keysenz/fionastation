@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "galau",
+  "sendu"
+ ],
+ "energy": 0.25,
+ "positivity": 0.3,
+ "reason": "Slow, soft Bernadya ballad of late-night overthinking about whether life without \"you\" will end happily; lonely and wistful with a faint hopeful wish.",
+ "usage": {
+  "model": "claude-fable-5-2",
+  "inputTokens": 2066,
+  "outputTokens": 184,
+  "usd": 0.0404,
+  "seconds": 5.11
+ }
+}

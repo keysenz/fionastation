@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "galau",
+  "romantis"
+ ],
+ "energy": 0.3,
+ "positivity": 0.4,
+ "reason": "Slow 90s pop ballad about a relationship at a crossroads, with a partner who can't decide; pleading and uncertain but still tender and hopeful that love will pull them through.",
+ "usage": {
+  "model": "claude-fable-5-2",
+  "inputTokens": 1935,
+  "outputTokens": 189,
+  "usd": 0.023415,
+  "seconds": 5.71
+ }
+}

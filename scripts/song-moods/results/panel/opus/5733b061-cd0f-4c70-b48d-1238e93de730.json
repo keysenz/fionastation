@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "sendu",
+  "galau"
+ ],
+ "energy": 0.3,
+ "positivity": 0.2,
+ "reason": "Slow emotional duet ballad about letting a loved one go home to the sky, with grief and prayer; letting go is framed as an act of love.",
+ "usage": {
+  "model": "claude-opus-5-5",
+  "inputTokens": 2049,
+  "outputTokens": 253,
+  "usd": 0.013995,
+  "seconds": 6.33
+ }
+}

@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "sendu",
+  "galau"
+ ],
+ "energy": 0.2,
+ "positivity": 0.2,
+ "reason": "Slow, soft, intimate ballad by Nadin Amizah about a divided soul, distance from home and a quietly carried name, so it feels melancholic and longing.",
+ "usage": {
+  "model": "claude-sonnet-5-5",
+  "inputTokens": 1966,
+  "outputTokens": 184,
+  "usd": 0.0059755,
+  "seconds": 6.21
+ }
+}

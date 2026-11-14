@@ -44,16 +44,17 @@ THEME_SYSTEM = """You tag the theme of a whole stream or video by Fiona, an Indo
 Themes: birthday, anniversary, late-night (a stream starting roughly 22:00 to 03:00 UTC+7, or titled as one), debut, collab, seasonal (a holiday or season), cover-release (a produced song cover upload), regular-karaoke (an ordinary singing stream), original-release (her own song). Pick from the title first and the setlist second."""
 
 
-class Haiku:
-    """Calls Haiku through a headless Claude Code session, so it runs on the user's Claude login with no API key."""
+class Claude:
+    """Calls a Claude model through a headless Claude Code session, so it runs on the user's Claude login with no API key."""
 
-    def __init__(self) -> None:
+    def __init__(self, model: str = "haiku") -> None:
+        self.model = model
         self.last: dict = {}
 
     def ask(self, system: str, prompt: str, schema: type[BaseModel]) -> BaseModel | None:
         started = time.monotonic()
         done = subprocess.run(
-            [*JS_LANE, "claude", "-p", "--model", "haiku", "--output-format", "json", "--tools", "", "--no-session-persistence",
+            [*JS_LANE, "claude", "-p", "--model", self.model, "--output-format", "json", "--tools", "", "--no-session-persistence",
              "--settings", '{"disableAllHooks":true}', "--system-prompt", system,
              "--json-schema", json.dumps(schema.model_json_schema()), prompt],
             capture_output=True, text=True, check=True, cwd=tempfile.gettempdir(),

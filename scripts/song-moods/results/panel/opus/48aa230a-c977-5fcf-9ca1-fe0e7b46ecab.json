@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "galau",
+  "romantis"
+ ],
+ "energy": 0.3,
+ "positivity": 0.35,
+ "reason": "A slow boyband pop ballad about a relationship at a crossroads, pleading for another chance with hopeful but heartsick longing.",
+ "usage": {
+  "model": "claude-opus-5-5",
+  "inputTokens": 1935,
+  "outputTokens": 174,
+  "usd": 0.011503,
+  "seconds": 4.75
+ }
+}

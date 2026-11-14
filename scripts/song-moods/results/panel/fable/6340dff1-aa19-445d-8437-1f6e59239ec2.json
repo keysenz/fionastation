@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "romantis",
+  "chill"
+ ],
+ "energy": 0.3,
+ "positivity": 0.72,
+ "reason": "A tender, soft acoustic-pop love ballad about finding home in a lover who mended a nearly-dead heart; warm and affectionate with a gentle, laid-back delivery.",
+ "usage": {
+  "model": "claude-fable-5-2",
+  "inputTokens": 2119,
+  "outputTokens": 190,
+  "usd": 0.026399000000000002,
+  "seconds": 5.27
+ }
+}

@@ -1,0 +1,15 @@
+{
+ "moods": [
+  "sendu"
+ ],
+ "energy": 0.25,
+ "positivity": 0.2,
+ "reason": "Slow acoustic folk ballad about hiding pain behind fake laughter and wanting to cry and accept oneself; quiet non-romantic sadness with a faint hopeful ending.",
+ "usage": {
+  "model": "claude-fable-5-2",
+  "inputTokens": 2004,
+  "outputTokens": 188,
+  "usd": 0.024479,
+  "seconds": 5.81
+ }
+}

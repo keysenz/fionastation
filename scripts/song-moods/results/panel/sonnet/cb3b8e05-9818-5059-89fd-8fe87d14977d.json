@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "romantis",
+  "chill"
+ ],
+ "energy": 0.5,
+ "positivity": 0.55,
+ "reason": "Blue Jeans by HANA is a mid-tempo, moody Japanese pop/R&B track about insecurity and then being drawn to someone on a night out. The mood is a smooth, slightly dreamy infatuation.",
+ "usage": {
+  "model": "claude-sonnet-5-5",
+  "inputTokens": 1764,
+  "outputTokens": 203,
+  "usd": 0.0053575,
+  "seconds": 4.43
+ }
+}

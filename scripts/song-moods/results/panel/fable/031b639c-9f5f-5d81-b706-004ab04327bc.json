@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "galau",
+  "sendu"
+ ],
+ "energy": 0.3,
+ "positivity": 0.25,
+ "reason": "A slow, fragile folk-pop ballad about fearing abandonment and feeling hard to love, with insecurity in a relationship and self-doubt, softened only slightly by a promise to get better.",
+ "usage": {
+  "model": "claude-fable-5-2",
+  "inputTokens": 2117,
+  "outputTokens": 194,
+  "usd": 0.026527000000000002,
+  "seconds": 5.46
+ }
+}

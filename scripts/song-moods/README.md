@@ -31,4 +31,6 @@ Run these from `scripts/song-moods/`:
 
 The first command measures audio in the 5G audio lane and skips the Claude calls. The second reuses that audio and runs each `claude -p` call in the 4G JS lane by itself, so it needs no outer cap. Every result is cached: audio features beside the audio in `song-moods-audio.json`, Claude answers in `results/text/` and `results/themes/`. A rerun only measures or asks what is missing. Delete a file to redo it.
 
-`report.py` rewrites the generated part of `PROTOTYPE-RESULTS.md` and leaves the hand-written verdict above it alone. On its first run it writes `labels.csv`, a 20-song sheet for a person to label. Once the sheet is filled in, rerun `report.py` to get agreement figures.
+`report.py` rewrites the generated part of `PROTOTYPE-RESULTS.md` and leaves the hand-written verdict above it alone. `panel.py` has Opus, Fable and Sonnet tag the `labels.csv` songs blind, so the report can show whether Haiku agrees with stronger models. It runs one call at a time in the JS lane and cost $0.91 for 60 labels. That is agreement between models, not ground truth.
+
+On its first run `report.py` writes `labels.csv`, a 20-song sheet for a person to label. Once the sheet is filled in, rerun `report.py` to get agreement figures.

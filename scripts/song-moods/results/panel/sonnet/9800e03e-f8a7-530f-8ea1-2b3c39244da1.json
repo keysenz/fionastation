@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "ceria",
+  "chill"
+ ],
+ "energy": 0.55,
+ "positivity": 0.8,
+ "reason": "No lyrics available; \"Gentari Hariku\" (Rumah Kewinci) is an Indonesian indie-pop song that sounds warm and bright, so this is a best-guess tag from the title and artist's style.",
+ "usage": {
+  "model": "claude-sonnet-5-5",
+  "inputTokens": 1563,
+  "outputTokens": 200,
+  "usd": 0.0045235,
+  "seconds": 5.78
+ }
+}

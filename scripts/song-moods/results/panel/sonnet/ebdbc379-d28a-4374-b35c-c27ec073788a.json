@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "galau",
+  "sendu"
+ ],
+ "energy": 0.4,
+ "positivity": 0.2,
+ "reason": "Juicy Luicy's mid-tempo pop ballad about being unable to move on from someone who is with another person, with rain and tears imagery and a heartbroken, self-reproaching tone.",
+ "usage": {
+  "model": "claude-sonnet-5-5",
+  "inputTokens": 2082,
+  "outputTokens": 192,
+  "usd": 0.006519499999999999,
+  "seconds": 6.74
+ }
+}

@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "chill",
+  "ceria"
+ ],
+ "energy": 0.4,
+ "positivity": 0.68,
+ "reason": "Gentle mid-tempo acoustic pop where the singer looks back on a hard year with relief and gratitude, staying calm and hopeful rather than sad.",
+ "usage": {
+  "model": "claude-opus-5-5",
+  "inputTokens": 1949,
+  "outputTokens": 272,
+  "usd": 0.013575,
+  "seconds": 5.84
+ }
+}

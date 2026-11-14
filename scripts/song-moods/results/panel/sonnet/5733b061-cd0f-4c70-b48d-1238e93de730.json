@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "sendu",
+  "galau"
+ ],
+ "energy": 0.3,
+ "positivity": 0.2,
+ "reason": "A slow, emotional ballad about letting go of a loved one, with grief and a farewell tone, though it keeps a tender, accepting feel.",
+ "usage": {
+  "model": "claude-sonnet-5-5",
+  "inputTokens": 2053,
+  "outputTokens": 176,
+  "usd": 0.0062435,
+  "seconds": 4.61
+ }
+}

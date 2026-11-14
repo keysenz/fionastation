@@ -7,6 +7,8 @@ Fio Radio wants a "set the mood" feature: a mood picker, autoplay that stays clo
 **Lyrics-based tagging works well enough to build on, pending the labels. Audio energy as built here does not, so drop it as a cross-check.**
 
 - **Text tags read right.** Haiku's tags and reasons for the songs I know are plausible. For example, Monokrom comes back as nostalgic gratitude to family, not romance, and Gala Bunga Matahari as grief. Both are judgment calls until the labeling sheet is filled in, and agreement goes below when it is.
+- **Haiku agrees with stronger models as well as they agree with each other.** Opus 5.5, Fable 5.2 and Sonnet 5.5 tagged the 20 labeling-sheet songs blind. Haiku's first tag was among each model's tags for 90 to 100% of songs, while the stronger models managed 85 to 95% with each other. Every pair, the stronger models included, picked the same first tag for 70 to 80% of songs. Positivity agrees closely everywhere (ρ 0.89 to 0.95). Energy is the weak score: ρ is 0.60 to 0.64 between Haiku and the others, against 0.73 to 0.80 among the stronger models. That fits, because energy is about sound, which none of them hears. So a cheap model is enough, but this is agreement between models, not correctness. Human labels are still the real test.
+- **Where models disagree, they disagree between neighbouring moods.** Counting every pair of models, the first-tag splits were galau vs sendu 9 times, romantis vs sendu 6, ceria vs romantis 5, galau vs romantis 5 and chill vs sendu 4. No model ever confused opposites such as hype and sendu. The two songs without lyrics, Janji and Gentari Hariku, got the widest spread.
 - **Text is stable.** The two takes of Tampar got identical tags, with energy 0.35 both times and positivity 0.15 and 0.2. The two takes of Monokrom shared their first tag (sendu) and had energy 0.2 and 0.25.
 - **Lyrics matter.** Given only the title and artist, Haiku called Tampar "high-energy, rap-driven party music". Given the lyrics, it called it a galau, sendu ballad. The two songs without lyrics got guessed reasons, and Haiku says so in them ("No lyrics available; tagged from the title"). Its claim that Rumah Kewinci is "a kids' music group" may be invented. A song without lyrics needs a human tag or a low-confidence mark.
 - **Audio energy barely tracks text energy.** Spearman ρ is 0.19 across all 39 songs and 0.18 across the 32 stream songs. Of the five audio inputs, only spectral brightness follows text energy (ρ 0.43). Tempo is noise (ρ −0.02): the two takes of Tampar read 80.7 and 172.3 BPM, and the slow ballad Betelgeuse reads 184.6. Loudness measures mixing, not energy: produced covers have a median of −12.6 dB and stream songs −23.2 dB. All four flagged songs are slow ballads that audio rated energetic: the cover Rayuan Perempuan Gila, mastered at −11.5 dB; both takes of Monokrom, at about −17.5 dB, louder than most stream songs; and Betelgeuse, with doubled tempo. In each of these I believe the audio is wrong, not the text.
@@ -19,7 +21,7 @@ Fio Radio wants a "set the mood" feature: a mood picker, autoplay that stays clo
 - **Skip audio.** Audio would mean downloading and running demucs on hundreds of hours, for a signal that didn't help. If an audio check is wanted later, use a model trained for arousal and valence instead of hand-built features, and normalize loudness per video.
 - **Storage.** Store a hand-editable file keyed by song id, like `server/lyrics-aligned.json`, holding `{ moods, energy, positivity, source: "Lyrics" | "TitleOnly" | "Human" }`. Have the server join it to `/api/get-karaoke`. A human override has to win over the model.
 - **Picker design.** Six equal buckets would leave hype, ceria and chill nearly empty. Make the energy and positivity scores drive mood-aware autoplay (nearest neighbour on those two). Offer the picker as a few broad moods (for example "galau / sendu", "romantis", "ceria / hype", "chill") that map to score regions, not to exact tags.
-- **Before building.** Fill in `labels.csv`, rerun `report.py`, and check that the human's first tag lands among the model's tags for at least 15 of the 20 songs, and that energy correlates with ρ ≥ 0.6. If galau and sendu keep swapping, merge them.
+- **Before building.** Fill in `labels.csv`, rerun `report.py`, and check that the human's first tag lands among the model's tags for at least 15 of the 20 songs, and that energy correlates with ρ ≥ 0.6. If galau and sendu keep swapping, merge them, as the model panel already suggests.
 
 <!-- generated:start -->
 ## Songs
@@ -129,6 +131,21 @@ Fio Radio wants a "set the mood" feature: a mood picker, autoplay that stays clo
 ## Agreement with labels
 
 No labels yet. Fill in `labels.csv` and rerun `report.py`.
+
+## Model panel (not ground truth)
+
+Opus 5.5, Fable 5.2 and Sonnet 5.5 each tagged the labeling-sheet songs blind, from the same prompt and lyrics Haiku got. This shows whether cheap Haiku agrees with stronger models, and how much strong models agree with each other. None of them hears the singing, so it does not replace human labels.
+
+| Pair | First tag among the other's tags | Same first tag | Energy ρ | Positivity ρ |
+| --- | --- | --- | --- | --- |
+| haiku vs opus | 90% | 75% | 0.60 | 0.90 |
+| haiku vs fable | 90% | 75% | 0.64 | 0.89 |
+| haiku vs sonnet | 100% | 75% | 0.64 | 0.93 |
+| opus vs fable | 85% | 75% | 0.80 | 0.95 |
+| opus vs sonnet | 90% | 70% | 0.74 | 0.93 |
+| fable vs sonnet | 95% | 80% | 0.73 | 0.92 |
+
+Cost of the panel: opus $0.280, fable $0.507, sonnet $0.125.
 
 ## Cost and runtime
 

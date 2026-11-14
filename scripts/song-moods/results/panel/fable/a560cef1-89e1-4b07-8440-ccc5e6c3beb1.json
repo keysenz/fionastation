@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "romantis",
+  "chill"
+ ],
+ "energy": 0.3,
+ "positivity": 0.72,
+ "reason": "Gentle, slow-building folk-pop ballad by Nadin Amizah about being fully accepted and soothed by a loving partner — tender and grateful, with a soft, calming arrangement.",
+ "usage": {
+  "model": "claude-fable-5-2",
+  "inputTokens": 2037,
+  "outputTokens": 194,
+  "usd": 0.025247,
+  "seconds": 5.38
+ }
+}

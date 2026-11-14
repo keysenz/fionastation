@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "galau",
+  "sendu"
+ ],
+ "energy": 0.25,
+ "positivity": 0.15,
+ "reason": "Slow, aching Nadin Amizah ballad about a love kept secret and kept apart ('rumah yang berbeda'), carried silently until it bleeds.",
+ "usage": {
+  "model": "claude-opus-5-5",
+  "inputTokens": 1962,
+  "outputTokens": 184,
+  "usd": 0.011919,
+  "seconds": 4.27
+ }
+}

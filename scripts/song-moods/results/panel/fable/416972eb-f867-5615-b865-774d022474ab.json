@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "hype",
+  "ceria"
+ ],
+ "energy": 0.8,
+ "positivity": 0.85,
+ "reason": "Anthemic, uplifting Wuthering Waves game theme about courage, unity and rising above hardship, with a soaring, driving arrangement.",
+ "usage": {
+  "model": "claude-fable-5-2",
+  "inputTokens": 1933,
+  "outputTokens": 179,
+  "usd": 0.022983,
+  "seconds": 5.38
+ }
+}

@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "galau",
+  "sendu"
+ ],
+ "energy": 0.3,
+ "positivity": 0.2,
+ "reason": "Amigdala's slow, melancholic song about realizing a lover who left was never a true home, with repeated heartbroken refrain of longing and disillusionment.",
+ "usage": {
+  "model": "claude-sonnet-5-5",
+  "inputTokens": 1862,
+  "outputTokens": 181,
+  "usd": 0.0055295,
+  "seconds": 5.35
+ }
+}

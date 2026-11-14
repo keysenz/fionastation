@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "sendu",
+  "galau"
+ ],
+ "energy": 0.3,
+ "positivity": 0.2,
+ "reason": "Slow, swelling film-soundtrack ballad about letting go of a loved one who has passed away; grief and acceptance dominate, with lingering love and longing.",
+ "usage": {
+  "model": "claude-fable-5-2",
+  "inputTokens": 2049,
+  "outputTokens": 183,
+  "usd": 0.024999,
+  "seconds": 5.64
+ }
+}

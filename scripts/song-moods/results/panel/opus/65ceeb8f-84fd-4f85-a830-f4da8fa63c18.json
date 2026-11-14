@@ -1,0 +1,15 @@
+{
+ "moods": [
+  "sendu"
+ ],
+ "energy": 0.25,
+ "positivity": 0.2,
+ "reason": "Slow, gentle acoustic ballad about hiding pain behind fake laughter and asking to cry just once. The sadness is about mental exhaustion and learning to accept yourself, not about romance.",
+ "usage": {
+  "model": "claude-opus-5-5",
+  "inputTokens": 2004,
+  "outputTokens": 191,
+  "usd": 0.012395,
+  "seconds": 4.44
+ }
+}

@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "romantis",
+  "galau"
+ ],
+ "energy": 0.45,
+ "positivity": 0.45,
+ "reason": "No lyrics and I don't know this track, so this is a guess from the title \"Janji\" (promise), which usually points to love or longing, with mid-tempo energy assumed.",
+ "usage": {
+  "model": "claude-sonnet-5-5",
+  "inputTokens": 1560,
+  "outputTokens": 260,
+  "usd": 0.0051115,
+  "seconds": 5.5
+ }
+}

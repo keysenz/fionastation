@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "ceria",
+  "romantis"
+ ],
+ "energy": 0.6,
+ "positivity": 0.65,
+ "reason": "Low-confidence guess: unknown song with no lyrics; title 'Promise' suggests a warm, hopeful idol-pop song about a vow.",
+ "usage": {
+  "model": "claude-opus-5-5",
+  "inputTokens": 1556,
+  "outputTokens": 437,
+  "usd": 0.013731,
+  "seconds": 6.53
+ }
+}

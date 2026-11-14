@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "romantis",
+  "sendu"
+ ],
+ "energy": 0.2,
+ "positivity": 0.5,
+ "reason": "A soft, gentle ballad about being comforted and fully accepted by a loved one through fear and tears, tender and warm with a faint melancholic edge.",
+ "usage": {
+  "model": "claude-sonnet-5-5",
+  "inputTokens": 2041,
+  "outputTokens": 180,
+  "usd": 0.0062355,
+  "seconds": 5.67
+ }
+}
