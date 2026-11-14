@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "galau",
+  "sendu"
+ ],
+ "energy": 0.35,
+ "positivity": 0.2,
+ "reason": "A heartbroken song about someone who keeps breaking promises and stays on the singer's mind, with tears and quiet disappointment over three years, sung in a slow, subdued arrangement.",
+ "usage": {
+  "model": "claude-haiku-5-5",
+  "inputTokens": 2497,
+  "outputTokens": 519,
+  "usd": 0.00028465,
+  "seconds": 5.98
+ }
+}

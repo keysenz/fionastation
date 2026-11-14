@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "galau",
+  "sendu"
+ ],
+ "energy": 0.25,
+ "positivity": 0.15,
+ "reason": "A slow, somber ballad about letting a lover go and crying through the numbness of heartbreak, so it reads as romantic heartache with a melancholic undertone.",
+ "usage": {
+  "model": "claude-haiku-5-5",
+  "inputTokens": 2468,
+  "outputTokens": 517,
+  "usd": 0.00057045,
+  "seconds": 5.58
+ }
+}

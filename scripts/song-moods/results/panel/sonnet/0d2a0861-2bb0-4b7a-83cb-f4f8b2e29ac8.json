@@ -1,0 +1,15 @@
+{
+ "moods": [
+  "galau"
+ ],
+ "energy": 0.3,
+ "positivity": 0.25,
+ "reason": "Soft, slow-building ballad about being left without explanation and overthinking what went wrong, classic heartache and self-questioning.",
+ "usage": {
+  "model": "claude-sonnet-5-5",
+  "inputTokens": 2120,
+  "outputTokens": 167,
+  "usd": 0.0064215,
+  "seconds": 5.75
+ }
+}

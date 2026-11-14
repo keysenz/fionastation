@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "sendu",
+  "chill"
+ ],
+ "energy": 0.25,
+ "positivity": 0.35,
+ "reason": "A slow, gentle ballad about comforting a grieving soul (\"Menangislah, kau juga manusia\"), with a melancholic tone that is not about romance but ends on a hopeful note that you will be heard.",
+ "usage": {
+  "model": "claude-haiku-5-5",
+  "inputTokens": 2892,
+  "outputTokens": 565,
+  "usd": 0.00067925,
+  "seconds": 6.86
+ }
+}

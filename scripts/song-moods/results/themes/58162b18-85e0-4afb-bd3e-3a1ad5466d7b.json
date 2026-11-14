@@ -1,0 +1,14 @@
+{
+ "themes": [
+  "anniversary",
+  "late-night"
+ ],
+ "reason": "Title says \"Happy 2nd Anniversary\"; published 18:30 UTC (01:30 UTC+7) as an endurance karaoke stream, so late-night is secondary.",
+ "usage": {
+  "model": "claude-haiku-5-5",
+  "inputTokens": 2078,
+  "outputTokens": 429,
+  "usd": 0.00048037000000000004,
+  "seconds": 6.8
+ }
+}

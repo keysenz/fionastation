@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "romantis",
+  "chill"
+ ],
+ "energy": 0.3,
+ "positivity": 0.7,
+ "reason": "Gentle, slow-building Nadin Amizah folk-pop ballad about two people healing each other and finding relief and peace after a long struggle; tender and hopeful rather than sad.",
+ "usage": {
+  "model": "claude-fable-5-2",
+  "inputTokens": 1971,
+  "outputTokens": 191,
+  "usd": 0.024071,
+  "seconds": 6.09
+ }
+}

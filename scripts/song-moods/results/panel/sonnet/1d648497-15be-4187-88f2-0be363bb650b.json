@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "galau",
+  "sendu"
+ ],
+ "energy": 0.35,
+ "positivity": 0.25,
+ "reason": "Unrequited longing and daydreaming about someone from afar, in a soft, mellow pop arrangement with a wistful, resigned tone.",
+ "usage": {
+  "model": "claude-sonnet-5-5",
+  "inputTokens": 2038,
+  "outputTokens": 176,
+  "usd": 0.0061835,
+  "seconds": 4.27
+ }
+}

@@ -1,0 +1,14 @@
+{
+ "themes": [
+  "cover-release",
+  "collab"
+ ],
+ "reason": "Title marks it as a produced cover of \"Gentari Hariku / Rumah Kewinci\" in the \"Fio's side ver.\" format, which suggests one half of a duet; not a late-night or seasonal stream.",
+ "usage": {
+  "model": "claude-haiku-5-5",
+  "inputTokens": 1851,
+  "outputTokens": 846,
+  "usd": 0.0006434699999999999,
+  "seconds": 7.29
+ }
+}

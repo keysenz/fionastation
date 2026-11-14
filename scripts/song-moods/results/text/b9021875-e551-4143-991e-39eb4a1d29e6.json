@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "sendu",
+  "hype"
+ ],
+ "energy": 0.65,
+ "positivity": 0.45,
+ "reason": "A sweeping, anthemic epic about mortality and legacy: the lyrics dwell on birth, fleeting life and things left behind, with a melancholic undertone, but the chorus builds to a grand, triumphant \"epic poem\" climax.",
+ "usage": {
+  "model": "claude-haiku-5-5",
+  "inputTokens": 2429,
+  "outputTokens": 660,
+  "usd": 0.00063415,
+  "seconds": 7.51
+ }
+}

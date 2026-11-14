@@ -1,0 +1,13 @@
+{
+ "themes": [
+  "cover-release"
+ ],
+ "reason": "Kind is cover and the title is a #shorts cover of 1000X by Ghea Indrawari; published 10:05 UTC+7, so not late-night.",
+ "usage": {
+  "model": "claude-haiku-5-5",
+  "inputTokens": 1874,
+  "outputTokens": 521,
+  "usd": 0.00048557,
+  "seconds": 7.3
+ }
+}

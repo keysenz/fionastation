@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "romantis",
+  "galau"
+ ],
+ "energy": 0.35,
+ "positivity": 0.45,
+ "reason": "IU's slow piano-and-strings ballad that builds to a dramatic climax; devoted, all-consuming love against the world, tinged with bittersweet doom (\"a bad ending?\", \"I want to be sad with you\").",
+ "usage": {
+  "model": "claude-fable-5-2",
+  "inputTokens": 2088,
+  "outputTokens": 202,
+  "usd": 0.026383000000000004,
+  "seconds": 5.53
+ }
+}

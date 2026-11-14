@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "galau",
+  "romantis"
+ ],
+ "energy": 0.35,
+ "positivity": 0.4,
+ "reason": "A relationship at a crossroads, with confusion, distance, and pleading for a change of heart, wrapped in hopeful lines about love and a sunrise; the ballad-like tempo keeps it mid-low energy.",
+ "usage": {
+  "model": "claude-haiku-5-5",
+  "inputTokens": 2354,
+  "outputTokens": 628,
+  "usd": 0.00060315,
+  "seconds": 7.83
+ }
+}

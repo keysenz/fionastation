@@ -1,0 +1,15 @@
+{
+ "moods": [
+  "galau"
+ ],
+ "energy": 0.35,
+ "positivity": 0.15,
+ "reason": "Mid-tempo Indonesian pop ballad about being unable to move on from someone who is with another person after three years, asking to be slapped back to reality.",
+ "usage": {
+  "model": "claude-fable-5-2",
+  "inputTokens": 2078,
+  "outputTokens": 174,
+  "usd": 0.025103,
+  "seconds": 5.51
+ }
+}

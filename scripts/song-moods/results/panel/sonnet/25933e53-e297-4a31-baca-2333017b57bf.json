@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "sendu",
+  "galau"
+ ],
+ "energy": 0.2,
+ "positivity": 0.25,
+ "reason": "Soft, sparse ballad about late-night overthinking, mortality and fear of losing someone, with a wistful, hopeful-but-lonely tone.",
+ "usage": {
+  "model": "claude-sonnet-5-5",
+  "inputTokens": 2070,
+  "outputTokens": 180,
+  "usd": 0.010076,
+  "seconds": 4.62
+ }
+}

@@ -1,0 +1,14 @@
+{
+ "themes": [
+  "regular-karaoke",
+  "late-night"
+ ],
+ "reason": "Kind is karaoke with an ordinary mix of ballads and pop songs, and the title \"Menyanyi di tengah hujan\" has no event cue; the 2023-11-26 20:07 UTC publish time is 03:07 UTC+7, so a stream of about 14 songs likely ran inside the late-night window.",
+ "usage": {
+  "model": "claude-haiku-5-5",
+  "inputTokens": 2089,
+  "outputTokens": 1264,
+  "usd": 0.0010496,
+  "seconds": 8.26
+ }
+}

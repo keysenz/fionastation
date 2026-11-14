@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "galau",
+  "sendu"
+ ],
+ "energy": 0.4,
+ "positivity": 0.2,
+ "reason": "A heartbreak ballad about loving someone who is still trapped by their ex, with the narrator close to giving up, so the feeling is painful overthinking with a melancholic undertone.",
+ "usage": {
+  "model": "claude-haiku-5-5",
+  "inputTokens": 2603,
+  "outputTokens": 584,
+  "usd": 0.0006309499999999999,
+  "seconds": 7.02
+ }
+}

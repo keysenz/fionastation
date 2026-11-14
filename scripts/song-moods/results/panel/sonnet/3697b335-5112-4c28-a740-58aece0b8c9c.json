@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "romantis",
+  "sendu"
+ ],
+ "energy": 0.3,
+ "positivity": 0.35,
+ "reason": "IU's slow, dreamy ballad (the Love wins all MV is tragic) about a devoted pair running from the world together, with tender love lyrics tinged by melancholy and doomed-lover imagery.",
+ "usage": {
+  "model": "claude-sonnet-5-5",
+  "inputTokens": 2092,
+  "outputTokens": 199,
+  "usd": 0.0066295,
+  "seconds": 6.22
+ }
+}

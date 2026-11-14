@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "galau",
+  "sendu"
+ ],
+ "energy": 0.3,
+ "positivity": 0.2,
+ "reason": "Soft, intimate indie-folk ballad where the singer fears being left and struggles to love herself, so it carries relationship insecurity and quiet melancholy.",
+ "usage": {
+  "model": "claude-sonnet-5-5",
+  "inputTokens": 2121,
+  "outputTokens": 182,
+  "usd": 0.006575500000000001,
+  "seconds": 5.18
+ }
+}

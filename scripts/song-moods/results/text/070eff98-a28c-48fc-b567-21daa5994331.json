@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "galau",
+  "sendu"
+ ],
+ "energy": 0.3,
+ "positivity": 0.15,
+ "reason": "A slow, heavy ballad about staying in a relationship that is falling apart, feeling exhausted and broken but unable to let go, so it is mostly heartache and overthinking love.",
+ "usage": {
+  "model": "claude-haiku-5-5",
+  "inputTokens": 2444,
+  "outputTokens": 440,
+  "usd": 0.00052715,
+  "seconds": 5.78
+ }
+}

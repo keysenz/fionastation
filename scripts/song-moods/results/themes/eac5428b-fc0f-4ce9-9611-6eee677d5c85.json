@@ -1,0 +1,14 @@
+{
+ "themes": [
+  "regular-karaoke",
+  "late-night"
+ ],
+ "reason": "Titled as an ordinary karaoke stream; it went live at 01:34 UTC+7, inside the late-night window, and the mixed setlist fits a regular singing session.",
+ "usage": {
+  "model": "claude-haiku-5-5",
+  "inputTokens": 2348,
+  "outputTokens": 759,
+  "usd": 0.00069937,
+  "seconds": 8.5
+ }
+}

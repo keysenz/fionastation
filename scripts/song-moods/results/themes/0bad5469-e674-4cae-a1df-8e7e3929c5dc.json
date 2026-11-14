@@ -1,0 +1,14 @@
+{
+ "themes": [
+  "late-night",
+  "regular-karaoke"
+ ],
+ "reason": "Published 2024-06-17 18:05 UTC, which is 01:05 UTC+7, inside the late-night window; the title \"malam ini kita\" fits, and the two ordinary karaoke songs point to a regular-karaoke stream.",
+ "usage": {
+  "model": "claude-haiku-5-5",
+  "inputTokens": 1862,
+  "outputTokens": 539,
+  "usd": 0.00049217,
+  "seconds": 7.23
+ }
+}

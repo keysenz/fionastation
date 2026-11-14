@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "galau",
+  "sendu"
+ ],
+ "energy": 0.25,
+ "positivity": 0.2,
+ "reason": "A slow, hushed Nadin Amizah ballad about a secret, distant love kept alive only through prayer — longing and heartache with a quiet, melancholic acceptance.",
+ "usage": {
+  "model": "claude-fable-5-2",
+  "inputTokens": 1962,
+  "outputTokens": 188,
+  "usd": 0.023807000000000002,
+  "seconds": 5.38
+ }
+}

@@ -1,0 +1,13 @@
+{
+ "themes": [
+  "regular-karaoke"
+ ],
+ "reason": "Title \"nyanyi lagi eheheh\" (\"singing again\") and a karaoke kind with a list of covers, published 17:24 UTC+7 (not late-night), with no birthday, anniversary, debut, collab, or seasonal cues.",
+ "usage": {
+  "model": "claude-haiku-5-5",
+  "inputTokens": 2038,
+  "outputTokens": 404,
+  "usd": 0.00045987,
+  "seconds": 6.5
+ }
+}

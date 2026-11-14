@@ -1,0 +1,13 @@
+{
+ "themes": [
+  "regular-karaoke"
+ ],
+ "reason": "Title \"NYANYI!!!\" (Sing!!!) and kind \"karaoke\" mark an ordinary singing stream; it airs at 17:44 UTC+7, not late-night, and the varied setlist has no birthday or anniversary signal.",
+ "usage": {
+  "model": "claude-haiku-5-5",
+  "inputTokens": 1768,
+  "outputTokens": 344,
+  "usd": 0.00037587000000000005,
+  "seconds": 4.89
+ }
+}

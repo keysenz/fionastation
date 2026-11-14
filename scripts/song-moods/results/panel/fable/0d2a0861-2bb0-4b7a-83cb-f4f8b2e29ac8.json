@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "galau",
+  "sendu"
+ ],
+ "energy": 0.3,
+ "positivity": 0.15,
+ "reason": "Bernadya's slow, sparse ballad about being left without explanation and overthinking what she did wrong, ending in the realization that the partner simply fell out of love.",
+ "usage": {
+  "model": "claude-fable-5-2",
+  "inputTokens": 2116,
+  "outputTokens": 183,
+  "usd": 0.026071000000000004,
+  "seconds": 5.31
+ }
+}

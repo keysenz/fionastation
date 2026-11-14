@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "sendu",
+  "hype"
+ ],
+ "energy": 0.6,
+ "positivity": 0.45,
+ "reason": "Lyrics dwell on a fading soul, worry, and an \"incomplete melody\" with a sad symphony, but the chorus-like chants and the closing \"I believe, everything will be fine / time to shine\" push it toward an anthemic, hopeful lift.",
+ "usage": {
+  "model": "claude-haiku-5-5",
+  "inputTokens": 2632,
+  "outputTokens": 854,
+  "usd": 0.0007717500000000001,
+  "seconds": 8.09
+ }
+}

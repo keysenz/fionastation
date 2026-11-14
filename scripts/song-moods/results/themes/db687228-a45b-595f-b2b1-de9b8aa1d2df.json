@@ -1,0 +1,13 @@
+{
+ "themes": [
+  "cover-release"
+ ],
+ "reason": "Titled as a short cover upload of \"Only Love\" (kind: cover), published 19:57 UTC+7, so not a late-night stream.",
+ "usage": {
+  "model": "claude-haiku-5-5",
+  "inputTokens": 1846,
+  "outputTokens": 499,
+  "usd": 0.00046897,
+  "seconds": 6.85
+ }
+}

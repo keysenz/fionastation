@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "hype",
+  "ceria"
+ ],
+ "energy": 0.82,
+ "positivity": 0.8,
+ "reason": "Anthemic, uplifting game theme song about courage, unity and rising above hardship, built for shouting along.",
+ "usage": {
+  "model": "claude-opus-5-5",
+  "inputTokens": 1933,
+  "outputTokens": 166,
+  "usd": 0.011327,
+  "seconds": 4.43
+ }
+}

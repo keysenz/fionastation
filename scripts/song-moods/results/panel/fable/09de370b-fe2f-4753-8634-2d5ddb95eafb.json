@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "romantis",
+  "hype"
+ ],
+ "energy": 0.68,
+ "positivity": 0.72,
+ "reason": "Yuuri's soaring J-pop rock ballad about two people bonded like enduring starlight, promising to stay side by side; tender and devoted with an anthemic, belt-along chorus and a slight bittersweet undertone.",
+ "usage": {
+  "model": "claude-fable-5-2",
+  "inputTokens": 2225,
+  "outputTokens": 205,
+  "usd": 0.028695,
+  "seconds": 5.68
+ }
+}

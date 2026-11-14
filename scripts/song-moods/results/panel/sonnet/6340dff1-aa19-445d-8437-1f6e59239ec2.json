@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "romantis",
+  "chill"
+ ],
+ "energy": 0.35,
+ "positivity": 0.7,
+ "reason": "A warm, gentle pop love song about welcoming someone into your heart like a home, with tender and soft lyrics and a mellow arrangement.",
+ "usage": {
+  "model": "claude-sonnet-5-5",
+  "inputTokens": 2123,
+  "outputTokens": 176,
+  "usd": 0.0065235,
+  "seconds": 5.66
+ }
+}

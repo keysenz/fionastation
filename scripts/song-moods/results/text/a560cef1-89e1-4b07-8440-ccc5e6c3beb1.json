@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "sendu",
+  "romantis"
+ ],
+ "energy": 0.2,
+ "positivity": 0.4,
+ "reason": "A slow, gentle ballad about being comforted while crying (\"Jangan menangis\") and feeling fully accepted, with a hopeful note that the storm will pass, so it reads as tender but quietly sad.",
+ "usage": {
+  "model": "claude-haiku-5-5",
+  "inputTokens": 2456,
+  "outputTokens": 697,
+  "usd": 0.0006580500000000001,
+  "seconds": 8.37
+ }
+}

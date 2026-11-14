@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "sendu",
+  "chill"
+ ],
+ "energy": 0.3,
+ "positivity": 0.55,
+ "reason": "Gentle, bittersweet folk ballad about healing and relief when an inner struggle ends; it builds softly but stays tender and calm.",
+ "usage": {
+  "model": "claude-opus-5-5",
+  "inputTokens": 1971,
+  "outputTokens": 342,
+  "usd": 0.015151000000000001,
+  "seconds": 6.46
+ }
+}

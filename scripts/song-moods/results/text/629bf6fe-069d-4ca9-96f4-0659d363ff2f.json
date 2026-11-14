@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "galau",
+  "sendu"
+ ],
+ "energy": 0.3,
+ "positivity": 0.25,
+ "reason": "A slow, somber ballad about loving someone from far away and keeping that love as a quiet secret, with a heavy sense of longing and feeling torn apart.",
+ "usage": {
+  "model": "claude-haiku-5-5",
+  "inputTokens": 2381,
+  "outputTokens": 407,
+  "usd": 0.00049805,
+  "seconds": 6.07
+ }
+}

@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "romantis",
+  "galau"
+ ],
+ "energy": 0.4,
+ "positivity": 0.55,
+ "reason": "A slow-building, orchestral ballad about escaping the world with a lover and wanting to be lost and even sad together; the love is tender and devoted, but the lyrics carry doubt about a bad ending and lost-ness.",
+ "usage": {
+  "model": "claude-haiku-5-5",
+  "inputTokens": 2507,
+  "outputTokens": 644,
+  "usd": 0.00064175,
+  "seconds": 7.39
+ }
+}

@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "galau",
+  "sendu"
+ ],
+ "energy": 0.25,
+ "positivity": 0.12,
+ "reason": "Slow acoustic indie-folk ballad about realizing a lover who only \"stopped by\" was never truly home; heartbroken and melancholic with a quiet, building arrangement.",
+ "usage": {
+  "model": "claude-fable-5-2",
+  "inputTokens": 1858,
+  "outputTokens": 189,
+  "usd": 0.022183,
+  "seconds": 5.71
+ }
+}

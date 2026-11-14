@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "hype",
+  "ceria"
+ ],
+ "energy": 0.8,
+ "positivity": 0.8,
+ "reason": "Orchestral anthemic Wuthering Waves theme with triumphant lyrics about courage, rising above the storm and shining bright, so it feels epic and uplifting.",
+ "usage": {
+  "model": "claude-sonnet-5-5",
+  "inputTokens": 1937,
+  "outputTokens": 186,
+  "usd": 0.005879499999999999,
+  "seconds": 4.5
+ }
+}

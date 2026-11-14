@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "romantis",
+  "chill"
+ ],
+ "energy": 0.3,
+ "positivity": 0.65,
+ "reason": "Soft, slow-building ballad about two people gently teaching each other to accept their flaws and finding relief and happiness after an inner war, with a tender, intimate tone.",
+ "usage": {
+  "model": "claude-haiku-5-5",
+  "inputTokens": 2390,
+  "outputTokens": 626,
+  "usd": 0.00060935,
+  "seconds": 7.82
+ }
+}

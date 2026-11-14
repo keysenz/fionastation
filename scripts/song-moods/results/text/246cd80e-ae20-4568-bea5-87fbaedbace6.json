@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "ceria",
+  "hype"
+ ],
+ "energy": 0.65,
+ "positivity": 0.9,
+ "reason": "A playful, comedic novelty track with a bouncy beat and cheerful call-and-response; the corn-as-innuendo lyrics are silly and light rather than emotional.",
+ "usage": {
+  "model": "claude-haiku-5-5",
+  "inputTokens": 2647,
+  "outputTokens": 587,
+  "usd": 0.00064125,
+  "seconds": 7.06
+ }
+}

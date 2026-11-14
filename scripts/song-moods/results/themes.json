@@ -1,0 +1,337 @@
+{
+ "0a254a44-6f79-5cf7-8906-e02a3a7afd0a": {
+  "title": "You(=I) - BOL4 #vtuber #vtuberid #vtuberindonesia #shorts #cover #singing",
+  "video": "A54s0w3NjuE",
+  "publishedAt": "2026-05-09 12:50:01+00",
+  "kind": "cover",
+  "themes": [
+   "cover-release",
+   "regular-karaoke"
+  ],
+  "reason": "Kind is \"cover\" and the title carries #cover, marking a produced song cover upload; published 19:50 UTC+7 so not late-night, and it's a short with no birthday, anniversary, debut, or collab cues.",
+  "usage": {
+   "model": "claude-haiku-5-5",
+   "inputTokens": 1856,
+   "outputTokens": 491,
+   "usd": 0.00046697000000000004,
+   "seconds": 6.5
+  }
+ },
+ "087cf59b-7426-4f83-ae46-8bb36ced48cf": {
+  "title": "SINGING STREAM - SADTURDAY SADTEMBER WITH FIO...",
+  "video": "I6rpgZhQCBo",
+  "publishedAt": "2023-09-16 19:21:50+00",
+  "kind": "karaoke",
+  "themes": [
+   "seasonal",
+   "late-night"
+  ],
+  "reason": "Title is a September-themed sad-songs event (\"Sadtember\"), and the 02:21 UTC+7 start also falls in the late-night window.",
+  "usage": {
+   "model": "claude-haiku-5-5",
+   "inputTokens": 2417,
+   "outputTokens": 803,
+   "usd": 0.00073517,
+   "seconds": 7.15
+  }
+ },
+ "eac5428b-fc0f-4ce9-9611-6eee677d5c85": {
+  "title": "【Karaoke Stream】Nyanyi...........................",
+  "video": "0trjgNB55XQ",
+  "publishedAt": "2023-02-26 18:34:18+00",
+  "kind": "karaoke",
+  "themes": [
+   "regular-karaoke",
+   "late-night"
+  ],
+  "reason": "Titled as an ordinary karaoke stream; it went live at 01:34 UTC+7, inside the late-night window, and the mixed setlist fits a regular singing session.",
+  "usage": {
+   "model": "claude-haiku-5-5",
+   "inputTokens": 2348,
+   "outputTokens": 759,
+   "usd": 0.00069937,
+   "seconds": 8.5
+  }
+ },
+ "b00cace5-6053-5892-88ee-03a7892d8c56": {
+  "title": "Hana - Blue Jeans #vtuber #vtuberid #shorts #vtuberindonesia",
+  "video": "EhHikMA-EHs",
+  "publishedAt": "2026-05-06 23:54:02+00",
+  "kind": "cover",
+  "themes": [
+   "cover-release"
+  ],
+  "reason": "Titled as a cover of \"Blue Jeans\" (kind: cover), published 06:54 UTC+7, outside the late-night window, with no birthday, debut, collab, or seasonal cues.",
+  "usage": {
+   "model": "claude-haiku-5-5",
+   "inputTokens": 1851,
+   "outputTokens": 543,
+   "usd": 0.00049197,
+   "seconds": 5.68
+  }
+ },
+ "9000f055-19b6-5dad-b387-3240a51a66bf": {
+  "title": "1000X - Ghea Indrawari (by fioyoyow) #vtuber #vtuberid #shorts #shorts  #vtuberindonesia #singing",
+  "video": "auyWQOKHOl4",
+  "publishedAt": "2026-05-10 03:05:32+00",
+  "kind": "cover",
+  "themes": [
+   "cover-release"
+  ],
+  "reason": "Kind is cover and the title is a #shorts cover of 1000X by Ghea Indrawari; published 10:05 UTC+7, so not late-night.",
+  "usage": {
+   "model": "claude-haiku-5-5",
+   "inputTokens": 1874,
+   "outputTokens": 521,
+   "usd": 0.00048557,
+   "seconds": 7.3
+  }
+ },
+ "8e7025a1-3e22-4796-92d7-2d36014fa480": {
+  "title": "nyanyi lagi eheheh 🐰",
+  "video": "xLUUwhCqAi0",
+  "publishedAt": "2024-07-31 10:24:26+00",
+  "kind": "karaoke",
+  "themes": [
+   "regular-karaoke"
+  ],
+  "reason": "Title \"nyanyi lagi eheheh\" (\"singing again\") and a karaoke kind with a list of covers, published 17:24 UTC+7 (not late-night), with no birthday, anniversary, debut, collab, or seasonal cues.",
+  "usage": {
+   "model": "claude-haiku-5-5",
+   "inputTokens": 2038,
+   "outputTokens": 404,
+   "usd": 0.00045987,
+   "seconds": 6.5
+  }
+ },
+ "3f592b3d-3c7e-471c-bd8b-059769127195": {
+  "title": "Menyanyi di tengah hujan",
+  "video": "YsUXvVM7a-g",
+  "publishedAt": "2023-11-26 20:07:08+00",
+  "kind": "karaoke",
+  "themes": [
+   "regular-karaoke",
+   "late-night"
+  ],
+  "reason": "Kind is karaoke with an ordinary mix of ballads and pop songs, and the title \"Menyanyi di tengah hujan\" has no event cue; the 2023-11-26 20:07 UTC publish time is 03:07 UTC+7, so a stream of about 14 songs likely ran inside the late-night window.",
+  "usage": {
+   "model": "claude-haiku-5-5",
+   "inputTokens": 2089,
+   "outputTokens": 1264,
+   "usd": 0.0010496,
+   "seconds": 8.26
+  }
+ },
+ "5f157a05-7938-5c2c-a84b-a8e113bd2d26": {
+  "title": "Gentari Hariku - Rumah Kewinci 【Fio's side ver.】",
+  "video": "rBop0GfMhEo",
+  "publishedAt": "2026-01-03 13:00:06+00",
+  "kind": "original",
+  "themes": [
+   "cover-release",
+   "collab"
+  ],
+  "reason": "Title marks it as a produced cover of \"Gentari Hariku / Rumah Kewinci\" in the \"Fio's side ver.\" format, which suggests one half of a duet; not a late-night or seasonal stream.",
+  "usage": {
+   "model": "claude-haiku-5-5",
+   "inputTokens": 1851,
+   "outputTokens": 846,
+   "usd": 0.0006434699999999999,
+   "seconds": 7.29
+  }
+ },
+ "67543e90-f40f-4121-acc0-49b4594c0c57": {
+  "title": "【FIOYODAY2023】BIRTHDAY BNUY! (˵ •̀ ᴗ - ˵ ) ✧",
+  "video": "_5yR3KQekYs",
+  "publishedAt": "2023-12-30 18:17:05+00",
+  "kind": "karaoke",
+  "themes": [
+   "birthday",
+   "late-night"
+  ],
+  "reason": "Title is \"BIRTHDAY BNUY!\", and the published time (01:17 UTC+7) also falls in the late-night window.",
+  "usage": {
+   "model": "claude-haiku-5-5",
+   "inputTokens": 1912,
+   "outputTokens": 459,
+   "usd": 0.00046217000000000003,
+   "seconds": 5.73
+  }
+ },
+ "d646073b-35b6-4281-8ebf-065789160d6f": {
+  "title": "First Stream 2024 - Singing Stream 🎤",
+  "video": "g5XJsXaeKvE",
+  "publishedAt": "2024-01-02 17:41:06+00",
+  "kind": "karaoke",
+  "themes": [
+   "seasonal",
+   "late-night"
+  ],
+  "reason": "Title marks the first stream of 2024, a New Year seasonal opener; it began 00:41 UTC+7 on Jan 3, inside the late-night window.",
+  "usage": {
+   "model": "claude-haiku-5-5",
+   "inputTokens": 2264,
+   "outputTokens": 711,
+   "usd": 0.00065857,
+   "seconds": 7.2
+  }
+ },
+ "db687228-a45b-595f-b2b1-de9b8aa1d2df": {
+  "title": "Trademark - Only Love short cover by Fio  #vtuber #cover #singing #coversong",
+  "video": "g26JmYMkml4",
+  "publishedAt": "2026-07-24 12:57:13+00",
+  "kind": "cover",
+  "themes": [
+   "cover-release"
+  ],
+  "reason": "Titled as a short cover upload of \"Only Love\" (kind: cover), published 19:57 UTC+7, so not a late-night stream.",
+  "usage": {
+   "model": "claude-haiku-5-5",
+   "inputTokens": 1846,
+   "outputTokens": 499,
+   "usd": 0.00046897,
+   "seconds": 6.85
+  }
+ },
+ "d412f3c4-c088-5cb1-9898-5576858b6edf": {
+  "title": "Unwavering Startorch - Wuthering Waves cover by Fiona Clearesta #vtuber #wutheringwaves  #cover",
+  "video": "bUoOOVO-PHs",
+  "publishedAt": "2026-09-29 12:24:01+00",
+  "kind": "cover",
+  "themes": [
+   "cover-release"
+  ],
+  "reason": "Title says \"cover\" with kind \"cover\", and the upload is a single Wuthering Waves song cover; published 19:24 UTC+7, so not late-night, and no birthday, anniversary, seasonal, or collab markers.",
+  "usage": {
+   "model": "claude-haiku-5-5",
+   "inputTokens": 1870,
+   "outputTokens": 458,
+   "usd": 0.00045327,
+   "seconds": 6.2
+  }
+ },
+ "76ddc54e-6f5d-49ff-8e42-0401ccfa3bf4": {
+  "title": "Let's chill and sing🎤 /bentar aja 'w'",
+  "video": "x5wzO1pTt8c",
+  "publishedAt": "2024-01-03 17:37:37+00",
+  "kind": "karaoke",
+  "themes": [
+   "late-night",
+   "regular-karaoke"
+  ],
+  "reason": "Published 00:37 UTC+7 (within the 22:00-03:00 window) and the casual \"bentar aja\" karaoke title fits an ordinary singing stream.",
+  "usage": {
+   "model": "claude-haiku-5-5",
+   "inputTokens": 2127,
+   "outputTokens": 560,
+   "usd": 0.00055567,
+   "seconds": 6.74
+  }
+ },
+ "8299cb83-302e-4f4f-9751-4656dea3dce5": {
+  "title": "Happy #IndependenceDay2023  !!",
+  "video": "PlNyvoQEPUs",
+  "publishedAt": "2023-08-17 10:04:02+00",
+  "kind": "karaoke",
+  "themes": [
+   "seasonal",
+   "regular-karaoke"
+  ],
+  "reason": "Title is an Indonesian Independence Day (17 Aug) celebration, and the patriotic setlist fits; it's a karaoke stream published at 17:04 UTC+7, so not late-night.",
+  "usage": {
+   "model": "claude-haiku-5-5",
+   "inputTokens": 2234,
+   "outputTokens": 396,
+   "usd": 0.00049507,
+   "seconds": 6.24
+  }
+ },
+ "0bad5469-e674-4cae-a1df-8e7e3929c5dc": {
+  "title": "malam ini kita",
+  "video": "Qb8-ZdUXre0",
+  "publishedAt": "2024-06-17 18:05:42+00",
+  "kind": "karaoke",
+  "themes": [
+   "late-night",
+   "regular-karaoke"
+  ],
+  "reason": "Published 2024-06-17 18:05 UTC, which is 01:05 UTC+7, inside the late-night window; the title \"malam ini kita\" fits, and the two ordinary karaoke songs point to a regular-karaoke stream.",
+  "usage": {
+   "model": "claude-haiku-5-5",
+   "inputTokens": 1862,
+   "outputTokens": 539,
+   "usd": 0.00049217,
+   "seconds": 7.23
+  }
+ },
+ "8e287de2-2386-539c-b699-5ee9d98b3e7b": {
+  "title": "Rayuan Perempuan Gila - Nadin Amizah Cover by Fiona Clearesta",
+  "video": "_T-o96i5gaw",
+  "publishedAt": "2024-06-22 12:00:07+00",
+  "kind": "cover",
+  "themes": [
+   "cover-release"
+  ],
+  "reason": "Title marks it as a cover upload by Fiona, kind is \"cover\", and it was published at 19:00 UTC+7 so no late-night tag applies.",
+  "usage": {
+   "model": "claude-haiku-5-5",
+   "inputTokens": 1862,
+   "outputTokens": 413,
+   "usd": 0.00042917,
+   "seconds": 17.14
+  }
+ },
+ "2a009fc3-6e31-4528-a937-93ecd8580acc": {
+  "title": "NYANYI ！！！",
+  "video": "1KNfl-oMRPE",
+  "publishedAt": "2023-11-14 10:44:12+00",
+  "kind": "karaoke",
+  "themes": [
+   "regular-karaoke"
+  ],
+  "reason": "Title \"NYANYI!!!\" (Sing!!!) and kind \"karaoke\" mark an ordinary singing stream; it airs at 17:44 UTC+7, not late-night, and the varied setlist has no birthday or anniversary signal.",
+  "usage": {
+   "model": "claude-haiku-5-5",
+   "inputTokens": 1768,
+   "outputTokens": 344,
+   "usd": 0.00037587000000000005,
+   "seconds": 4.89
+  }
+ },
+ "6fe52b0e-8525-4d11-a2d6-9113aa627f09": {
+  "title": "wiii sudah bulan sadtember!! 🐰",
+  "video": "rQ1JC4YC1Qs",
+  "publishedAt": "2024-09-07 16:25:04+00",
+  "kind": "karaoke",
+  "themes": [
+   "late-night",
+   "regular-karaoke"
+  ],
+  "reason": "Published 16:25 UTC (23:25 UTC+7), inside the late-night window; a plain karaoke stream of sad Bernadya songs, with one birthday song that doesn't set the theme.",
+  "usage": {
+   "model": "claude-haiku-5-5",
+   "inputTokens": 2131,
+   "outputTokens": 624,
+   "usd": 0.00058847,
+   "seconds": 7.73
+  }
+ },
+ "58162b18-85e0-4afb-bd3e-3a1ad5466d7b": {
+  "title": "Happy 2nd Anniversary!! 🎉✨ - 1st Endurance Stream #2",
+  "video": "nHnPb4xYTlg",
+  "publishedAt": "2024-03-14 18:30:04+00",
+  "kind": "karaoke",
+  "themes": [
+   "anniversary",
+   "late-night"
+  ],
+  "reason": "Title says \"Happy 2nd Anniversary\"; published 18:30 UTC (01:30 UTC+7) as an endurance karaoke stream, so late-night is secondary.",
+  "usage": {
+   "model": "claude-haiku-5-5",
+   "inputTokens": 2078,
+   "outputTokens": 429,
+   "usd": 0.00048037000000000004,
+   "seconds": 6.8
+  }
+ }
+}

@@ -1,0 +1,15 @@
+{
+ "moods": [
+  "sendu"
+ ],
+ "energy": 0.25,
+ "positivity": 0.2,
+ "reason": "A slow, soft ballad about hiding pain behind fake smiles and wanting to cry and accept oneself. It is quiet sadness about the self, not romance.",
+ "usage": {
+  "model": "claude-sonnet-5-5",
+  "inputTokens": 2008,
+  "outputTokens": 179,
+  "usd": 0.0060935,
+  "seconds": 4.27
+ }
+}

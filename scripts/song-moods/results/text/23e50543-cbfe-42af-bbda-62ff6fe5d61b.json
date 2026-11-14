@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "galau",
+  "sendu"
+ ],
+ "energy": 0.3,
+ "positivity": 0.1,
+ "reason": "A slow, tearful ballad about being cheated on and hurt by a partner who chose someone else, with the singer crying and feeling wronged.",
+ "usage": {
+  "model": "claude-haiku-5-5",
+  "inputTokens": 2126,
+  "outputTokens": 295,
+  "usd": 0.00039105,
+  "seconds": 4.68
+ }
+}

@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "galau",
+  "sendu"
+ ],
+ "energy": 0.25,
+ "positivity": 0.25,
+ "reason": "Slow acoustic indie-folk ballad about unrequited love and daydreaming of being with someone who is only an illusion, sung in a hushed, lonely tone.",
+ "usage": {
+  "model": "claude-fable-5-2",
+  "inputTokens": 2034,
+  "outputTokens": 185,
+  "usd": 0.024839,
+  "seconds": 6.03
+ }
+}

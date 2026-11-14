@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "galau",
+  "sendu"
+ ],
+ "energy": 0.3,
+ "positivity": 0.2,
+ "reason": "A slow, wistful ballad about two people who thought they would end up together and now must part, with lingering longing (\"semoga rindu ini menghilang\") and a bittersweet \"hati-hati di jalan\" goodbye.",
+ "usage": {
+  "model": "claude-haiku-5-5",
+  "inputTokens": 2473,
+  "outputTokens": 528,
+  "usd": 0.00057695,
+  "seconds": 6.67
+ }
+}

@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "sendu",
+  "romantis"
+ ],
+ "energy": 0.25,
+ "positivity": 0.45,
+ "reason": "A slow, nostalgic ballad of gratitude for family and childhood memories in black-and-white photos, bittersweet with mortality undertones and no romantic-heartache angle.",
+ "usage": {
+  "model": "claude-haiku-5-5",
+  "inputTokens": 2420,
+  "outputTokens": 678,
+  "usd": 0.00064135,
+  "seconds": 7.65
+ }
+}

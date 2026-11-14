@@ -1,0 +1,13 @@
+{
+ "themes": [
+  "cover-release"
+ ],
+ "reason": "Titled as a cover of \"Blue Jeans\" (kind: cover), published 06:54 UTC+7, outside the late-night window, with no birthday, debut, collab, or seasonal cues.",
+ "usage": {
+  "model": "claude-haiku-5-5",
+  "inputTokens": 1851,
+  "outputTokens": 543,
+  "usd": 0.00049197,
+  "seconds": 5.68
+ }
+}

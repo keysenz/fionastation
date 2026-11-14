@@ -1,0 +1,13 @@
+{
+ "themes": [
+  "cover-release"
+ ],
+ "reason": "Title marks it as a cover upload by Fiona, kind is \"cover\", and it was published at 19:00 UTC+7 so no late-night tag applies.",
+ "usage": {
+  "model": "claude-haiku-5-5",
+  "inputTokens": 1862,
+  "outputTokens": 413,
+  "usd": 0.00042917,
+  "seconds": 17.14
+ }
+}

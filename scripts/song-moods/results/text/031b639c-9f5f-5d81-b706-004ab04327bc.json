@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "galau",
+  "sendu"
+ ],
+ "energy": 0.25,
+ "positivity": 0.2,
+ "reason": "Slow, hushed ballad where the singer frets over whether a lover still loves her, fears being left, and calls herself a \"crazy woman,\" a sad, self-doubting mood.",
+ "usage": {
+  "model": "claude-haiku-5-5",
+  "inputTokens": 2536,
+  "outputTokens": 514,
+  "usd": 0.00058255,
+  "seconds": 6.25
+ }
+}

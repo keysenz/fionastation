@@ -1,0 +1,14 @@
+{
+ "themes": [
+  "late-night",
+  "regular-karaoke"
+ ],
+ "reason": "Published 00:37 UTC+7 (within the 22:00-03:00 window) and the casual \"bentar aja\" karaoke title fits an ordinary singing stream.",
+ "usage": {
+  "model": "claude-haiku-5-5",
+  "inputTokens": 2127,
+  "outputTokens": 560,
+  "usd": 0.00055567,
+  "seconds": 6.74
+ }
+}

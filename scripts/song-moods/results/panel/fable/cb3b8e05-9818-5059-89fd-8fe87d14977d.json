@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "romantis",
+  "galau"
+ ],
+ "energy": 0.5,
+ "positivity": 0.6,
+ "reason": "HANA's mid-tempo nostalgic pop/R&B love song about an insecure girl who was fallen for on an ordinary night in blue jeans and old sneakers; tender and bittersweet with a wistful, longing undertone.",
+ "usage": {
+  "model": "claude-fable-5-2",
+  "inputTokens": 1760,
+  "outputTokens": 207,
+  "usd": 0.021335,
+  "seconds": 5.99
+ }
+}

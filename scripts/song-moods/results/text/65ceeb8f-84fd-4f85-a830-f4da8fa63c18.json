@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "sendu",
+  "galau"
+ ],
+ "energy": 0.3,
+ "positivity": 0.15,
+ "reason": "A slow, heavy ballad about emotional exhaustion, pretending to laugh while hurting, and wanting permission to cry; the sadness is about self-hurt rather than romance, with galau as a secondary tag for the emotional strain.",
+ "usage": {
+  "model": "claude-haiku-5-5",
+  "inputTokens": 2423,
+  "outputTokens": 647,
+  "usd": 0.00062645,
+  "seconds": 6.38
+ }
+}

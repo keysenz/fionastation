@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "romantis",
+  "chill"
+ ],
+ "energy": 0.25,
+ "positivity": 0.8,
+ "reason": "A tender, slow-paced love song about finding someone who walks beside you without rushing and makes sense of past fear, with a hopeful, warm tone.",
+ "usage": {
+  "model": "claude-haiku-5-5",
+  "inputTokens": 2349,
+  "outputTokens": 491,
+  "usd": 0.00053365,
+  "seconds": 6.96
+ }
+}

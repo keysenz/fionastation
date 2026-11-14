@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "romantis",
+  "ceria"
+ ],
+ "energy": 0.7,
+ "positivity": 0.85,
+ "reason": "A bouncy, giddy love song about a racing heart and a crush slowly warming up, with a playful, hopeful tone throughout.",
+ "usage": {
+  "model": "claude-haiku-5-5",
+  "inputTokens": 2752,
+  "outputTokens": 426,
+  "usd": 0.00058175,
+  "seconds": 6.41
+ }
+}

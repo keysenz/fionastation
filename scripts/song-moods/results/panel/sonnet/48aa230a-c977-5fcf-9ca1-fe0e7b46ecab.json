@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "galau",
+  "romantis"
+ ],
+ "energy": 0.35,
+ "positivity": 0.35,
+ "reason": "A slow, soft-rock ballad about a partner who is unsure whether to stay, with the singer hopeful but pleading, so it feels like relationship heartache with tender undertones.",
+ "usage": {
+  "model": "claude-sonnet-5-5",
+  "inputTokens": 1939,
+  "outputTokens": 188,
+  "usd": 0.0059074999999999996,
+  "seconds": 5.14
+ }
+}

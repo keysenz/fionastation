@@ -1,0 +1,13 @@
+{
+ "themes": [
+  "cover-release"
+ ],
+ "reason": "Title says \"cover\" with kind \"cover\", and the upload is a single Wuthering Waves song cover; published 19:24 UTC+7, so not late-night, and no birthday, anniversary, seasonal, or collab markers.",
+ "usage": {
+  "model": "claude-haiku-5-5",
+  "inputTokens": 1870,
+  "outputTokens": 458,
+  "usd": 0.00045327,
+  "seconds": 6.2
+ }
+}

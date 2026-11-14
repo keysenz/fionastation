@@ -1,0 +1,16 @@
+{
+ "moods": [
+  "galau",
+  "romantis"
+ ],
+ "energy": 0.45,
+ "positivity": 0.45,
+ "reason": "Mid-tempo R&B-pop by HANA with a nostalgic, wistful feel: insecurity and remembering a night when someone loved her just as she was, in old jeans and messy makeup.",
+ "usage": {
+  "model": "claude-opus-5-5",
+  "inputTokens": 1760,
+  "outputTokens": 340,
+  "usd": 0.013423000000000001,
+  "seconds": 5.9
+ }
+}
