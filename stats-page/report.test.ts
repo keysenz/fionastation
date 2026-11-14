@@ -7,6 +7,7 @@ import {
   histogramOf,
   parseReport,
   sortSongs,
+  sortTransitions,
   totalsOf,
 } from './report.ts'
 
@@ -43,6 +44,16 @@ const raw = {
   ],
   skipBucketSeconds: 10,
   skipBucketCount: 31,
+  outcomes: [
+    { origin: 'Visitor', plays: 10, finishes: 6, skips: 3, medianSecondsIntoSkip: 25 },
+    { origin: 'Autoplay', plays: 0, finishes: 0, skips: 0, medianSecondsIntoSkip: null },
+  ],
+  transitions: [
+    { prevSongId: 'a', songId: 'b', prevTitle: 'A', title: null, plays: 6, finishes: 3, skips: 3 },
+    { prevSongId: 'b', songId: 'c', prevTitle: null, title: 'C', plays: 2, finishes: 2, skips: 0 },
+    { prevSongId: 'c', songId: 'a', prevTitle: 'C', title: 'A', plays: 4, finishes: 1, skips: 0 },
+  ],
+  transitionMinPlays: 2,
 }
 const report = parseReport(raw) as Report
 
@@ -155,5 +166,38 @@ describe('charts', () => {
     expect(svg.querySelector('[data-bucket="30"] title')?.textContent).toBe(
       '300s and later: 4 skips',
     )
+  })
+})
+
+describe('transitions', () => {
+  const pairs = (rows: ReturnType<typeof sortTransitions>) =>
+    rows.map(row => `${row.prevSongId}${row.songId}`)
+
+  test('hides pairs under the minimum, so a single event cannot lead a rate sort', () => {
+    expect(
+      pairs(sortTransitions(report.transitions, 5, 'plays', 'desc')),
+    ).toEqual(['ab'])
+    expect(
+      pairs(sortTransitions(report.transitions, 2, 'plays', 'desc')),
+    ).toEqual(['ab', 'ca', 'bc'])
+  })
+
+  test('sorts by finish rate and skip rate, either way, and by the pair name', () => {
+    expect(
+      pairs(sortTransitions(report.transitions, 2, 'finishRate', 'desc')),
+    ).toEqual(['bc', 'ab', 'ca'])
+    expect(
+      pairs(sortTransitions(report.transitions, 2, 'skipRate', 'asc')),
+    ).toEqual(['ca', 'bc', 'ab'])
+    expect(
+      pairs(sortTransitions(report.transitions, 2, 'transition', 'asc')),
+    ).toEqual(['ab', 'bc', 'ca'])
+  })
+
+  test('rejects a report whose outcomes are missing', () => {
+    expect(parseReport({ ...raw, outcomes: undefined })).toBeUndefined()
+    expect(
+      parseReport({ ...raw, transitions: [{ prevSongId: 'a' }] }),
+    ).toBeUndefined()
   })
 })

@@ -28,6 +28,24 @@ export type SkipBucket = Readonly<{
   count: number
 }>
 
+export type OutcomeRow = Readonly<{
+  origin: Origin
+  plays: number
+  finishes: number
+  skips: number
+  medianSecondsIntoSkip: number | null
+}>
+
+export type TransitionRow = Readonly<{
+  prevSongId: string
+  songId: string
+  prevTitle: string | null
+  title: string | null
+  plays: number
+  finishes: number
+  skips: number
+}>
+
 export type Report = Readonly<{
   days: number
   since: string
@@ -37,6 +55,9 @@ export type Report = Readonly<{
   skipBuckets: readonly SkipBucket[]
   skipBucketSeconds: number
   skipBucketCount: number
+  outcomes: readonly OutcomeRow[]
+  transitions: readonly TransitionRow[]
+  transitionMinPlays: number
 }>
 
 const record = (value: unknown) =>
@@ -128,6 +149,55 @@ const parseBucket = (item: unknown): SkipBucket | undefined => {
     : { songId, bucket, count: amount }
 }
 
+const parseOutcome = (item: unknown): OutcomeRow | undefined => {
+  const fields = record(item)
+  const origin = ORIGINS.find(known => known === fields?.origin)
+  const plays = count(fields?.plays)
+  const finishes = count(fields?.finishes)
+  const skips = count(fields?.skips)
+  const median = fields?.medianSecondsIntoSkip
+  if (
+    origin === undefined ||
+    plays === undefined ||
+    finishes === undefined ||
+    skips === undefined ||
+    (median !== null && count(median) === undefined)
+  ) {
+    return undefined
+  }
+  return {
+    origin,
+    plays,
+    finishes,
+    skips,
+    medianSecondsIntoSkip: median === null ? null : (median as number),
+  }
+}
+
+const parseTransition = (item: unknown): TransitionRow | undefined => {
+  const fields = record(item)
+  const prevSongId = text(fields?.prevSongId)
+  const songId = text(fields?.songId)
+  const plays = count(fields?.plays)
+  const finishes = count(fields?.finishes)
+  const skips = count(fields?.skips)
+  return prevSongId === undefined ||
+    songId === undefined ||
+    plays === undefined ||
+    finishes === undefined ||
+    skips === undefined
+    ? undefined
+    : {
+        prevSongId,
+        songId,
+        prevTitle: text(fields?.prevTitle) ?? null,
+        title: text(fields?.title) ?? null,
+        plays,
+        finishes,
+        skips,
+      }
+}
+
 export const parseReport = (raw: unknown): Report | undefined => {
   const fields = record(raw)
   const days = count(fields?.days)
@@ -138,6 +208,9 @@ export const parseReport = (raw: unknown): Report | undefined => {
   const skipBuckets = each(fields?.skipBuckets, parseBucket)
   const skipBucketSeconds = count(fields?.skipBucketSeconds)
   const skipBucketCount = count(fields?.skipBucketCount)
+  const outcomes = each(fields?.outcomes, parseOutcome)
+  const transitions = each(fields?.transitions, parseTransition)
+  const transitionMinPlays = count(fields?.transitionMinPlays)
   if (
     days === undefined ||
     since === undefined ||
@@ -146,7 +219,10 @@ export const parseReport = (raw: unknown): Report | undefined => {
     !daily ||
     !skipBuckets ||
     !skipBucketSeconds ||
-    !skipBucketCount
+    !skipBucketCount ||
+    !outcomes ||
+    !transitions ||
+    transitionMinPlays === undefined
   ) {
     return undefined
   }
@@ -159,6 +235,9 @@ export const parseReport = (raw: unknown): Report | undefined => {
     skipBuckets,
     skipBucketSeconds,
     skipBucketCount,
+    outcomes,
+    transitions,
+    transitionMinPlays,
   }
 }
 
@@ -175,7 +254,7 @@ export type Totals = Readonly<{
   finishRate: number | null
 }>
 
-const ratio = (part: number, whole: number) =>
+export const ratio = (part: number, whole: number) =>
   whole === 0 ? null : part / whole
 
 export const totalsOf = (daily: readonly DayRow[]): Totals => {
@@ -196,6 +275,55 @@ export const totalsOf = (daily: readonly DayRow[]): Totals => {
     skips: sum(daily.map(day => day.skips.Visitor + day.skips.Autoplay)),
     finishRate: ratio(finishes, totalPlays),
   }
+}
+
+export const TRANSITION_COLUMNS = [
+  'transition',
+  'plays',
+  'finishRate',
+  'skipRate',
+] as const
+export type TransitionColumn = (typeof TRANSITION_COLUMNS)[number]
+
+export const MIN_PLAYS_CHOICES = [2, 5, 10] as const
+
+const transitionValue = (
+  row: TransitionRow,
+  column: TransitionColumn,
+): string | number | null => {
+  switch (column) {
+    case 'transition':
+      return `${row.prevTitle ?? row.prevSongId} ${row.title ?? row.songId}`.toLowerCase()
+    case 'plays':
+      return row.plays
+    case 'finishRate':
+      return ratio(row.finishes, row.plays)
+    case 'skipRate':
+      return ratio(row.skips, row.plays)
+  }
+}
+
+export const sortTransitions = (
+  rows: readonly TransitionRow[],
+  minPlays: number,
+  column: TransitionColumn,
+  direction: SortDirection,
+): TransitionRow[] => {
+  const sign = direction === 'asc' ? 1 : -1
+  return rows
+    .filter(row => row.plays >= minPlays)
+    .toSorted((left, right) => {
+      const a = transitionValue(left, column)
+      const b = transitionValue(right, column)
+      if (a === null || b === null) {
+        return a === b ? 0 : a === null ? 1 : -1
+      }
+      const order =
+        typeof a === 'string' && typeof b === 'string'
+          ? a.localeCompare(b)
+          : Number(a) - Number(b)
+      return order * sign || right.plays - left.plays
+    })
 }
 
 export const SONG_COLUMNS = [
@@ -272,6 +400,14 @@ export const formatPercent = (value: number | null) =>
 
 export const formatSeconds = (value: number | null) =>
   value === null ? 'n/a' : `${Math.round(value)}s`
+
+export const EXPORT_TABLES = [
+  { table: 'events', label: 'Export listening trail' },
+  { table: 'decisions', label: 'Export autoplay decisions' },
+] as const
+
+export const exportUrl = (table: string, days: number) =>
+  `/api/stats-page/export?days=${days}&table=${table}`
 
 export const RANGES = [
   { label: '24 h', days: 1 },
