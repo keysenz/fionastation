@@ -1,4 +1,4 @@
-import { Array, Option, Schema } from 'effect'
+import { Array, Effect, Option, Schema } from 'effect'
 import { defineTaggedUnion } from 'foldkit/schema'
 
 import { WriteFailure } from '../../api.ts'
@@ -14,10 +14,16 @@ export const EditToken = Schema.String.check(
 ).pipe(Schema.brand('EditToken'))
 export type EditToken = typeof EditToken.Type
 
+export const Origin = Schema.Literals(['Created', 'PickedUp'])
+export type Origin = typeof Origin.Type
+
 export const Owned = Schema.Struct({
   id: PlaylistId,
   name: Schema.String,
   editToken: EditToken,
+  origin: Origin.pipe(
+    Schema.withDecodingDefaultTypeKey(Effect.succeed('Created' as const)),
+  ),
 })
 export type Owned = typeof Owned.Type
 
@@ -71,7 +77,10 @@ export const applyChange = (
     Forget: ({ id }) => forget(owned, id),
   })
 
-export const Candidate = Schema.Struct({ id: PlaylistId, editToken: EditToken })
+export const Candidate = Schema.Struct({
+  id: PlaylistId,
+  editToken: EditToken,
+})
 export type Candidate = typeof Candidate.Type
 
 export const isUnproven = (
@@ -80,6 +89,22 @@ export const isUnproven = (
   editToken: EditToken,
 ): boolean =>
   Option.exists(editTokenOf(owned, id), stored => stored !== editToken)
+
+export const originFor = (
+  owned: ReadonlyArray<Owned>,
+  id: PlaylistId,
+  editToken: EditToken,
+): Origin =>
+  Option.getOrElse(
+    Option.map(
+      Array.findFirst(
+        owned,
+        entry => entry.id === id && entry.editToken === editToken,
+      ),
+      ({ origin }) => origin,
+    ),
+    () => 'PickedUp',
+  )
 
 export const mergeOwned = (
   loaded: ReadonlyArray<Owned>,
@@ -137,6 +162,7 @@ export type Remembered = typeof Remembered.Type
 
 export const PlaylistDialog = defineTaggedUnion({
   Closed: {},
+  Account: {},
   Editing: { form: PlaylistForm, maybeFailure: Schema.Option(WriteFailure) },
   Sending: { form: PlaylistForm },
   Shared: {

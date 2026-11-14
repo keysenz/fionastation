@@ -171,7 +171,7 @@ describe('login', () => {
     })
   })
 
-  test('a state that differs from the cookie, or is missing, is a 400 with no session and no Discord call', async () => {
+  test('a state that differs from the cookie, or is missing, lands on the page as login=state with no session and no Discord call', async () => {
     const { send, calls, sessionRows } = harness()
     await send('discord/start')
     const attempts = [
@@ -181,7 +181,10 @@ describe('login', () => {
       { query: 'code=code-1&state=', cookie: 'fs_oauth_state=' },
     ]
     for (const attempt of attempts) {
-      expect(statusOf(await send('discord/callback', attempt))).toBe(400)
+      expect(await send('discord/callback', attempt)).toMatchObject({
+        kind: 'Redirect',
+        location: '/?login=state',
+      })
     }
     expect(calls).toEqual([])
     expect(sessionRows()).toEqual([])
@@ -212,15 +215,21 @@ describe('login', () => {
         },
       },
     ],
-  ])('a failed login is a 502 with no session when %s', async (_, options) => {
-    const { login, sessionRows, send } = harness(options)
-    const { reply, cookie } = await login()
+  ])(
+    'a failed login lands on the page as login=refused with no session when %s',
+    async (_, options) => {
+      const { login, sessionRows, send } = harness(options)
+      const { reply, cookie } = await login()
 
-    expect(statusOf(reply)).toBe(502)
-    expect(reply.cookies.join()).not.toContain('fs_session')
-    expect(sessionRows()).toEqual([])
-    expect(statusOf(await send('me', { cookie }))).toBe(401)
-  })
+      expect(reply).toMatchObject({
+        kind: 'Redirect',
+        location: '/?login=refused',
+      })
+      expect(reply.cookies.join()).not.toContain('fs_session')
+      expect(sessionRows()).toEqual([])
+      expect(statusOf(await send('me', { cookie }))).toBe(401)
+    },
+  )
 
   test('a visitor who cancels on Discord returns to the page with no session', async () => {
     const { send, sessionRows, calls } = harness()
@@ -266,14 +275,24 @@ describe('login', () => {
         cookie: 'fs_oauth_state=chosen',
         ip,
       })
-    const answers = []
-    for (let i = 0; i < 6; i++) answers.push(statusOf(await hit('1.1.1.1')))
-    expect(answers).toEqual([302, 302, 302, 429, 429, 429])
+    const locations = []
+    for (let i = 0; i < 6; i++) {
+      const reply = await hit('1.1.1.1')
+      locations.push(reply.kind === 'Redirect' ? reply.location : undefined)
+    }
+    expect(locations).toEqual([
+      '/',
+      '/',
+      '/',
+      ...Array(3).fill('/?login=limit'),
+    ])
     expect(
       calls.filter(call => call.url.endsWith('/oauth2/token')),
     ).toHaveLength(3)
-    expect(statusOf(await send('discord/start', { ip: '1.1.1.1' }))).toBe(429)
-    expect(statusOf(await hit('2.2.2.2'))).not.toBe(429)
+    expect(await send('discord/start', { ip: '1.1.1.1' })).toMatchObject({
+      location: '/?login=limit',
+    })
+    expect(await hit('2.2.2.2')).toMatchObject({ location: '/' })
   })
 
   test('every callback answer clears the state cookie, so the same state cannot be replayed', async () => {

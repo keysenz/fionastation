@@ -24,6 +24,7 @@ const owned = (value: string, name = value): Owned => ({
   id: id(value),
   name,
   editToken: token(`token-${value}`),
+  origin: 'Created',
 })
 const [one, two] = [owned('AAAAAAAA'), owned('BBBBBBBB')]
 
@@ -91,4 +92,21 @@ test('a token that differs from the stored one is unproven, a new playlist is no
   expect(isUnproven([one], one.id, other)).toBe(true)
   expect(isUnproven([one], one.id, one.editToken)).toBe(false)
   expect(isUnproven([two], one.id, other)).toBe(false)
+})
+
+test('an entry stored before origins were recorded reads as created', () => {
+  expect(
+    parseOwned(
+      Option.some(
+        JSON.stringify([
+          { id: 'AAAAAAAA', name: 'old', editToken: 'token-AAAAAAAA' },
+        ]),
+      ),
+    ),
+  ).toEqual([{ ...one, name: 'old' }])
+})
+
+test('a picked-up origin survives storage', () => {
+  const pickedUp: Owned = { ...two, origin: 'PickedUp' }
+  expect(parseOwned(Option.some(ownedToJson([pickedUp])))).toEqual([pickedUp])
 })

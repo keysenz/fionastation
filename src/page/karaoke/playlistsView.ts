@@ -3,6 +3,7 @@ import type { Html, HtmlBuilder } from 'foldkit/html'
 import { twMerge } from 'tailwind-merge'
 
 import { WriteFailure } from '../../api.ts'
+import { Account, type Listed, reachablePlaylists } from './account.ts'
 import {
   Message,
   type Model,
@@ -16,6 +17,7 @@ import {
   type CopyTarget,
   PlaylistForm,
   SAVE_SOURCES,
+  playlistPath,
   writtenName,
 } from './playlists.ts'
 import type { SaveSource } from './setlist.ts'
@@ -92,7 +94,21 @@ export const savePlaylistButtonView = (h: HtmlBuilder<Message>): Html =>
     [
       h.i([h.Class('fas fa-bookmark'), h.AriaHidden(true)]),
       h.span([h.Class('hidden sm:inline')], ['Save as playlist']),
-      h.span([h.Class('sm:hidden')], ['Save']),
+    ],
+  )
+
+export const myPlaylistsButtonView = (h: HtmlBuilder<Message>): Html =>
+  h.button(
+    [
+      h.Type('button'),
+      h.AriaLabel('My playlists'),
+      h.DataAttribute('playlist-action', 'Mine'),
+      h.OnClick(Message.ClickedOpenMyPlaylists()),
+      h.Class(barButtonClass),
+    ],
+    [
+      h.i([h.Class('fas fa-list'), h.AriaHidden(true)]),
+      h.span([h.Class('hidden sm:inline')], ['My playlists']),
     ],
   )
 
@@ -472,6 +488,122 @@ const sharedBodyView = (
   }),
 ]
 
+const accountSectionView = (model: Model, h: HtmlBuilder<Message>): Html =>
+  Account.match<Html>(model.account, {
+    Loading: () => h.empty,
+    Unavailable: () => h.empty,
+    SignedOut: () =>
+      h.div(
+        [h.DataAttribute('account', 'SignedOut'), h.Class('space-y-2')],
+        [
+          h.button(
+            [
+              h.Type('button'),
+              h.DataAttribute('playlist-action', 'Connect'),
+              h.OnClick(Message.ClickedConnectDiscord()),
+              h.Class(twMerge(primaryClass, 'w-full')),
+            ],
+            [
+              h.i([h.Class('fab fa-discord'), h.AriaHidden(true)]),
+              'Connect Discord',
+            ],
+          ),
+          h.p(
+            [h.Class('text-xs text-gray-300')],
+            [
+              "Connect to edit your playlists from any browser. Connected fans can also manage them with /playlist in Fiona's Discord server.",
+            ],
+          ),
+        ],
+      ),
+    Connected: ({ name }) =>
+      h.div(
+        [
+          h.DataAttribute('account', 'Connected'),
+          h.Class('flex flex-wrap items-center gap-2'),
+        ],
+        [
+          h.p(
+            [h.Class('min-w-0 flex-1 text-sm')],
+            [
+              'Connected as ',
+              h.span(
+                [
+                  h.DataAttribute('account-name', ''),
+                  h.Class('font-semibold break-words'),
+                ],
+                [name],
+              ),
+            ],
+          ),
+          h.button(
+            [
+              h.Type('button'),
+              h.DataAttribute('playlist-action', 'Disconnect'),
+              h.OnClick(Message.ClickedDisconnectDiscord()),
+              h.Class(quietClass),
+            ],
+            ['Disconnect'],
+          ),
+        ],
+      ),
+  })
+
+const listedPlaylistView = (entry: Listed, h: HtmlBuilder<Message>): Html =>
+  h.li(
+    [],
+    [
+      h.a(
+        [
+          h.Href(playlistPath(entry.id)),
+          h.DataAttribute('my-playlist', entry.id),
+          h.Class(
+            'block min-h-11 rounded-lg px-3 py-2 text-sm break-words hover:bg-white/10',
+          ),
+        ],
+        [entry.name],
+      ),
+    ],
+  )
+
+const accountDialogBodyView = (
+  model: Model,
+  h: HtmlBuilder<Message>,
+): ReadonlyArray<Html> => {
+  const playlists = reachablePlaylists(model.account, model.mine)
+  return [
+    h.h1(
+      [h.Id(`${PLAYLIST_DIALOG_ID}-title`), h.Class('text-lg font-bold')],
+      ['My playlists'],
+    ),
+    accountSectionView(model, h),
+    Array.isReadonlyArrayNonEmpty(playlists)
+      ? h.ul(
+          [
+            h.DataAttribute('my-playlists', String(playlists.length)),
+            h.Class('max-h-64 space-y-1 overflow-y-auto'),
+          ],
+          Array.map(playlists, entry => listedPlaylistView(entry, h)),
+        )
+      : h.p(
+          [
+            h.DataAttribute('my-playlists', '0'),
+            h.Class('text-sm text-gray-300'),
+          ],
+          ['No saved playlists in this browser yet.'],
+        ),
+    h.button(
+      [
+        h.Type('button'),
+        h.DataAttribute('playlist-action', 'Done'),
+        h.OnClick(Message.ClickedClosePlaylistDialog()),
+        h.Class(twMerge(quietClass, 'w-full')),
+      ],
+      ['Done'],
+    ),
+  ]
+}
+
 export const playlistDialogView = (
   model: Model,
   h: HtmlBuilder<Message>,
@@ -481,7 +613,10 @@ export const playlistDialogView = (
     return h.empty
   }
   const isSending = dialog._tag === 'Sending'
-  const form = dialog._tag === 'Shared' ? undefined : dialog.form
+  const form =
+    dialog._tag === 'Shared' || dialog._tag === 'Account'
+      ? undefined
+      : dialog.form
   const copy = form === undefined ? undefined : formCopyOf(model, form, h)
   return h.div(
     [
@@ -510,80 +645,82 @@ export const playlistDialogView = (
             'relative w-full max-w-md max-h-[calc(100vh-2rem)] overflow-y-auto rounded-xl border border-white/10 bg-black/80 backdrop-blur-xl text-white shadow-2xl outline-none p-5 space-y-4',
           ),
         ],
-        dialog._tag === 'Shared'
-          ? [
-              h.p(
-                [
-                  h.Id(`${PLAYLIST_DIALOG_ID}-title`),
-                  h.Class('text-xs uppercase tracking-wide text-gray-300'),
-                ],
-                ['Playlist ready to share'],
-              ),
-              ...sharedBodyView(model, dialog, h),
-              h.button(
-                [
-                  h.Type('button'),
-                  h.DataAttribute('playlist-action', 'Done'),
-                  h.OnClick(Message.ClickedClosePlaylistDialog()),
-                  h.Class(twMerge(quietClass, 'w-full')),
-                ],
-                ['Done'],
-              ),
-            ]
-          : copy === undefined
-            ? []
-            : [
-                h.h1(
+        dialog._tag === 'Account'
+          ? accountDialogBodyView(model, h)
+          : dialog._tag === 'Shared'
+            ? [
+                h.p(
                   [
                     h.Id(`${PLAYLIST_DIALOG_ID}-title`),
-                    h.Class('text-lg font-bold'),
+                    h.Class('text-xs uppercase tracking-wide text-gray-300'),
                   ],
-                  [copy.title],
+                  ['Playlist ready to share'],
                 ),
-                h.form(
+                ...sharedBodyView(model, dialog, h),
+                h.button(
                   [
-                    h.OnSubmit(Message.SubmittedPlaylistForm()),
-                    h.Class('space-y-4'),
+                    h.Type('button'),
+                    h.DataAttribute('playlist-action', 'Done'),
+                    h.OnClick(Message.ClickedClosePlaylistDialog()),
+                    h.Class(twMerge(quietClass, 'w-full')),
                   ],
-                  [
-                    ...copy.body,
-                    dialog._tag === 'Editing'
-                      ? failureView(dialog.maybeFailure, h)
-                      : h.empty,
-                    h.div(
-                      [h.Class('flex flex-col gap-2')],
-                      [
-                        h.button(
-                          [
-                            h.Type('submit'),
-                            h.DataAttribute('playlist-action', 'Submit'),
-                            h.Disabled(isSending || !copy.canSubmit),
-                            h.Class(
-                              form !== undefined && form._tag === 'Delete'
-                                ? twMerge(
-                                    buttonClass,
-                                    'bg-red-700 hover:bg-red-600',
-                                  )
-                                : primaryClass,
-                            ),
-                          ],
-                          [isSending ? 'Working...' : copy.submit],
-                        ),
-                        h.button(
-                          [
-                            h.Type('button'),
-                            h.DataAttribute('playlist-action', 'Cancel'),
-                            h.Disabled(isSending),
-                            h.OnClick(Message.ClickedClosePlaylistDialog()),
-                            h.Class(quietClass),
-                          ],
-                          ['Cancel'],
-                        ),
-                      ],
-                    ),
-                  ],
+                  ['Done'],
                 ),
-              ],
+              ]
+            : copy === undefined
+              ? []
+              : [
+                  h.h1(
+                    [
+                      h.Id(`${PLAYLIST_DIALOG_ID}-title`),
+                      h.Class('text-lg font-bold'),
+                    ],
+                    [copy.title],
+                  ),
+                  h.form(
+                    [
+                      h.OnSubmit(Message.SubmittedPlaylistForm()),
+                      h.Class('space-y-4'),
+                    ],
+                    [
+                      ...copy.body,
+                      dialog._tag === 'Editing'
+                        ? failureView(dialog.maybeFailure, h)
+                        : h.empty,
+                      h.div(
+                        [h.Class('flex flex-col gap-2')],
+                        [
+                          h.button(
+                            [
+                              h.Type('submit'),
+                              h.DataAttribute('playlist-action', 'Submit'),
+                              h.Disabled(isSending || !copy.canSubmit),
+                              h.Class(
+                                form !== undefined && form._tag === 'Delete'
+                                  ? twMerge(
+                                      buttonClass,
+                                      'bg-red-700 hover:bg-red-600',
+                                    )
+                                  : primaryClass,
+                              ),
+                            ],
+                            [isSending ? 'Working...' : copy.submit],
+                          ),
+                          h.button(
+                            [
+                              h.Type('button'),
+                              h.DataAttribute('playlist-action', 'Cancel'),
+                              h.Disabled(isSending),
+                              h.OnClick(Message.ClickedClosePlaylistDialog()),
+                              h.Class(quietClass),
+                            ],
+                            ['Cancel'],
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ],
       ),
     ],
   )
