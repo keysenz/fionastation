@@ -25,7 +25,7 @@ DATABASE_PATH="$PWD/$RUN/karaoke.db" PORT="$PORT" HOSTNAME=127.0.0.1 \
 echo $! >"$RUN/pid"
 
 for _ in $(seq 1 90); do
-  if curl -sf --max-time 30 "http://localhost:$PORT/api/get-karaoke" | grep -q song_title; then
+  if curl -sf --max-time 30 -H "x-proxy-secret: ${PROXY_SECRET:-}" "http://localhost:$PORT/api/get-karaoke" | grep -q song_title; then
     echo "ready on http://localhost:$PORT (pid $(cat "$RUN/pid"))"
     exit 0
   fi

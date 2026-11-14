@@ -2,13 +2,20 @@
 // environment settings so the devbox hostname stays out of this public repo.
 const API_PATH = /^[\w-]+(\/[\w-]+)*$/
 
+const FORWARDED_HEADERS = ['content-type', 'authorization']
+
 const DROPPED_HEADERS = [
   'content-encoding',
   'content-length',
   'transfer-encoding',
 ]
 
-export async function GET(request: Request): Promise<Response> {
+const PLAYLIST_PATH = /^playlists(\/|$)/
+
+const visitorIp = (request: Request) =>
+  request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || undefined
+
+async function forward(request: Request): Promise<Response> {
   const origin = process.env.API_ORIGIN
   const secret = process.env.PROXY_SECRET
   if (!origin || !secret) {
@@ -23,19 +30,42 @@ export async function GET(request: Request): Promise<Response> {
   }
   url.searchParams.delete('path')
 
-  const upstream = await fetch(`${origin}/api/${path}${url.search}`, {
-    headers: { 'x-proxy-secret': secret },
-  })
-  const headers = new Headers(upstream.headers)
-  for (const name of DROPPED_HEADERS) {
-    headers.delete(name)
+  const headers: Record<string, string> = { 'x-proxy-secret': secret }
+  for (const name of FORWARDED_HEADERS) {
+    const value = request.headers.get(name)
+    if (value) {
+      headers[name] = value
+    }
   }
-  // NOTE: the hop to devbox takes 1-3 s, so Vercel's CDN answers from cache and refreshes in the background; browsers still revalidate every load.
-  if (upstream.ok) {
-    headers.set(
+  const ip = visitorIp(request)
+  if (ip) {
+    headers['x-forwarded-for'] = ip
+  }
+
+  const hasBody = request.method !== 'GET' && request.method !== 'DELETE'
+  const upstream = await fetch(`${origin}/api/${path}${url.search}`, {
+    method: request.method,
+    headers,
+    ...(hasBody && { body: await request.arrayBuffer() }),
+  })
+  const responseHeaders = new Headers(upstream.headers)
+  for (const name of DROPPED_HEADERS) {
+    responseHeaders.delete(name)
+  }
+  // NOTE: the hop to devbox takes 1-3 s, so Vercel's CDN answers from cache and refreshes in the background; browsers still revalidate every load. Playlists change on every write, so they and every write skip it.
+  if (request.method === 'GET' && upstream.ok && !PLAYLIST_PATH.test(path)) {
+    responseHeaders.set(
       'Vercel-CDN-Cache-Control',
       'max-age=60, stale-while-revalidate=86400',
     )
   }
-  return new Response(upstream.body, { status: upstream.status, headers })
+  return new Response(upstream.body, {
+    status: upstream.status,
+    headers: responseHeaders,
+  })
 }
+
+export const GET = forward
+export const POST = forward
+export const PUT = forward
+export const DELETE = forward
