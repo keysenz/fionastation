@@ -281,12 +281,10 @@ describe('write api', () => {
 
   test('a store that fails answers 500 and leaks nothing', () => {
     const broken: StatStore = {
+      ...openStatStore({ path: dbPath, now }),
       record: () => {
         throw new Error('disk is gone')
       },
-      totalsSince: () => [],
-      skipsSince: () => [],
-      dailySince: () => [],
     }
     const api = createStatApi({ store: broken, songExists, now })
     const answer = api({ ip: '1.1.1.1', body: play('a1') })

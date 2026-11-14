@@ -3,6 +3,8 @@ import { readFile } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { extname, join, resolve, sep } from 'node:path'
+import { Readable } from 'node:stream'
+import { pipeline } from 'node:stream/promises'
 import { gzipSync } from 'node:zlib'
 
 import {
@@ -29,12 +31,20 @@ import {
   openPlaylistStore,
 } from './playlists.ts'
 import { loadSongbook } from './songbook.ts'
-import { createStatApi, createStatReport, openStatStore } from './stats.ts'
 import {
+  createStatApi,
+  createStatExport,
+  createStatReport,
+  openStatStore,
+} from './stats.ts'
+import {
+  STATS_EXPORT_ROUTE,
   STATS_REPORT_ROUTE,
+  createGatedExport,
   createGatedReport,
   parseStatsUserIds,
 } from './statsAccess.ts'
+import { DEFAULT_TRAIL_DAYS } from './trail.ts'
 import { isGone, startRefreshing } from './videoStatus.ts'
 
 const ROOT = resolve(import.meta.dirname, '../dist')
@@ -111,6 +121,8 @@ const playlistApi =
     createsPerIpPerHour,
   })
 
+const DAY_MS = 24 * 60 * 60 * 1000
+
 const statStore = (() => {
   const path = process.env.STATS_DB_PATH
   if (!path) {
@@ -118,7 +130,19 @@ const statStore = (() => {
     return undefined
   }
   try {
-    return openStatStore({ path })
+    const store = openStatStore({
+      path,
+      trailDays: Number(process.env.STATS_TRAIL_DAYS) || DEFAULT_TRAIL_DAYS,
+    })
+    store.prune()
+    setInterval(() => {
+      try {
+        store.prune()
+      } catch (error) {
+        console.error('Could not prune the listening trail:', error)
+      }
+    }, DAY_MS).unref()
+    return store
   } catch (error) {
     console.error('Could not open the statistics database:', error)
     return undefined
@@ -163,6 +187,10 @@ const statReport =
   statStore &&
   createStatReport({ store: statStore, findSongs: findSongsForStats })
 
+const statExport =
+  statStore &&
+  createStatExport({ store: statStore, findSongs: findSongsForStats })
+
 const statsUserIds = parseStatsUserIds(process.env.STATS_USER_IDS)
 if (!statsUserIds) {
   console.warn(
@@ -170,12 +198,12 @@ if (!statsUserIds) {
   )
 }
 
-const gatedReport = createGatedReport({
+const statsGate = {
   allowedIds: statsUserIds,
   signedInId:
     discordApp &&
     discordAuth &&
-    (cookie => {
+    ((cookie: string | undefined) => {
       const viewer = discordAuth.viewer({
         method: 'GET',
         cookie,
@@ -183,7 +211,12 @@ const gatedReport = createGatedReport({
       })
       return viewer.kind === 'Member' ? viewer.discordId : undefined
     }),
-  report: statReport,
+}
+
+const gatedReport = createGatedReport({ ...statsGate, report: statReport })
+const gatedExport = createGatedExport({
+  ...statsGate,
+  exportRows: statExport,
 })
 
 const STATS_ROUTE = '/api/stats'
@@ -472,6 +505,34 @@ const handle = async (req: IncomingMessage, res: ServerResponse) => {
       new URL(req.url ?? '/', 'http://localhost').searchParams.get('days'),
     )
     return replyJson(status, body, 'no-store')
+  }
+
+  if (pathname === STATS_EXPORT_ROUTE) {
+    if (!hasProxySecret(req)) {
+      return replyJson(403, { error: 'Forbidden' })
+    }
+    if (req.method !== 'GET') {
+      return replyJson(405, { error: 'Method Not Allowed' }, 'no-store')
+    }
+    const query = new URL(req.url ?? '/', 'http://localhost').searchParams
+    const answer = gatedExport(
+      req.headers.cookie,
+      query.get('days'),
+      query.get('table'),
+    )
+    if (!('lines' in answer)) {
+      return replyJson(answer.status, answer.body, 'no-store')
+    }
+    res.writeHead(200, {
+      ...SECURITY_HEADERS,
+      'Content-Type': 'application/x-ndjson; charset=utf-8',
+      'Content-Disposition': `attachment; filename="fio-radio-${query.get('table')}-${query.get('days') ?? 30}d.ndjson"`,
+      'Cache-Control': 'no-store',
+    })
+    await pipeline(Readable.from(answer.lines), res).catch(error => {
+      console.error('Stats export failed:', error)
+    })
+    return
   }
 
   if (pathname === STATS_ROUTE) {
