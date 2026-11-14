@@ -13,10 +13,10 @@ import { songsRouter } from '../../route'
 import { type LoadFailure, thumbnailUrl } from '../../youtube'
 import { infoButtonView, infoPanelView } from './info.ts'
 import {
+  CANCEL_CHOICE,
   Message,
   type Model,
   MountPlayer,
-  CANCEL_CHOICE,
   PLAYLIST_PROMPT_ID,
   REPLACE_CHOICE,
   SETLIST_PANE_ID,
@@ -1868,22 +1868,19 @@ const toastView = (toast: Toast, h: HtmlBuilder<Message>): Html =>
     ],
   )
 
-const wrapFocus = (
-  from: 'Replace' | 'Cancel',
-): Option.Option<{ focusSelector: string; message: Message }> =>
-  Option.some({
-    focusSelector: from === 'Cancel' ? REPLACE_CHOICE : CANCEL_CHOICE,
-    message: Message.CompletedFocusPlaylistPrompt(),
-  })
-
 const promptButtonClass =
   'flex items-center justify-center gap-2 min-h-11 px-4 rounded-full border border-white/15 text-sm font-semibold transition'
 
 const playlistPromptView = (
   asking: Extract<PlaylistOpen, { _tag: 'Asking' }>,
   h: HtmlBuilder<Message>,
-): Html =>
-  h.div(
+): Html => {
+  const wrapFocus = (focusSelector: string) =>
+    Option.some({
+      focusSelector,
+      message: Message.CompletedFocusPlaylistPrompt(),
+    })
+  return h.div(
     [
       h.Class('fixed inset-0 z-[70] flex items-center justify-center p-4'),
       h.OnKeyDownPreventDefault(key =>
@@ -1931,7 +1928,7 @@ const playlistPromptView = (
                   h.DataAttribute('playlist-choice', 'Replace'),
                   h.OnKeyDownFocus((key, { shiftKey }) =>
                     key === 'Tab' && shiftKey
-                      ? wrapFocus('Replace')
+                      ? wrapFocus(CANCEL_CHOICE)
                       : Option.none(),
                   ),
                   h.OnClick(Message.ClickedReplaceQueueWithPlaylist()),
@@ -1961,7 +1958,7 @@ const playlistPromptView = (
                   h.DataAttribute('playlist-choice', 'Cancel'),
                   h.OnKeyDownFocus((key, { shiftKey }) =>
                     key === 'Tab' && !shiftKey
-                      ? wrapFocus('Cancel')
+                      ? wrapFocus(REPLACE_CHOICE)
                       : Option.none(),
                   ),
                   h.OnClick(Message.ClickedCancelPlaylist()),
@@ -1980,6 +1977,7 @@ const playlistPromptView = (
       ),
     ],
   )
+}
 
 export const view = Submodel.defineView<Model, Message>((model, h): Html =>
   h.div(
