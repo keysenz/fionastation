@@ -16,6 +16,10 @@ fi
 
 npm run build >"$RUN/build.log" 2>&1 || { echo "build failed, see $RUN/build.log" >&2; exit 1; }
 
+PLAYLISTS_DB_PATH="${PLAYLISTS_DB_PATH:-$(mktemp -d /tmp/fio-playlists-XXXXXX)/playlists.db}"
+export PLAYLISTS_DB_PATH
+echo "playlists db $PLAYLISTS_DB_PATH"
+
 DATABASE_PATH="$PWD/$RUN/karaoke.db" PORT="$PORT" HOSTNAME=127.0.0.1 \
   setsid node --disable-warning=ExperimentalWarning server/main.ts >"$RUN/dev.log" 2>&1 &
 echo $! >"$RUN/pid"

@@ -5,13 +5,23 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { extname, join, resolve, sep } from 'node:path'
 import { gzipSync } from 'node:zlib'
 
-import { findSongForLyrics, listKaraokeVideos, listSongIds } from './db.ts'
+import {
+  findSongForLyrics,
+  findSongsForPlaylist,
+  listKaraokeVideos,
+  listSongIds,
+} from './db.ts'
 import {
   loadAlignments,
   loadOverrides,
   lookupLyrics,
   warnAboutUnknownSongs,
 } from './lyrics.ts'
+import {
+  MAX_BODY_BYTES,
+  createPlaylistApi,
+  openPlaylistStore,
+} from './playlists.ts'
 import { loadSongbook } from './songbook.ts'
 import { isGone, startRefreshing } from './videoStatus.ts'
 
@@ -37,6 +47,55 @@ const hasProxySecret = (req: IncomingMessage) => {
     timingSafeEqual(sentBytes, PROXY_SECRET)
   )
 }
+
+const visitorIp = (req: IncomingMessage) => {
+  const socketIp = req.socket.remoteAddress ?? 'unknown'
+  const forwarded = req.headers['x-forwarded-for']
+  if (!PROXY_SECRET || !hasProxySecret(req) || typeof forwarded !== 'string') {
+    return socketIp
+  }
+  return forwarded.split(',')[0]?.trim() || socketIp
+}
+
+const readBody = (req: IncomingMessage) =>
+  new Promise<string | undefined>((resolve, reject) => {
+    const chunks: Buffer[] = []
+    let size = 0
+    req.on('data', (chunk: Buffer) => {
+      size += chunk.length
+      if (size > MAX_BODY_BYTES) {
+        req.removeAllListeners('data')
+        resolve(undefined)
+        return
+      }
+      chunks.push(chunk)
+    })
+    req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')))
+    req.on('error', reject)
+  })
+
+const createsPerIpPerHour =
+  Number(process.env.PLAYLISTS_IP_LIMIT_PER_HOUR) || 10
+
+const playlistApi = (() => {
+  const path = process.env.PLAYLISTS_DB_PATH
+  if (!path) {
+    console.warn('PLAYLISTS_DB_PATH is not set, so playlists are unavailable')
+    return undefined
+  }
+  try {
+    return createPlaylistApi({
+      store: openPlaylistStore({ path }),
+      findSongs: findSongsForPlaylist,
+      createsPerIpPerHour,
+    })
+  } catch (error) {
+    console.error('Could not open the playlists database:', error)
+    return undefined
+  }
+})()
+
+const PLAYLIST_ROUTE = /^\/api\/playlists(?:\/([^/]+))?$/
 
 // NOTE: keep in step with src/route.ts. Any other path gets the 404 status with the app's own 404 page.
 const PAGE_PATHS = new Set(['/', '/songs'])
@@ -243,6 +302,35 @@ const handle = async (req: IncomingMessage, res: ServerResponse) => {
     res.writeHead(301, { ...SECURITY_HEADERS, Location: `/${search}` })
     res.end()
     return
+  }
+
+  const playlistRoute = PLAYLIST_ROUTE.exec(pathname)
+  if (playlistRoute) {
+    if (!hasProxySecret(req)) {
+      return replyJson(403, { error: 'Forbidden' })
+    }
+    if (!playlistApi) {
+      return replyJson(
+        503,
+        { error: 'Playlists are unavailable right now' },
+        'no-store',
+      )
+    }
+    const declared = Number(req.headers['content-length'] ?? 0)
+    const body = declared > MAX_BODY_BYTES ? undefined : await readBody(req)
+    if (body === undefined) {
+      res.once('finish', () => req.destroy())
+      res.setHeader('Connection', 'close')
+      return replyJson(413, { error: 'The request is too large' }, 'no-store')
+    }
+    const { status, body: payload } = playlistApi({
+      method: req.method ?? 'GET',
+      id: playlistRoute[1],
+      ip: visitorIp(req),
+      authorization: req.headers.authorization,
+      body,
+    })
+    return replyJson(status, payload, 'no-store')
   }
 
   const apiRoute = API_ROUTES[pathname]
