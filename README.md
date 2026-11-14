@@ -20,6 +20,35 @@ The page reuses the site's Discord login. A visitor who is signed out sees a Sig
 
 Set `STATS_USER_IDS` to a comma-separated list of Discord user ids, such as `244661517356761089,927090060480905276`. The Discord application needs no change, because the page signs in through the same `/api/auth/discord/callback` redirect and the `identify` scope as playlists.
 
+## Commissions
+
+Fio's voice, studio and endorsement inquiries go through the site. The forms at `/hire`, `/studio` and `/endorse` post to `POST /api/inquiry`. The site stores each one in `COMMISSIONS_DB_PATH`, a SQLite file it alone writes (`server/commissions.ts`), and answers `{ id, trackingUrl }`. The client picks the `id`, a lowercase UUID, so a retry with the same payload answers 200 with the same reply and a different payload under that id answers 409. The server decodes the body with the form's own `InquiryPayload` Schema, checks the required answers per kind, and prices the answers again with `src/page/commission/pricing.ts`. It stores its own quote and keeps the client's only inside the payload it compares for retries. It keeps a keyed hash of the visitor's IP, not the address.
+
+`trackingUrl` is `/commission/<id>?t=<token>`, where the token is `HMAC-SHA256(COMMISSIONS_SECRET, id)` in base64url. The page behind it reads `GET /api/commission/<id>?t=<token>`, which shows the kind, the creation date and the status history, and never the name or contact. A wrong token and an unknown id both answer 404.
+
+The Discord bot works the commissions through the admin listener (`ADMIN_PORT`, `Authorization: Bearer <ADMIN_SECRET>`):
+
+| Route | What it does |
+| --- | --- |
+| `GET /admin/commissions/unposted` | commissions with no Discord thread yet, oldest first, with fields, quote, status and `next` |
+| `POST /admin/commissions/<id>/posted` | records `{ channelId, messageId }` once. The same pair answers 200, another pair 409 |
+| `POST /admin/commissions/<id>/events` | moves the status with `{ status, note? }` and `X-Acting-Discord-Id`. A move the table forbids answers 400 |
+
+The status table, which the site owns and the bot reads through `next`:
+
+| From | Allowed next |
+| --- | --- |
+| `received` | `quoted`, `declined` |
+| `quoted` | `deposit_paid`, `declined` |
+| `deposit_paid` | `in_progress` |
+| `in_progress` | `preview` |
+| `preview` | `draft` |
+| `draft` | `revision`, `final` |
+| `revision` | `draft`, `final` |
+| `final`, `declined` | none |
+
+Set `COMMISSIONS_DB_PATH` and `COMMISSIONS_SECRET` to switch the public routes on. `COMMISSIONS_IP_LIMIT_PER_HOUR` overrides the 5 new inquiries an hour per IP. The admin routes need only the database and `ADMIN_SECRET`. Nothing deletes old commissions yet.
+
 ## Where state lives
 
 All page state is one Schema-typed Model in `src/`, and it changes only when `update` handles a named Message. Side effects, such as fetching or controlling the YouTube player, are Commands that `update` returns. Read [`FOLDKIT.md`](./FOLDKIT.md) before you change the app.
