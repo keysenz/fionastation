@@ -3,6 +3,7 @@ import { defineTaggedUnion } from 'foldkit/schema'
 import { modifyFields } from 'foldkit/struct'
 
 import { PlayableSong } from '../../domain.ts'
+import { type PlaylistEntry, PlaylistId } from '../../playlist.ts'
 import { LoadFailure } from '../../youtube.ts'
 
 const HISTORY_LIMIT = 50
@@ -67,6 +68,7 @@ export const Setlist = Schema.Struct({
   history: Schema.Array(PlayableSong),
   maybeNowPlaying: Schema.Option(NowPlaying),
   playCount: Schema.Number,
+  maybeOpenedPlaylistId: Schema.Option(PlaylistId),
 })
 export type Setlist = typeof Setlist.Type
 
@@ -75,6 +77,7 @@ const PersistedSetlist = Schema.Struct({
   state: Schema.Struct({
     queue: Schema.Array(PlayableSong),
     history: Schema.Array(PlayableSong),
+    openedPlaylistId: Schema.optional(PlaylistId),
   }),
   version: Schema.Number,
 })
@@ -86,6 +89,7 @@ export const emptySetlist: Setlist = {
   history: [],
   maybeNowPlaying: Option.none(),
   playCount: 0,
+  maybeOpenedPlaylistId: Option.none(),
 }
 
 const startPlay = (setlist: Setlist, song: PlayableSong): Setlist =>
@@ -119,8 +123,20 @@ export const play = (setlist: Setlist, song: PlayableSong): Setlist =>
     song,
   )
 
+const editQueueAndForgetPlaylist = (
+  setlist: Setlist,
+  change: (queue: Setlist['queue']) => Setlist['queue'],
+): Setlist =>
+  modifyFields(setlist, {
+    queue: change,
+    maybeOpenedPlaylistId: () => Option.none(),
+  })
+
+const withoutQueued = (queue: Setlist['queue'], index: number) =>
+  queue.filter((_, position) => position !== index)
+
 export const enqueue = (setlist: Setlist, song: PlayableSong): Setlist =>
-  modifyFields(setlist, { queue: queue => [...queue, song] })
+  editQueueAndForgetPlaylist(setlist, queue => [...queue, song])
 
 /** Appends songs to the queue in the order given. */
 export const enqueueAll = (
@@ -128,8 +144,82 @@ export const enqueueAll = (
   songs: ReadonlyArray<PlayableSong>,
 ): Setlist =>
   Array.isReadonlyArrayNonEmpty(songs)
-    ? modifyFields(setlist, { queue: queue => [...queue, ...songs] })
+    ? editQueueAndForgetPlaylist(setlist, queue => [...queue, ...songs])
     : setlist
+
+export type PlaylistLoadMode = 'Replace' | 'Append'
+
+const archiveSongOf = (
+  archive: ReadonlyArray<PlayableSong>,
+  entry: PlaylistEntry,
+): Option.Option<PlayableSong> =>
+  Array.findFirst(archive, song => song.id === entry.songId).pipe(
+    Option.orElse(() =>
+      Array.findFirst(
+        archive,
+        song =>
+          song.video_url === entry.videoUrl &&
+          song.timestamp === entry.timestamp,
+      ),
+    ),
+    Option.orElse(() =>
+      Array.findFirst(
+        archive,
+        song =>
+          song.video_url === entry.videoUrl && song.song_title === entry.title,
+      ),
+    ),
+  )
+
+export type ResolvedPlaylist = {
+  songs: ReadonlyArray<PlayableSong>
+  unavailableCount: number
+}
+
+export const resolvePlaylist = (
+  entries: ReadonlyArray<PlaylistEntry>,
+  archive: ReadonlyArray<PlayableSong>,
+  isGone: (song: PlayableSong) => boolean,
+): ResolvedPlaylist => {
+  const resolved = Array.flatMap(entries, entry =>
+    Option.toArray(
+      Option.filter(archiveSongOf(archive, entry), song => !isGone(song)),
+    ),
+  )
+  return {
+    songs: Array.dedupeWith(
+      resolved,
+      (first, second) => first.id === second.id,
+    ),
+    unavailableCount: entries.length - resolved.length,
+  }
+}
+
+export const loadPlaylist = (
+  setlist: Setlist,
+  songs: ReadonlyArray<PlayableSong>,
+  mode: PlaylistLoadMode,
+  id: PlaylistId,
+): Setlist => {
+  if (!Array.isReadonlyArrayNonEmpty(songs)) {
+    return setlist
+  }
+  const opened = (loaded: Setlist) =>
+    modifyFields(loaded, { maybeOpenedPlaylistId: () => Option.some(id) })
+  if (mode === 'Replace') {
+    return playNext(opened(modifyFields(setlist, { queue: () => songs })))
+  }
+  const heldIds = new Set([
+    ...setlist.queue.map(song => song.id),
+    ...Option.toArray(setlist.maybeNowPlaying).map(({ song }) => song.id),
+  ])
+  return opened(
+    enqueueAll(
+      setlist,
+      Array.filter(songs, song => !heldIds.has(song.id)),
+    ),
+  )
+}
 
 export const moveInQueue = (
   setlist: Setlist,
@@ -145,21 +235,26 @@ export const moveInQueue = (
   const without = queue.filter((_, index) => index !== from)
   return modifyFields(setlist, {
     queue: () => [...without.slice(0, to), queue[from]!, ...without.slice(to)],
+    maybeOpenedPlaylistId: () => Option.none(),
   })
 }
 
 export const removeFromQueue = (setlist: Setlist, index: number): Setlist =>
   Number.isInteger(index) && index >= 0 && index < setlist.queue.length
-    ? modifyFields(setlist, {
-        queue: queue => queue.filter((_, position) => position !== index),
-      })
+    ? editQueueAndForgetPlaylist(setlist, queue => withoutQueued(queue, index))
     : setlist
 
 export const playFromQueue = (setlist: Setlist, index: number): Setlist => {
   const maybeSong = Array.get(setlist.queue, index)
   return Option.match(maybeSong, {
     onNone: () => setlist,
-    onSome: song => play(removeFromQueue(setlist, index), song),
+    onSome: song =>
+      play(
+        modifyFields(setlist, {
+          queue: queue => withoutQueued(queue, index),
+        }),
+        song,
+      ),
   })
 }
 
@@ -448,11 +543,15 @@ export const applySkip = (cleaned: Setlist, advance: Advance): Setlist =>
 
 export const toPersistedJson = (setlist: Setlist): string =>
   Schema.encodeSync(PersistedSetlistJson)({
-    state: { queue: setlist.queue, history: setlist.history },
+    state: {
+      queue: setlist.queue,
+      history: setlist.history,
+      openedPlaylistId: Option.getOrUndefined(setlist.maybeOpenedPlaylistId),
+    },
     version: 0,
   })
 
-/** Takes the saved queue and history, and keeps what is playing. With nothing
+/** Takes the saved queue, history and opened playlist, and keeps what is playing. With nothing
  *  usable saved, it changes nothing, because storage can be blocked or corrupt. */
 export const restoreSaved = (
   setlist: Setlist,
@@ -466,6 +565,8 @@ export const restoreSaved = (
         modifyFields(setlist, {
           queue: () => state.queue,
           history: () => state.history,
+          maybeOpenedPlaylistId: () =>
+            Option.fromUndefinedOr(state.openedPlaylistId),
         }),
     },
   )

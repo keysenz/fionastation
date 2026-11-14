@@ -136,6 +136,7 @@ const ADMIN_PATH = /^\/(?:api\/)?admin(?:\/|$)/
 
 // NOTE: keep in step with src/route.ts. Any other path gets the 404 status with the app's own 404 page.
 const PAGE_PATHS = new Set(['/', '/songs'])
+const PLAYLIST_PAGE_PATH = /^\/p\/[0-9A-Za-z]{8}$/
 
 const MOVED_PAGE_PATHS = new Set([
   '/radio',
@@ -438,7 +439,7 @@ const handle = async (req: IncomingMessage, res: ServerResponse) => {
     return reply(405, TEXT, Buffer.from('Method Not Allowed'))
   }
 
-  if (PAGE_PATHS.has(pathname)) {
+  if (PAGE_PATHS.has(pathname) || PLAYLIST_PAGE_PATH.test(pathname)) {
     return replyShell(200)
   }
 
