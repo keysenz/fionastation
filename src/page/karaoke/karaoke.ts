@@ -106,13 +106,13 @@ import {
   stepStats,
 } from './playStats.ts'
 import {
+  type AutoplayPick,
   TrailDecision,
   TrailSession,
   TrailTag,
-  decidedPick,
+  claimSeqs,
   newSessionId,
   startedTrail,
-  tagStats,
   trailFields,
 } from './trail.ts'
 import {
@@ -2622,7 +2622,7 @@ const updateModel = (model: Model, message: Message) =>
 
     // NOTE: a click while the pick was pending changed the playId, and the visitor's choice wins.
     // A refetch can report the picked video gone after the pick was asked for, so it is drawn again.
-    CompletedPickRandomVideo: ({ playId, song, poolSize }) =>
+    CompletedPickRandomVideo: ({ playId, song }) =>
       Option.match(
         Option.filter(
           model.setlist.maybeNowPlaying,
@@ -2641,15 +2641,7 @@ const updateModel = (model: Model, message: Message) =>
             const setlist = play(model.setlist, song, 'Autoplay')
             const saveSetlist = SaveSetlist({ json: toPersistedJson(setlist) })
             const dismissId = setlist.playCount
-            const decided = decidedPick(model.maybeTrail, song.id, poolSize)
-            const logDecision = Option.match(decided.maybeDecision, {
-              onNone: () => [],
-              onSome: decision => [RecordDecision({ decision })],
-            })
-            const picked = modifyFields(model, {
-              setlist: () => setlist,
-              maybeTrail: () => decided.maybeTrail,
-            })
+            const picked = modifyFields(model, { setlist: () => setlist })
             return phase._tag === 'MovingOn'
               ? {
                   model: withSkipToast(
@@ -2657,15 +2649,11 @@ const updateModel = (model: Model, message: Message) =>
                     songLabel(previousSong),
                     dismissId,
                   ),
-                  commands: [
-                    ...logDecision,
-                    saveSetlist,
-                    WaitBeforeDismissToast({ dismissId }),
-                  ],
+                  commands: [saveSetlist, WaitBeforeDismissToast({ dismissId })],
                 }
               : {
                   model: picked,
-                  commands: [...logDecision, saveSetlist],
+                  commands: [saveSetlist],
                 }
           },
         },
@@ -3258,6 +3246,16 @@ const isCounting = (before: Model, after: Model): boolean =>
     ({ phase }) => phase._tag === 'Playing',
   )
 
+const autoplayPickOf = (
+  before: Model,
+  message: Message,
+  after: Model,
+): Option.Option<AutoplayPick> =>
+  message._tag === 'CompletedPickRandomVideo' &&
+  after.setlist.playCount > before.setlist.playCount
+    ? Option.some({ songId: message.song.id, poolSize: message.poolSize })
+    : Option.none()
+
 const withPlayStats = (
   before: Model,
   message: Message,
@@ -3272,16 +3270,26 @@ const withPlayStats = (
       )
     : { listens: [], stats: [] }
   const stats = [...clickedStatOf(message), ...step.stats]
-  const trailed = tagStats(result.model.maybeTrail, stats)
+  const trailed = claimSeqs(
+    result.model.maybeTrail,
+    autoplayPickOf(before, message, result.model),
+    stats,
+  )
   return {
     model: modifyFields(result.model, {
       listens: () => step.listens,
       maybeTrail: () => trailed.maybeTrail,
     }),
-    ...(Array.isReadonlyArrayNonEmpty(stats) || result.commands
+    ...(Array.isReadonlyArrayNonEmpty(stats) ||
+    Option.isSome(trailed.maybeDecision) ||
+    result.commands
       ? {
           commands: [
             ...(result.commands ?? []),
+            ...Option.match(trailed.maybeDecision, {
+              onNone: () => [],
+              onSome: decision => [RecordDecision({ decision })],
+            }),
             ...trailed.tagged.map(({ stat, maybeTag }) =>
               RecordStat({ stat, maybeTag }),
             ),

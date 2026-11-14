@@ -84,48 +84,58 @@ export type TaggedStat = Readonly<{
   maybeTag: Option.Option<TrailTag>
 }>
 
-export const tagStats = (
+export type AutoplayPick = Readonly<{ songId: string; poolSize: number }>
+
+const decide = (session: TrailSession): Step => ({
+  session: { ...session, seq: session.seq + 1 },
+  tag: tagFor(session, session.maybeCurrentSongId),
+})
+
+export const claimSeqs = (
   maybeTrail: Option.Option<TrailSession>,
+  maybePick: Option.Option<AutoplayPick>,
   stats: ReadonlyArray<PlayStat>,
 ): Readonly<{
   maybeTrail: Option.Option<TrailSession>
+  maybeDecision: Option.Option<TrailDecision>
   tagged: ReadonlyArray<TaggedStat>
 }> =>
   Option.match(maybeTrail, {
     onNone: () => ({
       maybeTrail,
+      maybeDecision: Option.none(),
       tagged: Array.map(stats, stat => ({ stat, maybeTag: Option.none() })),
     }),
     onSome: first => {
-      const tagged: Array<TaggedStat> = []
-      const last = Array.reduce(stats, first, (session, stat) => {
-        const step = stepTrail(session, stat)
-        tagged.push({ stat, maybeTag: Option.some(step.tag) })
-        return step.session
+      const decided = Option.map(maybePick, pick => ({
+        pick,
+        step: decide(first),
+      }))
+      const afterDecision = Option.match(decided, {
+        onNone: () => first,
+        onSome: ({ step }) => step.session,
       })
-      return { maybeTrail: Option.some(last), tagged }
+      const tagged: Array<TaggedStat> = []
+      const last = Array.reduce(
+        stats,
+        afterDecision,
+        (session, stat) => {
+          const step = stepTrail(session, stat)
+          tagged.push({ stat, maybeTag: Option.some(step.tag) })
+          return step.session
+        },
+      )
+      return {
+        maybeTrail: Option.some(last),
+        maybeDecision: Option.map(decided, ({ pick, step }) => ({
+          tag: step.tag,
+          songId: pick.songId,
+          policy: AUTOPLAY_POLICY,
+          poolSize: pick.poolSize,
+        })),
+        tagged,
+      }
     },
-  })
-
-export const decidedPick = (
-  maybeTrail: Option.Option<TrailSession>,
-  songId: string,
-  poolSize: number,
-): Readonly<{
-  maybeTrail: Option.Option<TrailSession>
-  maybeDecision: Option.Option<TrailDecision>
-}> =>
-  Option.match(maybeTrail, {
-    onNone: () => ({ maybeTrail, maybeDecision: Option.none() }),
-    onSome: session => ({
-      maybeTrail: Option.some({ ...session, seq: session.seq + 1 }),
-      maybeDecision: Option.some({
-        tag: tagFor(session, session.maybeCurrentSongId),
-        songId,
-        policy: AUTOPLAY_POLICY,
-        poolSize,
-      }),
-    }),
   })
 
 export const trailFields = (maybeTag: Option.Option<TrailTag>) =>
