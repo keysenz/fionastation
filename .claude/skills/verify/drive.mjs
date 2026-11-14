@@ -658,6 +658,11 @@ const seedStats = async (path, songs) => {
   const tenAgo = at(10);
   repeat(4, { kind: 'Play', songId: first.id, origin: 'Visitor' }).forEach((event) => tenAgo.record(event));
   tenAgo.record({ kind: 'Skip', songId: first.id, origin: 'Visitor', secondsIntoSong: 200 });
+  const vote = (store, songId, moods, times) => repeat(times, { kind: 'Mood', songId, moods }).forEach((event) => store.record(event));
+  vote(today, first.id, ['ceria', 'hype'], 2);
+  vote(today, first.id, ['ceria'], 1);
+  vote(today, second.id, ['sendu'], 1);
+  vote(tenAgo, second.id, ['sendu'], 2);
   const fortyAgo = at(40);
   repeat(10, { kind: 'Play', songId: second.id, origin: 'Visitor' }).forEach((event) => fortyAgo.record(event));
 };
@@ -718,6 +723,31 @@ const journeys = {
         const videos = await page.locator('[data-table="videos"] tbody tr').count();
         if (videos < 1) throw new Error('no video rows');
       }, page);
+      await step(f, 'the Moods section shows the tiles, the days, the mix and the songs, and a mood chip filters the table', async () => {
+        await shows('mood-votes', '8');
+        await shows('mood-songs', '2');
+        await shows('mood-top', 'ceria / sendu');
+        const days = await page.locator('[data-chart="mood-daily"] [data-day]').count();
+        if (days !== 90) throw new Error(`${days} mood days`);
+        const ceria = await page.locator('[data-mood-share="ceria"]').innerText();
+        if (!ceria.includes('ceria 3')) throw new Error(`mix ${ceria}`);
+        const rows = () => page.locator('[data-table="moods"] tbody tr').evaluateAll((els) => els.map((el) => el.getAttribute('data-mood-song')));
+        if ((await rows()).join() !== [first.id, second.id].join()) throw new Error(`rows ${await rows()}`);
+        const top = await page.locator(`[data-mood-song="${first.id}"] [data-top-mood]`).innerText();
+        if (top !== 'ceria') throw new Error(`top ${top}`);
+        await page.locator('[data-mood-filter="sendu"]').click();
+        await page.waitForFunction(() => document.querySelectorAll('[data-table="moods"] tbody tr').length === 1);
+        if ((await rows()).join() !== second.id) throw new Error(`filtered ${await rows()}`);
+        if ((await page.locator('[data-mood-filter="sendu"]').getAttribute('aria-pressed')) !== 'true') throw new Error('chip not pressed');
+        await page.locator('[data-mood-filter="sendu"]').click();
+        await page.waitForFunction(() => document.querySelectorAll('[data-table="moods"] tbody tr').length === 2);
+        await page.locator('[data-range="1"]').click();
+        await shows('mood-votes', '6');
+        await page.locator(`[data-mood-song="${second.id}"] [data-few-votes]`).waitFor();
+        await page.screenshot({ path: join(out, 'stats-moods-desktop.png'), fullPage: true });
+        await page.locator('[data-range="90"]').click();
+        await shows('mood-votes', '8');
+      }, page);
       await step(f, 'picking a song narrows the skip histogram and sorting reorders the table', async () => {
         const all = await page.locator('[data-skip-total]').getAttribute('data-skip-total');
         if (all !== '4') throw new Error(`all songs ${all}`);
@@ -733,6 +763,7 @@ const journeys = {
         await page.setViewportSize({ width: 375, height: 667 });
         await shows('plays', '22');
         if (!(await noSidewaysScroll(page))) throw new Error('the page scrolls sideways');
+        await page.locator('[data-panel="moods"]').waitFor();
         await page.screenshot({ path: join(out, 'stats-dashboard-phone.png'), fullPage: true });
         await page.setViewportSize({ width: 1280, height: 800 });
       }, page);
@@ -1370,6 +1401,81 @@ const journeys = {
     }, page);
     console.log(JSON.stringify(await report(), null, 2));
   },
+  async moodPrompt(page) {
+    const adminPort = process.env.ADMIN_PORT ?? '3911';
+    const adminSecret = process.env.ADMIN_SECRET ?? 'verify-admin-secret';
+    const report = async () => (await fetch(`http://127.0.0.1:${adminPort}/stats?days=1`, { headers: { authorization: `Bearer ${adminSecret}` } })).json();
+    const votesFor = async (song) => (await report()).moods?.find((m) => m.songId === song.id);
+    const { body: videos } = await pageVideos();
+    const video = videos
+      .filter((v) => !v.is_gone)
+      .find((v) => {
+        const songs = v.karaoke_song.toSorted((a, b) => secondsOf(a.timestamp) - secondsOf(b.timestamp));
+        return songs.length >= 5 && [2, 3].every((i) => secondsOf(songs[i + 1].timestamp) - secondsOf(songs[i].timestamp) > 60);
+      });
+    if (!video) throw new Error('no live video with five songs and long third and fourth songs');
+    const [first, second, third, fourth] = songRows([video]).toSorted((a, b) => secondsOf(a.timestamp) - secondsOf(b.timestamp));
+    const seekTo = (seconds) =>
+      page.evaluate((to) => window.YT.get(document.querySelector('iframe[src*="youtube"]').id).seekTo(to, true), seconds);
+    const playheadPast = (seconds) =>
+      page.waitForFunction((want) => window.YT.get(document.querySelector('iframe[src*="youtube"]').id).getCurrentTime() >= want, seconds, { timeout: 30000 });
+    const card = page.locator('[data-mood-prompt]');
+    await page.goto(BASE + '/');
+    await videoRows(page).first().waitFor();
+
+    await step('moodPrompt', 'no card shows during the third song, even well past 45 seconds', async () => {
+      await (await songRowOf(page, videos, first)).click();
+      await playerReady(page);
+      await playVideo(page);
+      await videoLoads(page, [video.video_url], { startSeconds: secondsOf(first.timestamp), isPlaying: true });
+      await seekTo(secondsOf(second.timestamp) + 1);
+      await playheadPast(secondsOf(second.timestamp) + 1);
+      await seekTo(secondsOf(third.timestamp) + 50);
+      await playheadPast(secondsOf(third.timestamp) + 50);
+      await page.waitForTimeout(1500);
+      if ((await card.count()) !== 0) throw new Error('the card showed during the third song');
+    }, page);
+
+    await step('moodPrompt', 'the card appears 45 seconds into the fourth song, and picking a third mood changes nothing', async () => {
+      await seekTo(secondsOf(fourth.timestamp) + 1);
+      await playheadPast(secondsOf(fourth.timestamp) + 1);
+      await page.waitForTimeout(1500);
+      if ((await card.count()) !== 0) throw new Error('the card showed before 45 seconds');
+      await seekTo(secondsOf(fourth.timestamp) + 46);
+      await playheadPast(secondsOf(fourth.timestamp) + 46);
+      await card.waitFor({ timeout: 10000 });
+      for (const mood of ['ceria', 'hype', 'chill']) await card.getByRole('button', { name: mood, exact: true }).click();
+      const pressed = await card.locator('button[aria-pressed="true"]').evaluateAll((els) => els.map((el) => el.textContent.trim()));
+      if (pressed.join() !== 'ceria,hype') throw new Error(`pressed ${pressed}`);
+      await page.screenshot({ path: join(out, 'mood-card.png') });
+    }, page);
+
+    await step('moodPrompt', 'Send records the vote once, the card goes away and the counters change', async () => {
+      await card.getByRole('button', { name: 'Send', exact: true }).click();
+      await card.waitFor({ state: 'hidden' });
+      let seen;
+      for (let i = 0; i < 40 && !seen; i++) {
+        seen = await votesFor(fourth);
+        if (!seen) await page.waitForTimeout(500);
+      }
+      if (!seen || seen.votes.ceria !== 1 || seen.votes.hype !== 1 || seen.total !== 2) throw new Error(JSON.stringify(seen));
+    }, page);
+
+    await step('moodPrompt', 'the card does not come back this visit, and a reload counts songs from zero again', async () => {
+      await page.waitForTimeout(2000);
+      if ((await card.count()) !== 0) throw new Error('the card came back');
+      await page.reload();
+      await videoRows(page).first().waitFor();
+      await (await songRowOf(page, videos, first)).click();
+      await playerReady(page);
+      await playVideo(page);
+      await seekTo(secondsOf(first.timestamp) + 50);
+      await page.waitForTimeout(2000);
+      if ((await card.count()) !== 0) throw new Error('the card showed on the first song of a new visit');
+      if ((await votesFor(second)) !== undefined) throw new Error('a vote was recorded for a song nobody voted on');
+    }, page);
+  },
+
   async listeningTrail(page) {
     const statsPath = readFileSync(join(RUN_DIR, 'stats.path'), 'utf8').trim();
     const rows = (table) => {
