@@ -16,9 +16,10 @@ import {
   Message,
   type Model,
   MountPlayer,
+  PLAYLIST_PROMPT_ID,
   SETLIST_PANE_ID,
   SONG_LIST_ID,
-  type SkipToast,
+  Toast,
   allSongs,
   nowSingingOf,
   queueHandleId,
@@ -29,6 +30,7 @@ import {
   lyricsColumnView,
   lyricsWindowView,
 } from './lyricsView.ts'
+import { PlaylistOpen } from './playlistOpen.ts'
 import {
   type NowPlaying,
   Phase,
@@ -1819,19 +1821,26 @@ const playerView = (
   )
 }
 
-const skipToastMessage = ({
-  firstSkippedTitle,
-  skippedCount,
-}: SkipToast): string =>
-  skippedCount === 1
-    ? `"${firstSkippedTitle}" was skipped because its stream is gone.`
-    : `"${firstSkippedTitle}" and ${skippedCount - 1} more were skipped because their streams are gone.`
+const toastMessage = (toast: Toast): string =>
+  Toast.match<string>(toast, {
+    SkippedSongs: ({ firstSkippedTitle, skippedCount }) =>
+      skippedCount === 1
+        ? `"${firstSkippedTitle}" was skipped because its stream is gone.`
+        : `"${firstSkippedTitle}" and ${skippedCount - 1} more were skipped because their streams are gone.`,
+    PlaylistDeleted: () => 'This playlist was deleted.',
+    PlaylistNotFound: () => 'That playlist link does not lead anywhere.',
+    PlaylistUnreachable: () =>
+      'Could not load the playlist. Reload to try again.',
+    PlaylistSongsUnavailable: ({ count }) =>
+      `${songCountText(count)} from the playlist ${count === 1 ? 'is' : 'are'} not available and ${count === 1 ? 'was' : 'were'} skipped.`,
+  })
 
-const skipToastView = (toast: SkipToast, h: HtmlBuilder<Message>): Html =>
+const toastView = (toast: Toast, h: HtmlBuilder<Message>): Html =>
   h.div(
     [
       h.Role('status'),
       h.AriaLive('polite'),
+      h.DataAttribute('toast', toast._tag),
       h.Class(
         'fixed bottom-24 left-1/2 -translate-x-1/2 z-[60] w-[calc(100vw-2rem)] max-w-md flex items-start gap-3 bg-black/80 backdrop-blur-xl border border-white/10 text-white rounded-xl shadow-2xl p-3',
       ),
@@ -1843,7 +1852,7 @@ const skipToastView = (toast: SkipToast, h: HtmlBuilder<Message>): Html =>
       ]),
       h.p(
         [h.Class('flex-1 min-w-0 text-sm break-words')],
-        [skipToastMessage(toast)],
+        [toastMessage(toast)],
       ),
       h.button(
         [
@@ -1853,6 +1862,102 @@ const skipToastView = (toast: SkipToast, h: HtmlBuilder<Message>): Html =>
           h.Class('shrink-0 text-gray-300 hover:text-white transition-colors'),
         ],
         [h.i([h.Class('fas fa-times')])],
+      ),
+    ],
+  )
+
+const promptButtonClass =
+  'flex items-center justify-center gap-2 min-h-11 px-4 rounded-full border border-white/15 text-sm font-semibold transition'
+
+const playlistPromptView = (
+  asking: Extract<PlaylistOpen, { _tag: 'Asking' }>,
+  h: HtmlBuilder<Message>,
+): Html =>
+  h.div(
+    [
+      h.Class('fixed inset-0 z-[70] flex items-center justify-center p-4'),
+      h.OnKeyDownPreventDefault(key =>
+        key === 'Escape'
+          ? Option.some(Message.ClickedCancelPlaylist())
+          : Option.none(),
+      ),
+    ],
+    [
+      h.div([
+        h.Class('absolute inset-0 bg-black/60'),
+        h.AriaHidden(true),
+        h.OnClick(Message.ClickedCancelPlaylist()),
+      ]),
+      h.div(
+        [
+          h.Id(PLAYLIST_PROMPT_ID),
+          h.Role('dialog'),
+          h.AriaModal(true),
+          h.AriaLabelledBy(`${PLAYLIST_PROMPT_ID}-title`),
+          h.Tabindex(-1),
+          h.Class(
+            'relative w-full max-w-md rounded-xl border border-white/10 bg-black/80 backdrop-blur-xl text-white shadow-2xl outline-none p-5 space-y-4',
+          ),
+        ],
+        [
+          h.h1(
+            [
+              h.Id(`${PLAYLIST_PROMPT_ID}-title`),
+              h.Class('text-lg font-bold break-words'),
+            ],
+            [asking.name],
+          ),
+          h.p(
+            [h.Class('text-sm text-gray-300')],
+            [
+              `${songCountText(asking.songs.length)} to play. Your queue already has songs in it.`,
+            ],
+          ),
+          h.div(
+            [h.Class('flex flex-col gap-2')],
+            [
+              h.button(
+                [
+                  h.Type('button'),
+                  h.DataAttribute('playlist-choice', 'Replace'),
+                  h.OnClick(Message.ClickedReplaceQueueWithPlaylist()),
+                  h.Class(
+                    twMerge(
+                      promptButtonClass,
+                      'bg-[#446e92] hover:bg-[#54809f]',
+                    ),
+                  ),
+                ],
+                ['Replace queue'],
+              ),
+              h.button(
+                [
+                  h.Type('button'),
+                  h.DataAttribute('playlist-choice', 'Append'),
+                  h.OnClick(Message.ClickedAddPlaylistToQueue()),
+                  h.Class(
+                    twMerge(promptButtonClass, 'bg-white/10 hover:bg-white/20'),
+                  ),
+                ],
+                ['Add to queue'],
+              ),
+              h.button(
+                [
+                  h.Type('button'),
+                  h.DataAttribute('playlist-choice', 'Cancel'),
+                  h.OnClick(Message.ClickedCancelPlaylist()),
+                  h.Class(
+                    twMerge(
+                      promptButtonClass,
+                      'text-gray-300 hover:bg-white/10',
+                    ),
+                  ),
+                ],
+                ['Cancel'],
+              ),
+            ],
+          ),
+        ],
       ),
     ],
   )
@@ -1899,8 +2004,13 @@ export const view = Submodel.defineView<Model, Message>((model, h): Html =>
       }),
       Option.match(model.maybeSkipToast, {
         onNone: () => h.empty,
-        onSome: toast => skipToastView(toast, h),
+        onSome: toast => toastView(toast, h),
       }),
+      PlaylistOpen.matchOrElse(
+        model.playlistOpen,
+        { Asking: asking => playlistPromptView(asking, h) },
+        () => h.empty,
+      ),
       model.isInfoOpen ? infoPanelView(h) : h.empty,
     ],
   ),

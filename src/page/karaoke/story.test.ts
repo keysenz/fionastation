@@ -1,17 +1,20 @@
-import { DateTime, Option } from 'effect'
+import { DateTime, Option, Schema } from 'effect'
 import { Command, given, message, model, story } from 'foldkit/story'
 import { expect, test } from 'vitest'
 
 import type { PlayableSong } from '../../domain.ts'
 import { LyricCursor, type Lyrics } from '../../lyrics.ts'
+import { Playlist } from '../../playlist.ts'
 import { PlayerEvent } from '../../youtube'
 import {
   ApplyPlayback,
   ApplyVolume,
   FetchLyrics,
+  FetchPlaylist,
   FetchSongs,
   FocusInfoButton,
   FocusInfoPanel,
+  FocusPlaylistPrompt,
   FocusQueueHandle,
   LoadAutoplay,
   LoadLyricNudges,
@@ -38,6 +41,7 @@ import {
   entered,
   init,
   nowSingingOf,
+  openedPlaylistNameOf,
   update as pageUpdate,
 } from './karaoke'
 import { layersToUrl, parseLayers } from './layers.ts'
@@ -389,6 +393,7 @@ test('a skipped video shows a toast naming the song and starts the dismiss timer
     ),
     model(current => {
       expect(toastOf(current)).toEqual({
+        _tag: 'SkippedSongs',
         firstSkippedTitle: 'Song a',
         skippedCount: 1,
         dismissId: 2,
@@ -416,6 +421,7 @@ test('a second consecutive skip keeps the first title and counts two', () => {
     waited(99),
     model(current => {
       expect(toastOf(current)).toEqual({
+        _tag: 'SkippedSongs',
         firstSkippedTitle: 'Song a',
         skippedCount: 2,
         dismissId: 3,
@@ -695,7 +701,7 @@ test('a queued gone song is skipped with a toast naming it', () => {
     ),
     model(current => {
       expect(currentIdOf(current)).toEqual(Option.some('c'))
-      expect(toastOf(current)?.firstSkippedTitle).toBe('Song b')
+      expect(toastOf(current)).toMatchObject({ firstSkippedTitle: 'Song b' })
     }),
   )
 })
@@ -938,6 +944,7 @@ test('a finished pick after a dead video shows the toast for the new play and ke
       expect(currentIdOf(current)).toEqual(Option.some('c'))
       expect(current.setlist.history).toEqual([])
       expect(toastOf(current)).toEqual({
+        _tag: 'SkippedSongs',
         firstSkippedTitle: 'Song a',
         skippedCount: 1,
         dismissId: 2,
@@ -2268,4 +2275,275 @@ test('a load timeout that elapses after the player got ready, or for an older pl
   const late = update(replaced.model, loadTimedOut(1))
   expect(late.model).toEqual(replaced.model)
   expect(late.commands).toBeUndefined()
+})
+
+const openingId = Schema.decodeSync(Playlist)({
+  id: 'Ab3dE5gH',
+  name: 'Road trip',
+  entries: [{ songId: 'x', videoUrl: 'v', timestamp: 't', title: 'T' }],
+  version: 1,
+  createdAt: 'x',
+  updatedAt: 'x',
+}).id
+
+const entryOf = (song: PlayableSong) => ({
+  songId: song.id,
+  videoUrl: song.video_url,
+  timestamp: song.timestamp,
+  title: song.song_title,
+})
+
+const playlistOf = (
+  first: PlayableSong,
+  ...more: ReadonlyArray<PlayableSong>
+): Playlist =>
+  Schema.decodeSync(Playlist)({
+    id: openingId,
+    name: 'Road trip',
+    entries: [entryOf(first), ...more.map(entryOf)],
+    version: 1,
+    createdAt: 'x',
+    updatedAt: 'x',
+  })
+
+const savedQueue = (...queue: ReadonlyArray<PlayableSong>) =>
+  Message.CompletedLoadSavedSetlist({
+    maybeJson: Option.some(
+      toPersistedJson({ ...emptySetlist, queue, history: [] }),
+    ),
+  })
+const noSavedQueue = Message.CompletedLoadSavedSetlist({
+  maybeJson: Option.none(),
+})
+const fetchedPlaylist = (playlist: Playlist) =>
+  Command.resolve(FetchPlaylist, Message.SucceededFetchPlaylist({ playlist }))
+const failedPlaylist = (failure: 'Deleted' | 'NotFound' | 'Unreachable') =>
+  Command.resolve(FetchPlaylist, Message.FailedFetchPlaylist({ failure }))
+const focusedPrompt = Command.resolve(
+  FocusPlaylistPrompt,
+  Message.CompletedFocusPlaylistPrompt(),
+)
+const archiveLoaded = (
+  songs: ReadonlyArray<PlayableSong>,
+  goneVideoIds: ReadonlyArray<string> = [],
+) => Message.SucceededFetchSongs({ songs, goneVideoIds })
+const queueIdsOf = (current: Model) => current.setlist.queue.map(({ id }) => id)
+const playingIdOf = (current: Model) =>
+  Option.map(current.setlist.maybeNowPlaying, ({ song }) => song.id)
+const openedNameOf = (current: Model) => openedPlaylistNameOf(current)
+
+test('opening a link with nothing queued plays the playlist at once and names the page', () => {
+  story(
+    update,
+    given(init()),
+    message(Message.OpenedPlaylist({ id: openingId })),
+    message(noSavedQueue),
+    fetchedPlaylist(playlistOf(b, a, c)),
+    message(archiveLoaded([a, b, c])),
+    saved,
+    model(current => {
+      expect(playingIdOf(current)).toEqual(Option.some('b'))
+      expect(queueIdsOf(current)).toEqual(['a', 'c'])
+      expect(openedNameOf(current)).toEqual(Option.some('Road trip'))
+    }),
+  )
+})
+
+test('the archive may load before the playlist and the result is the same', () => {
+  story(
+    update,
+    given(init()),
+    message(Message.OpenedPlaylist({ id: openingId })),
+    message(archiveLoaded([a, b, c])),
+    message(noSavedQueue),
+    fetchedPlaylist(playlistOf(b, a, c)),
+    saved,
+    model(current => {
+      expect(playingIdOf(current)).toEqual(Option.some('b'))
+      expect(queueIdsOf(current)).toEqual(['a', 'c'])
+    }),
+  )
+})
+
+test('the playlist is not fetched until the saved queue is known', () => {
+  const opened = update(init(), Message.OpenedPlaylist({ id: openingId }))
+  expect(opened.commands).toBeUndefined()
+  const restored = update(opened.model, noSavedQueue)
+  expect(restored.commands?.map(({ name }) => name)).toEqual([
+    FetchPlaylist.name,
+  ])
+})
+
+test('a saved queue makes the link ask, and nothing changes until the visitor answers', () => {
+  story(
+    update,
+    given(init()),
+    message(Message.OpenedPlaylist({ id: openingId })),
+    message(savedQueue(a, b)),
+    fetchedPlaylist(playlistOf(c)),
+    message(archiveLoaded([a, b, c])),
+    focusedPrompt,
+    model(current => {
+      expect(current.playlistOpen._tag).toBe('Asking')
+      expect(queueIdsOf(current)).toEqual(['a', 'b'])
+      expect(current.setlist.maybeNowPlaying).toEqual(Option.none())
+    }),
+  )
+})
+
+const asked = (first: PlayableSong, ...more: ReadonlyArray<PlayableSong>) =>
+  through(
+    update,
+    Message.SucceededFetchSongs({ songs: [a, b, c], goneVideoIds: [] }),
+    Message.OpenedPlaylist({ id: openingId }),
+    savedQueue(a, b),
+    Message.SucceededFetchPlaylist({ playlist: playlistOf(first, ...more) }),
+  )
+
+test('answering Replace queue plays the playlist instead of the queue', () => {
+  const answered = update(
+    asked(c).model,
+    Message.ClickedReplaceQueueWithPlaylist(),
+  )
+  expect(playingIdOf(answered.model)).toEqual(Option.some('c'))
+  expect(queueIdsOf(answered.model)).toEqual([])
+  expect(answered.model.playlistOpen._tag).toBe('Opened')
+})
+
+test('answering Add to queue keeps the queue and puts the playlist behind it without repeats', () => {
+  const answered = update(
+    asked(b, c).model,
+    Message.ClickedAddPlaylistToQueue(),
+  )
+  expect(queueIdsOf(answered.model)).toEqual(['a', 'b', 'c'])
+  expect(answered.model.setlist.maybeNowPlaying).toEqual(Option.none())
+  expect(answered.model.playlistOpen._tag).toBe('Opened')
+})
+
+test('answering Cancel leaves the queue as it was and closes the question', () => {
+  const answered = update(asked(c).model, Message.ClickedCancelPlaylist())
+  expect(queueIdsOf(answered.model)).toEqual(['a', 'b'])
+  expect(answered.model.setlist.maybeNowPlaying).toEqual(Option.none())
+  expect(answered.model.playlistOpen._tag).toBe('Idle')
+  expect(openedNameOf(answered.model)).toEqual(Option.none())
+})
+
+test('an answer with no question open changes nothing', () => {
+  const idle = through(
+    update,
+    Message.SucceededFetchSongs({ songs: [a], goneVideoIds: [] }),
+  )
+  for (const answer of [
+    Message.ClickedReplaceQueueWithPlaylist(),
+    Message.ClickedAddPlaylistToQueue(),
+    Message.ClickedCancelPlaylist(),
+  ]) {
+    expect(update(idle.model, answer).model).toEqual(idle.model)
+  }
+})
+
+const toastOfFailure = (failure: 'Deleted' | 'NotFound' | 'Unreachable') =>
+  through(
+    update,
+    Message.OpenedPlaylist({ id: openingId }),
+    noSavedQueue,
+    Message.FailedFetchPlaylist({ failure }),
+  )
+
+test('a deleted playlist shows its own toast, returns the address to the radio and opens nothing', () => {
+  story(
+    update,
+    given(init()),
+    message(Message.OpenedPlaylist({ id: openingId })),
+    message(noSavedQueue),
+    failedPlaylist('Deleted'),
+    synced,
+    waited(99),
+    model(current => {
+      expect(toastOf(current)?._tag).toBe('PlaylistDeleted')
+      expect(current.playlistOpen._tag).toBe('Idle')
+      expect(current.setlist.maybeNowPlaying).toEqual(Option.none())
+    }),
+  )
+})
+
+test('the radio keeps its address bar at the radio when the playlist is gone', () => {
+  const failed = toastOfFailure('Deleted')
+  const sync = failed.commands?.find(({ name }) => name === SyncUrl.name)
+  expect(sync?.args).toEqual({ url: '/', change: 'Replace' })
+})
+
+test('a playlist that never existed shows the unknown toast and returns to the radio', () => {
+  const failed = toastOfFailure('NotFound')
+  expect(toastOf(failed.model)?._tag).toBe('PlaylistNotFound')
+  expect(failed.commands?.some(({ name }) => name === SyncUrl.name)).toBe(true)
+})
+
+test('a playlist that could not be reached keeps its address so a reload can retry', () => {
+  const failed = toastOfFailure('Unreachable')
+  expect(toastOf(failed.model)?._tag).toBe('PlaylistUnreachable')
+  expect(failed.commands?.some(({ name }) => name === SyncUrl.name)).toBe(false)
+})
+
+test('a failure after the link was left behind is ignored', () => {
+  const idle = update(
+    init(),
+    Message.FailedFetchPlaylist({ failure: 'Deleted' }),
+  )
+  expect(idle.model).toEqual(init())
+  expect(idle.commands).toBeUndefined()
+})
+
+test('songs whose video is gone are skipped and the toast counts them', () => {
+  const opened = through(
+    update,
+    Message.OpenedPlaylist({ id: openingId }),
+    noSavedQueue,
+    Message.SucceededFetchPlaylist({ playlist: playlistOf(a, b, c) }),
+    archiveLoaded([a, b, c], [b.video_url]),
+  )
+  expect(queueIdsOf(opened.model)).toEqual(['c'])
+  expect(playingIdOf(opened.model)).toEqual(Option.some('a'))
+  expect(toastOf(opened.model)).toMatchObject({
+    _tag: 'PlaylistSongsUnavailable',
+    count: 1,
+  })
+})
+
+test('a playlist whose songs are all unavailable loads nothing and says so', () => {
+  const opened = through(
+    update,
+    Message.OpenedPlaylist({ id: openingId }),
+    noSavedQueue,
+    Message.SucceededFetchPlaylist({ playlist: playlistOf(a, b) }),
+    archiveLoaded([a, b], [a.video_url, b.video_url]),
+  )
+  expect(opened.model.setlist.maybeNowPlaying).toEqual(Option.none())
+  expect(queueIdsOf(opened.model)).toEqual([])
+  expect(opened.model.playlistOpen._tag).toBe('Idle')
+  expect(toastOf(opened.model)).toMatchObject({
+    _tag: 'PlaylistSongsUnavailable',
+    count: 2,
+  })
+})
+
+test('a playlist that arrives for a link the visitor left is ignored', () => {
+  const stray = update(
+    init(),
+    Message.SucceededFetchPlaylist({ playlist: playlistOf(a) }),
+  )
+  expect(stray.model).toEqual(init())
+})
+
+test('the playlist waits for a failed archive and opens once a retry succeeds', () => {
+  const waiting = through(
+    update,
+    Message.OpenedPlaylist({ id: openingId }),
+    noSavedQueue,
+    Message.SucceededFetchPlaylist({ playlist: playlistOf(a) }),
+    Message.FailedFetchSongs({ error: 'down' }),
+  )
+  expect(waiting.model.playlistOpen._tag).toBe('Fetched')
+  const retried = update(waiting.model, archiveLoaded([a]))
+  expect(playingIdOf(retried.model)).toEqual(Option.some('a'))
 })

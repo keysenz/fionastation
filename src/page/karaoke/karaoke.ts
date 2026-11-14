@@ -22,7 +22,7 @@ import { defineMessageUnion } from 'foldkit/message'
 import { defineTaggedUnion } from 'foldkit/schema'
 import { modifyFields } from 'foldkit/struct'
 
-import { fetchJson } from '../../api'
+import { fetchJson, fetchJsonOrFailure } from '../../api'
 import {
   KaraokeVideo,
   PlayableSong,
@@ -49,6 +49,7 @@ import {
   songBeside,
   toNudgesJson,
 } from '../../lyrics.ts'
+import { Playlist, PlaylistId } from '../../playlist.ts'
 import {
   type LoadFailure,
   PlayerEvent,
@@ -66,9 +67,15 @@ import {
   parseLayers,
 } from './layers.ts'
 import {
+  PlaylistFailure,
+  PlaylistOpen,
+  playlistFailureOf,
+} from './playlistOpen.ts'
+import {
   Advance,
   type Continuation,
   type NowPlaying,
+  type PlaylistLoadMode,
   Repeat,
   Setlist,
   Volume,
@@ -81,6 +88,7 @@ import {
   failLoad,
   firstSongOfEachOtherLiveVideo,
   intentOf,
+  loadPlaylist,
   loadRetryDelaySeconds,
   moveInQueue,
   nextRepeat,
@@ -96,6 +104,7 @@ import {
   reportPaused,
   reportPlaying,
   reportReady,
+  resolvePlaylist,
   restoreSaved,
   retryLoad,
   setLevel,
@@ -116,6 +125,7 @@ export const SONG_LIST_ID = 'karaoke-song-list'
 export const SETLIST_PANE_ID = 'karaoke-setlist-pane'
 export const INFO_PANEL_ID = 'karaoke-info-panel'
 export const INFO_BUTTON_ID = 'karaoke-info-button'
+export const PLAYLIST_PROMPT_ID = 'karaoke-playlist-prompt'
 
 // MODEL
 
@@ -129,12 +139,18 @@ export const LyricsFetch = defineTaggedUnion({
 })
 export type LyricsFetch = typeof LyricsFetch.Type
 
-export const SkipToast = Schema.Struct({
-  firstSkippedTitle: Schema.String,
-  skippedCount: Schema.Number,
-  dismissId: Schema.Number,
+export const Toast = defineTaggedUnion({
+  SkippedSongs: {
+    firstSkippedTitle: Schema.String,
+    skippedCount: Schema.Number,
+    dismissId: Schema.Number,
+  },
+  PlaylistDeleted: { dismissId: Schema.Number },
+  PlaylistNotFound: { dismissId: Schema.Number },
+  PlaylistUnreachable: { dismissId: Schema.Number },
+  PlaylistSongsUnavailable: { count: Schema.Number, dismissId: Schema.Number },
 })
-export type SkipToast = typeof SkipToast.Type
+export type Toast = typeof Toast.Type
 
 export const QueueDrag = Schema.Struct({
   from: Schema.Number,
@@ -154,7 +170,8 @@ export const Model = Schema.Struct({
   isExpanded: Schema.Boolean,
   isQueueOpen: Schema.Boolean,
   isInfoOpen: Schema.Boolean,
-  maybeSkipToast: Schema.Option(SkipToast),
+  maybeSkipToast: Schema.Option(Toast),
+  playlistOpen: PlaylistOpen,
   goneVideoIds: Schema.Array(Schema.String),
   isAutoplay: Schema.Boolean,
   repeat: Repeat,
@@ -176,6 +193,12 @@ export const Message = defineMessageUnion({
     goneVideoIds: Schema.Array(Schema.String),
   },
   FailedFetchSongs: { error: Schema.String },
+  SucceededFetchPlaylist: { playlist: Playlist },
+  FailedFetchPlaylist: { failure: PlaylistFailure },
+  OpenedPlaylist: { id: PlaylistId },
+  ClickedReplaceQueueWithPlaylist: {},
+  ClickedAddPlaylistToQueue: {},
+  ClickedCancelPlaylist: {},
   ClickedRetryFetch: {},
   UpdatedSearch: { value: Schema.String },
   ClickedVideo: { videoId: Schema.String },
@@ -239,6 +262,7 @@ export const Message = defineMessageUnion({
   CompletedFocusQueueHandle: {},
   CompletedFocusInfoPanel: {},
   CompletedFocusInfoButton: {},
+  CompletedFocusPlaylistPrompt: {},
   CompletedPickRandomVideo: {
     playId: Schema.Number,
     song: PlayableSong,
@@ -263,6 +287,19 @@ export const FetchSongs = Command.define('FetchSongs', {
         }),
     }),
   ),
+})
+
+export const FetchPlaylist = Command.define('FetchPlaylist', {
+  args: { id: PlaylistId },
+  messages: [Message.SucceededFetchPlaylist, Message.FailedFetchPlaylist],
+  execute: ({ id }) =>
+    fetchJsonOrFailure(`/api/playlists/${id}`, Playlist).pipe(
+      Effect.match({
+        onFailure: failure =>
+          Message.FailedFetchPlaylist({ failure: playlistFailureOf(failure) }),
+        onSuccess: playlist => Message.SucceededFetchPlaylist({ playlist }),
+      }),
+    ),
 })
 
 export const FetchLyrics = Command.define('FetchLyrics', {
@@ -394,6 +431,14 @@ export const FocusInfoButton = Command.define('FocusInfoButton', {
   execute: Dom.focus(`#${INFO_BUTTON_ID}`).pipe(
     Effect.ignore,
     Effect.as(Message.CompletedFocusInfoButton()),
+  ),
+})
+
+export const FocusPlaylistPrompt = Command.define('FocusPlaylistPrompt', {
+  messages: [Message.CompletedFocusPlaylistPrompt],
+  execute: Dom.focus(`#${PLAYLIST_PROMPT_ID}`).pipe(
+    Effect.ignore,
+    Effect.as(Message.CompletedFocusPlaylistPrompt()),
   ),
 })
 
@@ -660,6 +705,7 @@ export const init = (): Model => ({
   isQueueOpen: false,
   isInfoOpen: false,
   maybeSkipToast: Option.none(),
+  playlistOpen: PlaylistOpen.Idle(),
   goneVideoIds: [],
   isAutoplay: true,
   repeat: 'Off',
@@ -685,6 +731,16 @@ const fetchIfNeeded = (model: Model): UpdateReturn =>
       commands: [FetchSongs()],
     }),
   })
+
+export const openedPlaylistNameOf = (model: Model): Option.Option<string> =>
+  PlaylistOpen.matchOrElse(
+    model.playlistOpen,
+    { Opened: ({ name }) => Option.some<string>(name) },
+    () => Option.none(),
+  )
+
+export const openedPlaylist = (model: Model, id: PlaylistId): UpdateReturn =>
+  update(model, Message.OpenedPlaylist({ id }))
 
 /** Rereads saved data on every visit, because another tab may have changed the queue. */
 export const entered = (model: Model): UpdateReturn => {
@@ -1009,21 +1065,23 @@ const recordFromPlayer = (model: Model, setlist: Setlist): UpdateReturn => ({
 })
 
 const addSkip = (
-  maybeToast: Option.Option<SkipToast>,
+  maybeToast: Option.Option<Toast>,
   failedTitle: string,
   dismissId: number,
-): SkipToast =>
-  Option.match(maybeToast, {
-    onNone: () => ({
-      firstSkippedTitle: failedTitle,
-      skippedCount: 1,
-      dismissId,
-    }),
-    onSome: toast => ({
-      firstSkippedTitle: toast.firstSkippedTitle,
-      skippedCount: toast.skippedCount + 1,
-      dismissId,
-    }),
+): Toast =>
+  Option.match(Option.filter(maybeToast, Toast.guards.SkippedSongs), {
+    onNone: () =>
+      Toast.SkippedSongs({
+        firstSkippedTitle: failedTitle,
+        skippedCount: 1,
+        dismissId,
+      }),
+    onSome: toast =>
+      Toast.SkippedSongs({
+        firstSkippedTitle: toast.firstSkippedTitle,
+        skippedCount: toast.skippedCount + 1,
+        dismissId,
+      }),
   })
 
 const withSkipToast = (
@@ -1035,6 +1093,22 @@ const withSkipToast = (
     maybeSkipToast: maybeToast =>
       Option.some(addSkip(maybeToast, failedTitle, dismissId)),
   })
+
+const withToast = (
+  result: UpdateReturn,
+  makeToast: (dismissId: number) => Toast,
+): UpdateReturn => {
+  const dismissId = result.model.setlist.playCount
+  return {
+    model: modifyFields(result.model, {
+      maybeSkipToast: () => Option.some(makeToast(dismissId)),
+    }),
+    commands: [
+      ...(result.commands ?? []),
+      WaitBeforeDismissToast({ dismissId }),
+    ],
+  }
+}
 
 /** The load of the current play failed. It is tried again by itself after a
  *  wait, while automatic retries are left. */
@@ -1116,20 +1190,160 @@ const skipGoneVideo = (
   )
 }
 
+const failureToasts: Record<PlaylistFailure, (dismissId: number) => Toast> = {
+  Deleted: dismissId => Toast.PlaylistDeleted({ dismissId }),
+  NotFound: dismissId => Toast.PlaylistNotFound({ dismissId }),
+  Unreachable: dismissId => Toast.PlaylistUnreachable({ dismissId }),
+}
+
+const failPlaylist = (model: Model, failure: PlaylistFailure): UpdateReturn => {
+  const idle = modifyFields(model, { playlistOpen: () => PlaylistOpen.Idle() })
+  return withToast(
+    failure === 'Unreachable'
+      ? { model: idle }
+      : {
+          model: idle,
+          commands: [
+            SyncUrl({ url: layersToUrl(layersOf(idle)), change: 'Replace' }),
+          ],
+        },
+    failureToasts[failure],
+  )
+}
+
+const startPlaylist = (
+  model: Model,
+  open: Extract<PlaylistOpen, { _tag: 'Asking' }>,
+  mode: PlaylistLoadMode,
+): UpdateReturn => {
+  const opened = modifyFields(model, {
+    playlistOpen: () => PlaylistOpen.Opened({ name: open.name }),
+  })
+  const loaded = changeSetlist(
+    opened,
+    loadPlaylist(opened.setlist, open.songs, mode),
+  )
+  return open.unavailableCount > 0
+    ? withToast(loaded, dismissId =>
+        Toast.PlaylistSongsUnavailable({
+          count: open.unavailableCount,
+          dismissId,
+        }),
+      )
+    : loaded
+}
+
+const settlePlaylist = (model: Model): UpdateReturn =>
+  PlaylistOpen.matchOrElse(
+    model.playlistOpen,
+    {
+      Fetched: ({ playlist }) =>
+        Option.match(AsyncData.getData(model.songs), {
+          onNone: () => ({ model }),
+          onSome: archive => {
+            const { songs, unavailableCount } = resolvePlaylist(
+              playlist.entries,
+              archive,
+              continuationOf(model).isGone,
+            )
+            return Array.match(songs, {
+              onEmpty: () =>
+                withToast(
+                  {
+                    model: modifyFields(model, {
+                      playlistOpen: () => PlaylistOpen.Idle(),
+                    }),
+                  },
+                  dismissId =>
+                    Toast.PlaylistSongsUnavailable({
+                      count: unavailableCount,
+                      dismissId,
+                    }),
+                ),
+              onNonEmpty: nonEmptySongs => {
+                const asking = PlaylistOpen.Asking({
+                  name: playlist.name,
+                  songs: nonEmptySongs,
+                  unavailableCount,
+                })
+                return Array.isReadonlyArrayEmpty(model.setlist.queue)
+                  ? startPlaylist(model, asking, 'Replace')
+                  : {
+                      model: modifyFields(model, {
+                        playlistOpen: () => asking,
+                      }),
+                      commands: [FocusPlaylistPrompt()],
+                    }
+              },
+            })
+          },
+        }),
+    },
+    () => ({ model }),
+  )
+
+const answerPlaylist = (model: Model, mode: PlaylistLoadMode): UpdateReturn =>
+  PlaylistOpen.matchOrElse(
+    model.playlistOpen,
+    { Asking: asking => startPlaylist(model, asking, mode) },
+    () => ({ model }),
+  )
+
 const updateModel = (model: Model, message: Message) =>
   Message.match<UpdateReturn>(message, {
-    SucceededFetchSongs: ({ songs, goneVideoIds }) => ({
-      model: modifyFields(model, {
-        songs: current => AsyncData.settle(current, Result.succeed(songs)),
-        goneVideoIds: known => Array.dedupe([...known, ...goneVideoIds]),
-      }),
-    }),
+    SucceededFetchSongs: ({ songs, goneVideoIds }) =>
+      settlePlaylist(
+        modifyFields(model, {
+          songs: current => AsyncData.settle(current, Result.succeed(songs)),
+          goneVideoIds: known => Array.dedupe([...known, ...goneVideoIds]),
+        }),
+      ),
 
     FailedFetchSongs: ({ error }) => ({
       model: modifyFields(model, {
         songs: current => AsyncData.settle(current, Result.fail(error)),
       }),
     }),
+
+    OpenedPlaylist: ({ id }) => ({
+      model: modifyFields(model, {
+        playlistOpen: () => PlaylistOpen.AwaitingSavedSetlist({ id }),
+      }),
+    }),
+
+    SucceededFetchPlaylist: ({ playlist }) =>
+      PlaylistOpen.matchOrElse(
+        model.playlistOpen,
+        {
+          Fetching: ({ id }) =>
+            id === playlist.id
+              ? settlePlaylist(
+                  modifyFields(model, {
+                    playlistOpen: () => PlaylistOpen.Fetched({ playlist }),
+                  }),
+                )
+              : { model },
+        },
+        () => ({ model }),
+      ),
+
+    FailedFetchPlaylist: ({ failure }) =>
+      PlaylistOpen.guards.Fetching(model.playlistOpen)
+        ? failPlaylist(model, failure)
+        : { model },
+
+    ClickedReplaceQueueWithPlaylist: () => answerPlaylist(model, 'Replace'),
+
+    ClickedAddPlaylistToQueue: () => answerPlaylist(model, 'Append'),
+
+    ClickedCancelPlaylist: () =>
+      PlaylistOpen.guards.Asking(model.playlistOpen)
+        ? {
+            model: modifyFields(model, {
+              playlistOpen: () => PlaylistOpen.Idle(),
+            }),
+          }
+        : { model },
 
     ClickedRetryFetch: () => fetchIfNeeded(model),
 
@@ -1415,11 +1629,23 @@ const updateModel = (model: Model, message: Message) =>
             : { model },
       }),
 
-    CompletedLoadSavedSetlist: ({ maybeJson }) => ({
-      model: modifyFields(model, {
+    CompletedLoadSavedSetlist: ({ maybeJson }) => {
+      const restored = modifyFields(model, {
         setlist: setlist => restoreSaved(setlist, maybeJson),
-      }),
-    }),
+      })
+      return PlaylistOpen.matchOrElse(
+        model.playlistOpen,
+        {
+          AwaitingSavedSetlist: ({ id }) => ({
+            model: modifyFields(restored, {
+              playlistOpen: () => PlaylistOpen.Fetching({ id }),
+            }),
+            commands: [FetchPlaylist({ id })],
+          }),
+        },
+        () => ({ model: restored }),
+      )
+    },
 
     ClickedToggleAutoplay: () => ({
       model: modifyFields(model, { isAutoplay: isAutoplay => !isAutoplay }),
@@ -1541,6 +1767,7 @@ const updateModel = (model: Model, message: Message) =>
     CompletedFocusQueueHandle: () => ({ model }),
     CompletedFocusInfoPanel: () => ({ model }),
     CompletedFocusInfoButton: () => ({ model }),
+    CompletedFocusPlaylistPrompt: () => ({ model }),
   })
 
 /** Every new play starts its own load timeout, whatever started the play, so a

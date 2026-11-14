@@ -3,6 +3,7 @@ import { defineTaggedUnion } from 'foldkit/schema'
 import { modifyFields } from 'foldkit/struct'
 
 import { PlayableSong } from '../../domain.ts'
+import type { PlaylistEntry } from '../../playlist.ts'
 import { LoadFailure } from '../../youtube.ts'
 
 const HISTORY_LIMIT = 50
@@ -130,6 +131,75 @@ export const enqueueAll = (
   Array.isReadonlyArrayNonEmpty(songs)
     ? modifyFields(setlist, { queue: queue => [...queue, ...songs] })
     : setlist
+
+export type PlaylistLoadMode = 'Replace' | 'Append'
+
+const archiveSongOf = (
+  archive: ReadonlyArray<PlayableSong>,
+  entry: PlaylistEntry,
+): Option.Option<PlayableSong> =>
+  Array.findFirst(archive, song => song.id === entry.songId).pipe(
+    Option.orElse(() =>
+      Array.findFirst(
+        archive,
+        song =>
+          song.video_url === entry.videoUrl &&
+          song.timestamp === entry.timestamp,
+      ),
+    ),
+    Option.orElse(() =>
+      Array.findFirst(
+        archive,
+        song =>
+          song.video_url === entry.videoUrl && song.song_title === entry.title,
+      ),
+    ),
+  )
+
+export type ResolvedPlaylist = {
+  songs: ReadonlyArray<PlayableSong>
+  unavailableCount: number
+}
+
+export const resolvePlaylist = (
+  entries: ReadonlyArray<PlaylistEntry>,
+  archive: ReadonlyArray<PlayableSong>,
+  isGone: (song: PlayableSong) => boolean,
+): ResolvedPlaylist => {
+  const resolved = Array.flatMap(entries, entry =>
+    Option.toArray(
+      Option.filter(archiveSongOf(archive, entry), song => !isGone(song)),
+    ),
+  )
+  return {
+    songs: Array.dedupeWith(
+      resolved,
+      (first, second) => first.id === second.id,
+    ),
+    unavailableCount: entries.length - resolved.length,
+  }
+}
+
+export const loadPlaylist = (
+  setlist: Setlist,
+  songs: ReadonlyArray<PlayableSong>,
+  mode: PlaylistLoadMode,
+): Setlist => {
+  if (!Array.isReadonlyArrayNonEmpty(songs)) {
+    return setlist
+  }
+  if (mode === 'Replace') {
+    return playNext(modifyFields(setlist, { queue: () => songs }))
+  }
+  const heldIds = new Set([
+    ...setlist.queue.map(song => song.id),
+    ...Option.toArray(setlist.maybeNowPlaying).map(({ song }) => song.id),
+  ])
+  return enqueueAll(
+    setlist,
+    Array.filter(songs, song => !heldIds.has(song.id)),
+  )
+}
 
 export const moveInQueue = (
   setlist: Setlist,

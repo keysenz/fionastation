@@ -1,23 +1,45 @@
 import { Effect, Schema } from 'effect'
+import { defineTaggedUnion } from 'foldkit/schema'
 
-/** Reads a JSON route and decodes it. The error is written for visitors. */
+export const FetchFailure = defineTaggedUnion({
+  Unreachable: {},
+  Rejected: { status: Schema.Number },
+  Unreadable: {},
+})
+export type FetchFailure = typeof FetchFailure.Type
+
+export const fetchFailureMessage = (failure: FetchFailure): string =>
+  FetchFailure.match(failure, {
+    Unreachable: () => 'Could not reach the archive',
+    Rejected: ({ status }) => `The archive responded with ${status}`,
+    Unreadable: () => 'The archive sent something unreadable',
+  })
+
+export const fetchJsonOrFailure = <A>(
+  path: string,
+  schema: Schema.Decoder<A>,
+): Effect.Effect<A, FetchFailure> =>
+  Effect.gen(function* () {
+    const response = yield* Effect.tryPromise({
+      try: () => fetch(path),
+      catch: () => FetchFailure.Unreachable(),
+    })
+    if (!response.ok) {
+      return yield* Effect.fail(
+        FetchFailure.Rejected({ status: response.status }),
+      )
+    }
+    const body = yield* Effect.tryPromise({
+      try: () => response.json(),
+      catch: () => FetchFailure.Unreadable(),
+    })
+    return yield* Schema.decodeUnknownEffect(schema)(body).pipe(
+      Effect.mapError(() => FetchFailure.Unreadable()),
+    )
+  })
+
 export const fetchJson = <A>(
   path: string,
   schema: Schema.Decoder<A>,
 ): Effect.Effect<A, string> =>
-  Effect.gen(function* () {
-    const response = yield* Effect.tryPromise({
-      try: () => fetch(path),
-      catch: () => 'Could not reach the archive',
-    })
-    if (!response.ok) {
-      return yield* Effect.fail(`The archive responded with ${response.status}`)
-    }
-    const body = yield* Effect.tryPromise({
-      try: () => response.json(),
-      catch: () => 'The archive sent something unreadable',
-    })
-    return yield* Schema.decodeUnknownEffect(schema)(body).pipe(
-      Effect.mapError(() => 'The archive sent something unreadable'),
-    )
-  })
+  fetchJsonOrFailure(path, schema).pipe(Effect.mapError(fetchFailureMessage))

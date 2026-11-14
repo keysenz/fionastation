@@ -28,3 +28,4 @@ This directory is the maintained source for verifying the user-facing behavior o
 - [Data API](./api.md) covers the read-only routes and the removed write routes.
 - [Player](./player.md) covers real playback, the video end, the player's reports back to the page, a load that fails and is retried, lyrics that fail and are retried until the song ends, and song changes in a browser that blocks autoplay.
 - [Resilience](./resilience.md) covers failed fetches, bad data, blocked or corrupt saved data, two tabs, and bad paths.
+- [Open a shared playlist link](./playlist-open.md) covers `/p/<id>`: opening, the question on a saved queue, the deleted and unknown toasts, gone songs, and timing.
