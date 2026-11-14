@@ -61,7 +61,7 @@ const primaryClass = twMerge(buttonClass, 'bg-[#446e92] hover:bg-[#54809f]')
 const quietClass = twMerge(buttonClass, 'text-gray-300 hover:bg-white/10')
 
 const barButtonClass =
-  'flex items-center gap-2 min-h-9 px-3 sm:min-h-10 rounded-full border border-white/15 bg-black/40 text-xs sm:text-sm font-semibold text-gray-100 hover:bg-white/10 drop-shadow-md transition'
+  'flex shrink-0 items-center gap-2 min-h-9 px-3 sm:min-h-10 whitespace-nowrap rounded-full border border-white/15 bg-black/40 text-xs sm:text-sm font-semibold text-gray-100 hover:bg-white/10 drop-shadow-md transition'
 
 const barButtonView = (
   action: string,
@@ -284,6 +284,7 @@ const formCopyOf = (
 ): FormCopy => {
   const nameIsValid = (name: string) => writtenName(name).kind === 'Valid'
   const queueSize = saveSelectionOf(model, 'Queue').songIds.length
+  const isOwner = Option.isSome(ownedOpenedOf(model))
   return PlaylistForm.match<FormCopy>(form, {
     Save: form => {
       const selection = saveSelectionOf(model, form.source)
@@ -294,6 +295,17 @@ const formCopyOf = (
           nameIsValid(form.name) &&
           Array.isReadonlyArrayNonEmpty(selection.songIds),
         body: [
+          Array.every(SAVE_SOURCES, source =>
+            Array.isReadonlyArrayEmpty(saveSelectionOf(model, source).songIds),
+          )
+            ? h.p(
+                [
+                  h.DataAttribute('playlist-problem', 'NothingToSave'),
+                  h.Class('text-sm text-amber-300'),
+                ],
+                ['Play or queue a song first, then save it as a playlist.'],
+              )
+            : h.empty,
           sourceChoiceView(model, form.source, h),
           selection.omittedCount > 0
             ? h.p(
@@ -327,13 +339,13 @@ const formCopyOf = (
     Rename: form => ({
       title: 'Rename playlist',
       submit: 'Rename',
-      canSubmit: nameIsValid(form.name),
+      canSubmit: isOwner && nameIsValid(form.name),
       body: nameFieldView(form.name, h),
     }),
     Update: () => ({
       title: 'Update from queue',
       submit: 'Replace songs',
-      canSubmit: queueSize > 0,
+      canSubmit: isOwner && queueSize > 0,
       body: [
         h.p(
           [h.Class('text-sm text-gray-300')],
@@ -348,7 +360,7 @@ const formCopyOf = (
     Delete: () => ({
       title: 'Delete playlist',
       submit: 'Delete playlist',
-      canSubmit: true,
+      canSubmit: isOwner,
       body: [
         h.p(
           [h.Class('text-sm text-gray-300')],

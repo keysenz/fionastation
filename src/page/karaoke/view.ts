@@ -747,13 +747,13 @@ const headerView = (model: Model, h: HtmlBuilder<Message>): Html =>
         [h.Class('flex items-center justify-between mb-2')],
         [
           h.div(
-            [h.Class('flex items-center space-x-3')],
+            [h.Class('flex min-w-0 items-center space-x-3')],
             [
               infoButtonView(model.isInfoOpen, h),
               h.h1(
                 [
                   h.Class(
-                    'text-xl font-bold tracking-tight text-[#446e92] uppercase drop-shadow-md whitespace-nowrap',
+                    'text-lg sm:text-xl font-bold tracking-tight text-[#446e92] uppercase drop-shadow-md whitespace-nowrap',
                   ),
                 ],
                 ['Fio Radio'],
@@ -761,18 +761,21 @@ const headerView = (model: Model, h: HtmlBuilder<Message>): Html =>
             ],
           ),
           h.div(
-            [h.Class('flex items-center gap-2')],
+            [h.Class('flex shrink-0 items-center gap-2')],
             [
               savePlaylistButtonView(h),
               h.a(
                 [
                   h.Href(songsRouter()),
                   h.Class(
-                    'flex items-center gap-2 min-h-10 px-4 rounded-full border border-white/15 bg-black/40 text-sm font-semibold text-gray-100 hover:bg-white/10 drop-shadow-md transition',
+                    'flex shrink-0 items-center gap-2 min-h-10 px-3 sm:px-4 whitespace-nowrap rounded-full border border-white/15 bg-black/40 text-sm font-semibold text-gray-100 hover:bg-white/10 drop-shadow-md transition',
                   ),
                 ],
                 [
-                  h.i([h.Class('fas fa-music'), h.AriaHidden(true)]),
+                  h.span(
+                    [h.Class('hidden sm:inline')],
+                    [h.i([h.Class('fas fa-music'), h.AriaHidden(true)])],
+                  ),
                   'Song list',
                 ],
               ),

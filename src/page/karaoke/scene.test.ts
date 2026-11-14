@@ -237,7 +237,10 @@ const askedAfter = (...setup: ReadonlyArray<Message>): Model =>
   after(
     fetched(a, b),
     ...setup,
-    Message.OpenedPlaylist({ id: playlistAB.id, maybeEditToken: Option.none() }),
+    Message.OpenedPlaylist({
+      id: playlistAB.id,
+      maybeEditToken: Option.none(),
+    }),
     Message.CompletedLoadSavedSetlist({ maybeJson: Option.none() }),
     Message.SucceededFetchPlaylist({ playlist: playlistAB }),
   )
@@ -273,5 +276,29 @@ test('the question says both when a song plays over a queue', () => {
     ),
     playerMounted,
     contextIs('PlayingAndQueued'),
+  )
+})
+
+const nothingToSave = selector('[data-playlist-problem="NothingToSave"]')
+
+test('the save dialog tells a visitor with no songs to play or queue one first', () => {
+  scene(
+    { update, view },
+    given(after(fetched(a, b), Message.ClickedSavePlaylist())),
+    expect(nothingToSave).toExist(),
+  )
+})
+
+test('the save dialog has no such hint once a song is queued', () => {
+  scene(
+    { update, view },
+    given(
+      after(
+        fetched(a, b),
+        Message.ClickedAddToQueue({ song: a }),
+        Message.ClickedSavePlaylist(),
+      ),
+    ),
+    expect(nothingToSave).toBeAbsent(),
   )
 })

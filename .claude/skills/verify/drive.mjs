@@ -2722,6 +2722,32 @@ const journeys = {
     await page.setViewportSize({ width: 375, height: 667 });
     const songs = distinctByTitle(await livePlayables(), 3);
     await page.goto(BASE + '/');
+    await step(
+      'playlist-save-mobile',
+      'the header keeps Song list on one line beside Save, and an empty Save dialog says what to do first',
+      async () => {
+        await page.locator('[data-playlist-action="Save"]').waitFor();
+        const lines = await page.evaluate(() => {
+          const link = [...document.querySelectorAll('a')].find((a) => a.textContent.trim() === 'Song list');
+          const save = document.querySelector('[data-playlist-action="Save"]');
+          const title = document.querySelector('h1').getBoundingClientRect();
+          return {
+            link: link.getBoundingClientRect().height,
+            titleRight: title.right,
+            titleWidth: title.width,
+            saveLeft: save.getBoundingClientRect().left,
+            titleClipped: document.querySelector('h1').scrollWidth > document.querySelector('h1').clientWidth,
+          };
+        });
+        if (lines.link > 48) throw new Error(`Song list wraps: ${JSON.stringify(lines)}`);
+        if (lines.titleRight + 8 > lines.saveLeft || lines.titleClipped) throw new Error(`title collides: ${JSON.stringify(lines)}`);
+        await page.screenshot({ path: join(out, 'header-375.png') });
+        await openSaveDialog(page);
+        await page.locator('[data-playlist-problem="NothingToSave"]').waitFor();
+        await dialogButton(page, 'Cancel').click();
+      },
+      page,
+    );
     await setSavedQueue(page, songs);
     await page.goto(BASE + '/');
     await step(

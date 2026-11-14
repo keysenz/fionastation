@@ -9,6 +9,7 @@ import {
   editTokenOf,
   editTokenOfHash,
   forget,
+  isUnproven,
   mergeOwned,
   ownedToJson,
   parseOwned,
@@ -36,7 +37,7 @@ test('storage that holds anything else reads as no playlists', () => {
   expect(parseOwned(Option.some('[{"id":"x"}]'))).toEqual([])
 })
 
-test('remembering a playlist twice keeps the newest token only', () => {
+test('a proven token replaces the stored one', () => {
   const again = { ...one, editToken: token('newer') }
   expect(remember([one, two], again)).toEqual([two, again])
 })
@@ -83,4 +84,11 @@ test('a copy name ends in (copy) and still fits in 60 characters', () => {
   const long = copyName('y'.repeat(60))
   expect(long.endsWith(' (copy)')).toBe(true)
   expect(writtenName(long).kind).toBe('Valid')
+})
+
+test('a token that differs from the stored one is unproven, a new playlist is not', () => {
+  const other = token('other')
+  expect(isUnproven([one], one.id, other)).toBe(true)
+  expect(isUnproven([one], one.id, one.editToken)).toBe(false)
+  expect(isUnproven([two], one.id, other)).toBe(false)
 })

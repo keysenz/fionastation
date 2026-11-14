@@ -1,4 +1,4 @@
-import { DateTime, Option, Schema } from 'effect'
+import { DateTime, Effect, Option, Schema } from 'effect'
 import { Command, given, message, model, story } from 'foldkit/story'
 import { expect, test } from 'vitest'
 
@@ -55,7 +55,13 @@ import {
   update as pageUpdate,
 } from './karaoke'
 import { layersToUrl, parseLayers } from './layers.ts'
-import { EditToken, PlaylistForm } from './playlists.ts'
+import {
+  EditToken,
+  OwnedChange,
+  PlaylistForm,
+  ownedToJson,
+  parseOwned,
+} from './playlists.ts'
 import {
   defaultVolume,
   emptySetlist,
@@ -2896,8 +2902,10 @@ test('a saved playlist is remembered with its token and shown with its links', (
   expect(done.model.mine).toEqual([
     { id: createdId, name: 'Rainy day Fio', editToken: token },
   ])
-  expect(commandNamed(done, SaveMyPlaylists.name)?.args?.['json']).toContain(
-    token,
+  expect(commandNamed(done, SaveMyPlaylists.name)?.args?.['change']).toEqual(
+    OwnedChange.Remember({
+      entry: { id: createdId, name: 'Rainy day Fio', editToken: token },
+    }),
   )
   expect(dialogOf(done.model)).toMatchObject({
     _tag: 'Shared',
@@ -2951,7 +2959,10 @@ test('a failed save keeps the dialog open with the reason and leaves the queue a
   const sent = submitSave('Queue', 'x')
   const limited = update(
     sent.model,
-    Message.FailedWritePlaylist({ failure: WriteFailure.RateLimited() }),
+    Message.FailedWritePlaylist({
+      failure: WriteFailure.RateLimited(),
+      maybeEditToken: Option.none(),
+    }),
   )
   expect(dialogOf(limited.model)._tag).toBe('Editing')
   expect(writeFailureOf(limited.model)).toBe('RateLimited')
@@ -2966,7 +2977,10 @@ test.each(['Unreachable', 'TooLarge', 'Unavailable'] as const)(
   tag => {
     const failed = update(
       submitSave('Queue', 'x').model,
-      Message.FailedWritePlaylist({ failure: WriteFailure[tag]() }),
+      Message.FailedWritePlaylist({
+        failure: WriteFailure[tag](),
+        maybeEditToken: Option.none(),
+      }),
     )
     expect(writeFailureOf(failed.model)).toBe(tag)
   },
@@ -3101,6 +3115,7 @@ test('a rename that succeeds updates the page, the stored name and the version',
       name: 'Night drive',
       songIds: ['a', 'b'],
       version: 2,
+      editToken: token,
     }),
   )
   expect(openedPlaylistNameOf(done.model)).toEqual(Option.some('Night drive'))
@@ -3156,7 +3171,10 @@ test('a stale edit reloads the playlist, tells the visitor, and holds the newer 
   )
   const conflict = update(
     submitted.model,
-    Message.FailedWritePlaylist({ failure: WriteFailure.Conflict() }),
+    Message.FailedWritePlaylist({
+      failure: WriteFailure.Conflict(),
+      maybeEditToken: Option.none(),
+    }),
   )
   expect(toastOf(conflict.model)?._tag).toBe('PlaylistConflict')
   expect(dialogOf(conflict.model)._tag).toBe('Closed')
@@ -3212,7 +3230,9 @@ test('deleting asks first, then removes the playlist and forgets its token', () 
   expect(done.model.mine).toEqual([])
   expect(dialogOf(done.model)._tag).toBe('Closed')
   expect(toastOf(done.model)?._tag).toBe('PlaylistDeleted')
-  expect(commandNamed(done, SaveMyPlaylists.name)?.args?.['json']).toBe('[]')
+  expect(
+    commandNamed(done, SaveMyPlaylists.name)?.args?.['change'],
+  ).toMatchObject({ _tag: 'Forget', id: openingId })
 })
 
 test('a visitor without the token cannot rename, update or delete', () => {
@@ -3234,7 +3254,10 @@ test('a wrong token is reported in the dialog', () => {
   )
   const failed = update(
     submitted.model,
-    Message.FailedWritePlaylist({ failure: WriteFailure.Forbidden() }),
+    Message.FailedWritePlaylist({
+      failure: WriteFailure.Forbidden(),
+      maybeEditToken: Option.none(),
+    }),
   )
   expect(writeFailureOf(failed.model)).toBe('Forbidden')
 })
@@ -3320,4 +3343,169 @@ test('an #edit link for the opened playlist is picked up even though re-entry is
   expect(again.model.mine).toEqual([
     { id: createdId, name: 'Rainy day Fio', editToken: token },
   ])
+})
+
+const forgedToken = Schema.decodeSync(EditToken)('forged-token-XYZ')
+const MY_PLAYLISTS_STORAGE_KEY = 'karaoke-my-playlists'
+const ownerWithFragment = (fragment: EditToken) =>
+  through(
+    update,
+    Message.SucceededFetchSongs({ songs: [a, b, c], goneVideoIds: [] }),
+    Message.CompletedLoadMyPlaylists({
+      maybeJson: Option.some(
+        ownedToJson([{ id: openingId, name: 'Road trip', editToken: token }]),
+      ),
+      origin: 'https://fio.example',
+    }),
+    Message.OpenedPlaylist({
+      id: openingId,
+      maybeEditToken: Option.some(fragment),
+    }),
+    noSavedQueue,
+    Message.SucceededFetchPlaylist({ playlist: playlistOf(a, b) }),
+  )
+const renameSubmitted = (current: Model) =>
+  update(
+    update(
+      update(current, Message.ClickedRenamePlaylist()).model,
+      Message.UpdatedPlaylistName({ value: 'Night drive' }),
+    ).model,
+    Message.SubmittedPlaylistForm(),
+  )
+const tokenSent = (result: UpdateReturn) =>
+  commandNamed(result, ReplacePlaylist.name)?.args?.['editToken']
+
+test('a save in one tab keeps the entries another tab stored meanwhile', async () => {
+  const other = { id: createdId, name: 'Other tab', editToken: forgedToken }
+  window.localStorage.setItem(MY_PLAYLISTS_STORAGE_KEY, ownedToJson([other]))
+  const mineHere = { id: openingId, name: 'Road trip', editToken: token }
+  await Effect.runPromise(
+    SaveMyPlaylists({ change: OwnedChange.Remember({ entry: mineHere }) })
+      .effect,
+  )
+  expect(
+    parseOwned(
+      Option.fromNullishOr(
+        window.localStorage.getItem(MY_PLAYLISTS_STORAGE_KEY),
+      ),
+    ),
+  ).toEqual([other, mineHere])
+  await Effect.runPromise(
+    SaveMyPlaylists({ change: OwnedChange.Forget({ id: openingId }) }).effect,
+  )
+  expect(
+    parseOwned(
+      Option.fromNullishOr(
+        window.localStorage.getItem(MY_PLAYLISTS_STORAGE_KEY),
+      ),
+    ),
+  ).toEqual([other])
+  window.localStorage.removeItem(MY_PLAYLISTS_STORAGE_KEY)
+})
+
+test('a change made in another tab reaches this tab', () => {
+  const other = { id: createdId, name: 'Other tab', editToken: forgedToken }
+  const synced = update(
+    init(),
+    Message.ChangedMyPlaylistsElsewhere({
+      maybeJson: Option.some(ownedToJson([other])),
+    }),
+  )
+  expect(synced.model.mine).toEqual([other])
+  const cleared = update(
+    synced.model,
+    Message.ChangedMyPlaylistsElsewhere({ maybeJson: Option.none() }),
+  )
+  expect(cleared.model.mine).toEqual([])
+})
+
+test('an edit link for a playlist that already has a stored token leaves the stored token alone', () => {
+  const opened = ownerWithFragment(forgedToken)
+  expect(opened.model.mine).toEqual([
+    { id: openingId, name: 'Road trip', editToken: token },
+  ])
+  expect(commandNamed(opened, SaveMyPlaylists.name)).toBeUndefined()
+  expect(tokenSent(renameSubmitted(opened.model))).toBe(token)
+})
+
+test('a stored token that the server rejects falls back to the edit link token, which is kept once it works', () => {
+  const real = Schema.decodeSync(EditToken)('real-token-123')
+  const submitted = renameSubmitted(ownerWithFragment(real).model)
+  const retried = update(
+    submitted.model,
+    Message.FailedWritePlaylist({
+      failure: WriteFailure.Forbidden(),
+      maybeEditToken: Option.some(token),
+    }),
+  )
+  expect(tokenSent(retried)).toBe(real)
+  expect(dialogOf(retried.model)._tag).toBe('Sending')
+  expect(retried.model.mine[0]?.editToken).toBe(token)
+  const done = update(
+    retried.model,
+    Message.SucceededReplacePlaylist({
+      name: 'Night drive',
+      songIds: ['a', 'b'],
+      version: 2,
+      editToken: real,
+    }),
+  )
+  expect(done.model.mine).toEqual([
+    { id: openingId, name: 'Night drive', editToken: real },
+  ])
+  expect(done.model.maybeCandidate).toEqual(Option.none())
+})
+
+test('when the edit link token is rejected too, the playlist is a visitor view and nothing is kept', () => {
+  const submitted = renameSubmitted(ownerWithFragment(forgedToken).model)
+  const retried = update(
+    submitted.model,
+    Message.FailedWritePlaylist({
+      failure: WriteFailure.Forbidden(),
+      maybeEditToken: Option.some(token),
+    }),
+  )
+  const failed = update(
+    retried.model,
+    Message.FailedWritePlaylist({
+      failure: WriteFailure.Forbidden(),
+      maybeEditToken: Option.some(forgedToken),
+    }),
+  )
+  expect(ownedOpenedOf(failed.model)._tag).toBe('None')
+  expect(failed.model.maybeCandidate).toEqual(Option.none())
+  expect(failed.model.mine).toEqual([])
+  expect(writeFailureOf(failed.model)).toBe('Forbidden')
+  expect(commandNamed(failed, SaveMyPlaylists.name)?.args?.['change']).toEqual(
+    OwnedChange.Forget({ id: openingId }),
+  )
+})
+
+test('a rejected token turns the owner bar into a visitor bar', () => {
+  const submitted = renameSubmitted(settledOwner())
+  const failed = update(
+    submitted.model,
+    Message.FailedWritePlaylist({
+      failure: WriteFailure.Forbidden(),
+      maybeEditToken: Option.some(token),
+    }),
+  )
+  expect(ownedOpenedOf(failed.model)._tag).toBe('None')
+  expect(failed.model.playlistOpen._tag).toBe('Opened')
+})
+
+test('a playlist deleted by someone else leaves the owner in the deleted state', () => {
+  const submitted = renameSubmitted(settledOwner())
+  const failed = update(
+    submitted.model,
+    Message.FailedWritePlaylist({
+      failure: WriteFailure.Deleted(),
+      maybeEditToken: Option.some(token),
+    }),
+  )
+  expect(failed.model.playlistOpen._tag).toBe('Idle')
+  expect(failed.model.mine).toEqual([])
+  expect(dialogOf(failed.model)._tag).toBe('Closed')
+  expect(toastOf(failed.model)?._tag).toBe('PlaylistDeleted')
+  expect(urlSyncs(failed)).toContain('/')
 })

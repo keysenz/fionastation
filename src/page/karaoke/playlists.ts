@@ -54,6 +54,33 @@ export const rename = (
 ): ReadonlyArray<Owned> =>
   Array.map(owned, entry => (entry.id === id ? { ...entry, name } : entry))
 
+export const OwnedChange = defineTaggedUnion({
+  Remember: { entry: Owned },
+  Rename: { id: PlaylistId, name: Schema.String },
+  Forget: { id: PlaylistId },
+})
+export type OwnedChange = typeof OwnedChange.Type
+
+export const applyChange = (
+  owned: ReadonlyArray<Owned>,
+  change: OwnedChange,
+): ReadonlyArray<Owned> =>
+  OwnedChange.match<ReadonlyArray<Owned>>(change, {
+    Remember: ({ entry }) => remember(owned, entry),
+    Rename: ({ id, name }) => rename(owned, id, name),
+    Forget: ({ id }) => forget(owned, id),
+  })
+
+export const Candidate = Schema.Struct({ id: PlaylistId, editToken: EditToken })
+export type Candidate = typeof Candidate.Type
+
+export const isUnproven = (
+  owned: ReadonlyArray<Owned>,
+  id: PlaylistId,
+  editToken: EditToken,
+): boolean =>
+  Option.exists(editTokenOf(owned, id), stored => stored !== editToken)
+
 export const mergeOwned = (
   loaded: ReadonlyArray<Owned>,
   current: ReadonlyArray<Owned>,
