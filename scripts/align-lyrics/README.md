@@ -46,6 +46,8 @@ Run the batch from the repository root:
 
 The batch writes the file after each song, so a crash loses at most one song. It skips a song that already has an entry with the same LRCLIB track and song title, `Rejected` entries included. To align a song again, delete its entry.
 
+Requests to the site retry on a 5xx, a 429 or a dropped connection, waiting 5 to 80 seconds, about 5 minutes in all. The batch skips videos marked `membership` or `is_gone`. When a download fails, it leaves the rest of that video's songs alone for the run and writes no entry, so a later run tries them again.
+
 ## Test the keep rules
 
 ```sh
