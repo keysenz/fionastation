@@ -637,6 +637,14 @@ const dashboard = (report: Report, name: string | undefined) => {
         'finishes per play',
       ),
     ]),
+    h('section', { class: 'panel wide', 'data-panel': 'songs' }, [
+      h('h2', {}, ['Top songs']),
+      songTable(report),
+    ]),
+    h('section', { class: 'panel wide', 'data-panel': 'videos' }, [
+      h('h2', {}, ['Top videos']),
+      videoTable(report.videos),
+    ]),
     h('section', { class: 'panel wide', 'data-panel': 'daily' }, [
       h('h2', {}, ['Plays per day']),
       h('ul', { class: 'legend' }, [
@@ -687,14 +695,6 @@ const dashboard = (report: Report, name: string | undefined) => {
         `One JSON object per line, UTC days from ${report.since}.`,
       ]),
       exportLinks(),
-    ]),
-    h('section', { class: 'panel wide', 'data-panel': 'songs' }, [
-      h('h2', {}, ['Top songs']),
-      songTable(report),
-    ]),
-    h('section', { class: 'panel wide', 'data-panel': 'videos' }, [
-      h('h2', {}, ['Top videos']),
-      videoTable(report.videos),
     ]),
   ])
 }
