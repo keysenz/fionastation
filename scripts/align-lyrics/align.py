@@ -2,9 +2,12 @@ import argparse
 import json
 import os
 import re
+import http.client
+import socket
 import subprocess
 import sys
 import time
+import urllib.error
 import urllib.request
 from importlib.metadata import version
 from pathlib import Path
@@ -27,11 +30,28 @@ JAPANESE = re.compile(r"[぀-ヿ㐀-鿿]")
 UNSPACED_LANGUAGES = {"ja", "zh", "yue", "th", "lo", "my"}
 
 
-def fetch_json(url: str):
+RETRY_WAITS_S = (5, 10, 20, 40, 80)
+
+
+def is_transient(error: Exception) -> bool:
+    if isinstance(error, urllib.error.HTTPError):
+        return error.code >= 500 or error.code == 429
+    return isinstance(error, (urllib.error.URLError, TimeoutError, socket.timeout, ConnectionError, http.client.RemoteDisconnected))
+
+
+def fetch_json(url: str, sleep=time.sleep):
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-    with urllib.request.urlopen(request, timeout=30) as response:
-        body = json.load(response)
-    time.sleep(REQUEST_PAUSE_S)
+    for wait in (*RETRY_WAITS_S, None):
+        try:
+            with urllib.request.urlopen(request, timeout=30) as response:
+                body = json.load(response)
+            break
+        except Exception as error:
+            if wait is None or not is_transient(error):
+                raise
+            print(f"  retrying {url} in {wait}s: {error}", flush=True)
+            sleep(wait)
+    sleep(REQUEST_PAUSE_S)
     return body
 
 
@@ -48,10 +68,11 @@ def songs_from(videos: list[dict]) -> list[dict]:
     A video YouTube has taken down is skipped, and the site marks those with
     is_gone. Without this the batch retries their songs on every run, because
     neither downloading them nor leaving them empty ever writes an entry.
+    A members-only video (membership) can never be downloaded, so it is skipped too.
     """
     songs = []
     for video in videos:
-        if video.get("is_gone"):
+        if video.get("is_gone") or video.get("membership"):
             continue
         ordered = sorted(video["karaoke_song"], key=lambda s: seconds(s["timestamp"]))
         for song, after in zip(ordered, ordered[1:] + [None]):
@@ -63,6 +84,18 @@ def songs_from(videos: list[dict]) -> list[dict]:
                 "end": seconds(after["timestamp"]) if after else None,
             })
     return songs
+
+
+def attempt(song: dict, failed_videos: set[str], run):
+    """Run one song, or None when its video failed. A failure writes no entry, so a later run retries it."""
+    if song["video"] in failed_videos:
+        return None
+    try:
+        return run()
+    except (subprocess.CalledProcessError, OSError) as error:
+        failed_videos.add(song["video"])
+        print(f"  skipped: {error}\n  skipping the rest of video {song['video']} this run", flush=True)
+        return None
 
 
 def load_output(path: Path = OUTPUT) -> dict:
@@ -184,6 +217,7 @@ def main() -> None:
     local = load_local()
     model = None
     aligned = 0
+    failed_videos: set[str] = set()
     for song in songs:
         if args.limit is not None and aligned >= args.limit:
             break
@@ -201,15 +235,16 @@ def main() -> None:
         done = entries.get(song["id"])
         if done and done["lrclibId"] == lrclib_id and done["songTitle"] == song["title"]:
             continue
+        if song["video"] in failed_videos:
+            continue
         print(f"{song['title']} ({song['id']})", flush=True)
         if model is None:
             import stable_whisper
             model = stable_whisper.load_model(MODEL, device="cpu")
-        try:
-            entries[song["id"]] = entry_for(model, song, lrclib_id, lines, args.cache)
-        except (subprocess.CalledProcessError, OSError) as error:
-            print(f"  skipped: {error}", flush=True)
+        entry = attempt(song, failed_videos, lambda: entry_for(model, song, lrclib_id, lines, args.cache))
+        if entry is None:
             continue
+        entries[song["id"]] = entry
         save_output(entries, args.out)
         aligned += 1
 
