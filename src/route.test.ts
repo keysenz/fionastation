@@ -26,3 +26,19 @@ test('the radio page and a playlist link both run the radio, the song list does 
   expect(isRadioRoute(routeOf('/songs'))).toBe(false)
   expect(isRadioRoute(routeOf('/nope'))).toBe(false)
 })
+
+test('a tracking link opens the commission route carrying the id, and the token stays in the query', () => {
+  const id = '6f0e5d0a-5a43-4c52-9a56-2a8f0f6c0001'
+  const route = routeOf(`/commission/${id}?t=abc_-123`)
+  expect(route._tag).toBe('Commission')
+  expect(route._tag === 'Commission' && route.id).toBe(id)
+  expect(routeOf(`/commission/${id}`)._tag).toBe('Commission')
+})
+
+test('a commission link whose id is not a lowercase UUID is not a page', () => {
+  expect(routeOf('/commission/abc')._tag).toBe('NotFound')
+  expect(routeOf('/commission/6F0E5D0A-5A43-4C52-9A56-2A8F0F6C0001')._tag).toBe(
+    'NotFound',
+  )
+  expect(routeOf('/commission')._tag).toBe('NotFound')
+})

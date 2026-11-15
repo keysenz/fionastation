@@ -27,6 +27,7 @@ import {
   WriteFailure,
   fetchJson,
   fetchJsonOrFailure,
+  postWithoutReply,
   sendJson,
 } from '../../api'
 import {
@@ -98,6 +99,30 @@ import {
   parseLayers,
 } from './layers.ts'
 import {
+  MAX_PICKED_MOODS,
+  Mood,
+  MoodPrompt,
+  initialMoodPrompt,
+  stepMoodPrompt,
+} from './moodPrompt.ts'
+import {
+  Listen,
+  PlayStat,
+  type Standing,
+  Trigger,
+  stepStats,
+} from './playStats.ts'
+import {
+  type AutoplayPick,
+  TrailDecision,
+  TrailSession,
+  TrailTag,
+  claimSeqs,
+  newSessionId,
+  startedTrail,
+  trailFields,
+} from './trail.ts'
+import {
   type OpenedPlaylist,
   PlaylistFailure,
   PlaylistOpen,
@@ -147,6 +172,7 @@ import {
   failLoad,
   firstSongOfEachOtherLiveVideo,
   intentOf,
+  isStreamGone,
   loadPlaylist,
   loadRetryDelaySeconds,
   moveInQueue,
@@ -254,6 +280,9 @@ export const Model = Schema.Struct({
   maybeSelectedVideoId: Schema.Option(Schema.String),
   maybeQueueDrag: Schema.Option(QueueDrag),
   maybePlayhead: Schema.Option(Playhead),
+  listens: Schema.Array(Listen),
+  maybeTrail: Schema.Option(TrailSession),
+  moodPrompt: MoodPrompt,
   lyricsBySongId: Schema.Record(Schema.String, LyricsFetch),
   lyricsWaitCount: Schema.Number,
   lyricNudges: Nudges,
@@ -352,6 +381,9 @@ export const Message = defineMessageUnion({
   ClickedToggleInfo: {},
   ClickedCloseInfo: {},
   ClickedDismissToast: {},
+  ToggledMood: { mood: Mood },
+  SubmittedMoods: {},
+  DismissedMoodPrompt: {},
   ClickedToggleAutoplay: {},
   ClickedCycleRepeat: {},
   ChangedVolume: { level: Schema.Number },
@@ -400,10 +432,15 @@ export const Message = defineMessageUnion({
   CompletedPickRandomVideo: {
     playId: Schema.Number,
     song: PlayableSong,
+    poolSize: Schema.Number,
   },
+  CompletedCreateSessionId: { sessionId: Schema.String },
+  CompletedRecordDecision: {},
   CompletedWaitBeforeDismissToast: { dismissId: Schema.Number },
   CompletedWaitBeforeLoadTimeout: { playId: Schema.Number },
   CompletedWaitBeforeRetryLoad: { playId: Schema.Number },
+  CompletedRecordStat: {},
+  CompletedRecordMoodVote: {},
 })
 export type Message = typeof Message.Type
 
@@ -1000,7 +1037,67 @@ export const PickRandomVideo = Command.define('PickRandomVideo', {
   messages: [Message.CompletedPickRandomVideo],
   execute: ({ playId, candidates }) =>
     Random.choice(candidates).pipe(
-      Effect.map(song => Message.CompletedPickRandomVideo({ playId, song })),
+      Effect.map(song =>
+        Message.CompletedPickRandomVideo({
+          playId,
+          song,
+          poolSize: candidates.length,
+        }),
+      ),
+    ),
+})
+
+export const CreateSessionId = Command.define('CreateSessionId', {
+  messages: [Message.CompletedCreateSessionId],
+  execute: Effect.map(newSessionId, sessionId =>
+    Message.CompletedCreateSessionId({ sessionId }),
+  ),
+})
+
+export const RecordDecision = Command.define('RecordDecision', {
+  args: { decision: TrailDecision },
+  messages: [Message.CompletedRecordDecision],
+  execute: ({ decision: { tag, songId, policy, poolSize } }) =>
+    postWithoutReply('/api/stats', {
+      kind: 'Decision',
+      songId,
+      policy,
+      poolSize,
+      ...trailFields(Option.some(tag)),
+    }).pipe(Effect.ignore, Effect.as(Message.CompletedRecordDecision())),
+})
+
+export const RecordStat = Command.define('RecordStat', {
+  args: { stat: PlayStat, maybeTag: Schema.Option(TrailTag) },
+  messages: [Message.CompletedRecordStat],
+  execute: ({ stat, maybeTag }) =>
+    postWithoutReply('/api/stats', {
+      ...PlayStat.match(stat, {
+        Clicked: ({ songId }) => ({
+          songId,
+          kind: 'Click',
+          origin: 'Visitor',
+        }),
+        Played: ({ songId, origin }) => ({ songId, kind: 'Play', origin }),
+        Finished: ({ songId, origin }) => ({ songId, kind: 'Finish', origin }),
+        Skipped: ({ songId, origin, secondsIntoSong }) => ({
+          songId,
+          kind: 'Skip',
+          origin,
+          secondsIntoSong,
+        }),
+      }),
+      ...trailFields(maybeTag),
+    }).pipe(Effect.ignore, Effect.as(Message.CompletedRecordStat())),
+})
+
+export const RecordMoodVote = Command.define('RecordMoodVote', {
+  args: { songId: Schema.String, moods: Schema.Array(Mood) },
+  messages: [Message.CompletedRecordMoodVote],
+  execute: ({ songId, moods }) =>
+    postWithoutReply('/api/stats', { songId, kind: 'Mood', moods }).pipe(
+      Effect.ignore,
+      Effect.as(Message.CompletedRecordMoodVote()),
     ),
 })
 
@@ -1200,6 +1297,9 @@ export const init = (): Model => ({
   maybeSelectedVideoId: Option.none(),
   maybeQueueDrag: Option.none(),
   maybePlayhead: Option.none(),
+  listens: [],
+  maybeTrail: Option.none(),
+  moodPrompt: initialMoodPrompt(),
   lyricsBySongId: {},
   lyricsWaitCount: 0,
   lyricNudges: {},
@@ -1259,6 +1359,7 @@ export const entered = (model: Model): UpdateReturn => {
       LoadRepeat(),
       LoadVolume(),
       LoadLyricNudges(),
+      ...(Option.isNone(model.maybeTrail) ? [CreateSessionId()] : []),
       ...(fetched.commands ?? []),
     ],
   }
@@ -2340,7 +2441,8 @@ const updateModel = (model: Model, message: Message) =>
           nowPlaying => nowPlaying.song.id === song.id,
         ),
         {
-          onNone: () => changeSetlist(model, play(model.setlist, song)),
+          onNone: () =>
+            changeSetlist(model, play(model.setlist, song, 'Visitor')),
           onSome: ({ phase }) =>
             phase._tag === 'LoadFailed'
               ? {
@@ -2559,23 +2661,21 @@ const updateModel = (model: Model, message: Message) =>
                   : { model: modifyFields(model, { setlist: settleGone }) },
               )
             }
-            const setlist = play(model.setlist, song)
+            const setlist = play(model.setlist, song, 'Autoplay')
             const saveSetlist = SaveSetlist({ json: toPersistedJson(setlist) })
             const dismissId = setlist.playCount
+            const picked = modifyFields(model, { setlist: () => setlist })
             return phase._tag === 'MovingOn'
               ? {
                   model: withSkipToast(
-                    modifyFields(model, { setlist: () => setlist }),
+                    picked,
                     songLabel(previousSong),
                     dismissId,
                   ),
-                  commands: [
-                    saveSetlist,
-                    WaitBeforeDismissToast({ dismissId }),
-                  ],
+                  commands: [saveSetlist, WaitBeforeDismissToast({ dismissId })],
                 }
               : {
-                  model: modifyFields(model, { setlist: () => setlist }),
+                  model: picked,
                   commands: [saveSetlist],
                 }
           },
@@ -2741,6 +2841,50 @@ const updateModel = (model: Model, message: Message) =>
     ClickedDismissToast: () => ({
       model: modifyFields(model, { maybeSkipToast: () => Option.none() }),
     }),
+
+    ToggledMood: ({ mood }) => ({
+      model: modifyFields(model, {
+        moodPrompt: prompt =>
+          MoodPrompt.matchOrElse(
+            prompt,
+            {
+              Asking: asking =>
+                MoodPrompt.Asking({
+                  ...asking,
+                  picked: Array.contains(asking.picked, mood)
+                    ? Array.filter(asking.picked, picked => picked !== mood)
+                    : asking.picked.length < MAX_PICKED_MOODS
+                      ? [...asking.picked, mood]
+                      : asking.picked,
+                }),
+            },
+            () => prompt,
+          ),
+      }),
+    }),
+
+    SubmittedMoods: () =>
+      MoodPrompt.matchOrElse(
+        model.moodPrompt,
+        {
+          Asking: ({ songId, picked }) =>
+            Array.isReadonlyArrayNonEmpty(picked)
+              ? {
+                  model: modifyFields(model, {
+                    moodPrompt: () => MoodPrompt.Done(),
+                  }),
+                  commands: [RecordMoodVote({ songId, moods: picked })],
+                }
+              : { model },
+        },
+        () => ({ model }),
+      ),
+
+    DismissedMoodPrompt: () => ({
+      model: modifyFields(model, { moodPrompt: () => MoodPrompt.Done() }),
+    }),
+
+    CompletedRecordMoodVote: () => ({ model }),
 
     CompletedWaitBeforeDismissToast: ({ dismissId }) => ({
       model: modifyFields(model, {
@@ -3103,7 +3247,126 @@ const updateModel = (model: Model, message: Message) =>
       settleCopy(model, CopyResult.CopyFailed({ target })),
 
     CompletedFocusPlaylistDialog: () => ({ model }),
+
+    CompletedRecordStat: () => ({ model }),
+    CompletedRecordDecision: () => ({ model }),
+    CompletedCreateSessionId: ({ sessionId }) => ({
+      model: modifyFields(model, {
+        maybeTrail: trail =>
+          Option.orElse(trail, () => Option.some(startedTrail(sessionId))),
+      }),
+    }),
   })
+
+const standingOf = (model: Model): Option.Option<Standing> =>
+  Option.map(model.setlist.maybeNowPlaying, nowPlaying => {
+    const maybeSinging = nowSingingOf(model)
+    const song = songOnBar(model, nowPlaying)
+    return {
+      playId: nowPlaying.playId,
+      origin: nowPlaying.origin,
+      isPlaying: nowPlaying.phase._tag === 'Playing',
+      hasFailedLoad: nowPlaying.phase._tag === 'LoadFailed',
+      hasGoneStream: isStreamGone(nowPlaying.phase),
+      songId: song.id,
+      maybeNextSongId: Option.map(
+        songBeside(allSongs(model), song, Option.none(), 1),
+        ({ id }) => id,
+      ),
+      secondsIntoSong: Option.getOrElse(
+        Option.zipWith(
+          maybeSinging,
+          playheadOf(model, nowPlaying),
+          ({ segment }, { seconds }) =>
+            Math.max(0, Math.floor(seconds - segment.startSeconds)),
+        ),
+        () => 0,
+      ),
+    }
+  })
+
+const triggerOf = (message: Message): Trigger => {
+  if (message._tag === 'ClickedNext') {
+    return Trigger.PressedNext()
+  }
+  if (message._tag === 'ReceivedPlayerEvent') {
+    const { playId, event } = message
+    if (event._tag === 'Ended') {
+      return Trigger.EndedPlay({ playId })
+    }
+    if (event._tag === 'Progressed') {
+      return Trigger.MovedPlayhead()
+    }
+  }
+  return Trigger.Other()
+}
+
+const clickedStatOf = (message: Message): ReadonlyArray<PlayStat> =>
+  message._tag === 'ClickedSong' || message._tag === 'ClickedAddToQueue'
+    ? [PlayStat.Clicked({ songId: message.song.id })]
+    : []
+
+const isCounting = (before: Model, after: Model): boolean =>
+  before.listens.length > 0 ||
+  Option.exists(
+    after.setlist.maybeNowPlaying,
+    ({ phase }) => phase._tag === 'Playing',
+  )
+
+const autoplayPickOf = (
+  before: Model,
+  message: Message,
+  after: Model,
+): Option.Option<AutoplayPick> =>
+  message._tag === 'CompletedPickRandomVideo' &&
+  after.setlist.playCount > before.setlist.playCount
+    ? Option.some({ songId: message.song.id, poolSize: message.poolSize })
+    : Option.none()
+
+const withPlayStats = (
+  before: Model,
+  message: Message,
+  result: UpdateReturn,
+): UpdateReturn => {
+  const step = isCounting(before, result.model)
+    ? stepStats(
+        before.listens,
+        triggerOf(message),
+        standingOf(before),
+        standingOf(result.model),
+      )
+    : { listens: [], stats: [] }
+  const stats = [...clickedStatOf(message), ...step.stats]
+  const trailed = claimSeqs(
+    result.model.maybeTrail,
+    autoplayPickOf(before, message, result.model),
+    stats,
+  )
+  return {
+    model: modifyFields(result.model, {
+      listens: () => step.listens,
+      moodPrompt: prompt =>
+        stepMoodPrompt(prompt, step.stats, standingOf(result.model)),
+      maybeTrail: () => trailed.maybeTrail,
+    }),
+    ...(Array.isReadonlyArrayNonEmpty(stats) ||
+    Option.isSome(trailed.maybeDecision) ||
+    result.commands
+      ? {
+          commands: [
+            ...(result.commands ?? []),
+            ...Option.match(trailed.maybeDecision, {
+              onNone: () => [],
+              onSome: decision => [RecordDecision({ decision })],
+            }),
+            ...trailed.tagged.map(({ stat, maybeTag }) =>
+              RecordStat({ stat, maybeTag }),
+            ),
+          ],
+        }
+      : {}),
+  }
+}
 
 /** Every new play starts its own load timeout, whatever started the play, so a
  *  load that never reports anything still ends. */
@@ -3128,7 +3391,11 @@ const withLoadTimeout = (before: Model, result: UpdateReturn): UpdateReturn =>
  *  the topmost one. A change that came from the address bar already has its
  *  entry, so it only repairs a URL that says something the model does not. */
 export const update = (model: Model, message: Message): UpdateReturn => {
-  const updated = withLoadTimeout(model, updateModel(model, message))
+  const updated = withPlayStats(
+    model,
+    message,
+    withLoadTimeout(model, updateModel(model, message)),
+  )
   const result = {
     ...updated,
     model: giveUpEndedRetries(updated.model),

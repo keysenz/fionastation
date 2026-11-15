@@ -261,6 +261,12 @@ const creditsView = (h: HtmlBuilder<Message>): Html =>
           NBSP,
         ],
       ),
+      h.p(
+        [h.Class('text-center text-sm text-gray-300')],
+        [
+          'To improve autoplay, this site records the order of songs played during a visit, with the time to the minute. Nothing identifies you or is kept on your device, and a reload starts a new record that is not linked to the last.',
+        ],
+      ),
     ],
   )
 

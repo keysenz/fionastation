@@ -9,7 +9,7 @@ import {
   formatPublishDate,
   songLabel,
 } from '../../domain.ts'
-import { songsRouter } from '../../route'
+import { hireRouter, songsRouter } from '../../route'
 import { type LoadFailure, thumbnailUrl } from '../../youtube'
 import type { LoginFailure } from './account.ts'
 import { infoButtonView, infoPanelView } from './info.ts'
@@ -33,6 +33,7 @@ import {
   lyricsColumnView,
   lyricsWindowView,
 } from './lyricsView.ts'
+import { MOODS, type Mood, MoodPrompt } from './moodPrompt.ts'
 import { PlaylistOpen } from './playlistOpen.ts'
 import {
   myPlaylistsButtonView,
@@ -767,6 +768,21 @@ const headerView = (model: Model, h: HtmlBuilder<Message>): Html =>
             [
               myPlaylistsButtonView(h),
               savePlaylistButtonView(h),
+              h.a(
+                [
+                  h.Href(hireRouter()),
+                  h.Class(
+                    'flex shrink-0 items-center gap-2 min-h-10 px-3 sm:px-4 whitespace-nowrap rounded-full border border-white/15 bg-black/40 text-sm font-semibold text-gray-100 hover:bg-black/70 hover:border-white/30 drop-shadow-md transition',
+                  ),
+                ],
+                [
+                  h.span(
+                    [h.Class('hidden sm:inline')],
+                    [h.i([h.Class('fas fa-microphone'), h.AriaHidden(true)])],
+                  ),
+                  'Hire Fio',
+                ],
+              ),
               h.a(
                 [
                   h.Href(songsRouter()),
@@ -1912,6 +1928,80 @@ const toastView = (toast: Toast, h: HtmlBuilder<Message>): Html =>
     ],
   )
 
+const moodPromptView = (
+  asking: { songId: string; picked: ReadonlyArray<Mood> },
+  songTitle: string,
+  h: HtmlBuilder<Message>,
+): Html =>
+  h.div(
+    [
+      h.Role('region'),
+      h.AriaLabel('Song mood'),
+      h.DataAttribute('mood-prompt', 'Asking'),
+      h.Class(
+        'fixed bottom-24 left-1/2 -translate-x-1/2 z-[60] w-[calc(100vw-2rem)] max-w-md bg-black/80 backdrop-blur-xl border border-white/10 text-white rounded-xl shadow-2xl p-3 space-y-3',
+      ),
+    ],
+    [
+      h.div(
+        [h.Class('flex items-start gap-3')],
+        [
+          h.p(
+            [h.Class('flex-1 min-w-0 text-sm break-words')],
+            [`How does ${songTitle} feel? Tap up to 2.`],
+          ),
+          h.button(
+            [
+              h.Type('button'),
+              h.AriaLabel('Close'),
+              h.OnClick(Message.DismissedMoodPrompt()),
+              h.Class(
+                'shrink-0 text-gray-300 hover:text-white transition-colors',
+              ),
+            ],
+            [h.i([h.Class('fas fa-times'), h.AriaHidden(true)])],
+          ),
+        ],
+      ),
+      h.div(
+        [h.Class('flex flex-wrap gap-2')],
+        MOODS.map(mood => {
+          const isPicked = Array.contains(asking.picked, mood)
+          return h.button(
+            [
+              h.Type('button'),
+              h.AriaPressed(isPicked ? 'true' : 'false'),
+              h.OnClick(Message.ToggledMood({ mood })),
+              h.Class(
+                twMerge(
+                  'min-h-9 px-3 rounded-full border text-sm font-semibold capitalize transition',
+                  isPicked
+                    ? 'bg-[#446e92] border-transparent'
+                    : 'border-white/15 hover:bg-white/10',
+                ),
+              ),
+            ],
+            [mood],
+          )
+        }),
+      ),
+      h.button(
+        [
+          h.Type('button'),
+          h.Disabled(!Array.isReadonlyArrayNonEmpty(asking.picked)),
+          h.OnClick(Message.SubmittedMoods()),
+          h.Class(
+            twMerge(
+              promptButtonClass,
+              'w-full bg-[#446e92] hover:bg-[#54809f] disabled:opacity-50 disabled:pointer-events-none',
+            ),
+          ),
+        ],
+        ['Send'],
+      ),
+    ],
+  )
+
 const promptButtonClass =
   'flex items-center justify-center gap-2 min-h-11 px-4 rounded-full border border-white/15 text-sm font-semibold transition'
 
@@ -2083,6 +2173,26 @@ export const view = Submodel.defineView<Model, Message>((model, h): Html =>
         onNone: () => h.empty,
         onSome: toast => toastView(toast, h),
       }),
+      Option.isNone(model.maybeSkipToast) &&
+      !model.isExpanded &&
+      !PlaylistOpen.guards.Asking(model.playlistOpen)
+        ? MoodPrompt.matchOrElse(
+            model.moodPrompt,
+            {
+              Asking: asking =>
+                Option.match(model.setlist.maybeNowPlaying, {
+                  onNone: () => h.empty,
+                  onSome: nowPlaying =>
+                    moodPromptView(
+                      asking,
+                      songOnBar(model, nowPlaying).song_title,
+                      h,
+                    ),
+                }),
+            },
+            () => h.empty,
+          )
+        : h.empty,
       PlaylistOpen.matchOrElse(
         model.playlistOpen,
         { Asking: asking => playlistPromptView(asking, model.setlist, h) },

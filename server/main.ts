@@ -3,11 +3,20 @@ import { readFile } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { extname, join, resolve, sep } from 'node:path'
+import { Readable } from 'node:stream'
+import { pipeline } from 'node:stream/promises'
 import { gzipSync } from 'node:zlib'
 
 import {
+  createCommissionAdminApi,
+  createCommissionApi,
+  isUuid,
+  openCommissionStore,
+} from './commissions.ts'
+import {
   findSongForLyrics,
   findSongsForPlaylist,
+  findSongsForStats,
   listKaraokeVideos,
   listSongIds,
 } from './db.ts'
@@ -23,10 +32,25 @@ import {
 import {
   MAX_BODY_BYTES,
   createAdminApi,
+  bearerHolder,
   createPlaylistApi,
   openPlaylistStore,
 } from './playlists.ts'
 import { loadSongbook } from './songbook.ts'
+import {
+  createStatApi,
+  createStatExport,
+  createStatReport,
+  openStatStore,
+} from './stats.ts'
+import {
+  STATS_EXPORT_ROUTE,
+  STATS_REPORT_ROUTE,
+  createGatedExport,
+  createGatedReport,
+  parseStatsUserIds,
+} from './statsAccess.ts'
+import { DEFAULT_TRAIL_DAYS } from './trail.ts'
 import { isGone, startRefreshing } from './videoStatus.ts'
 
 const ROOT = resolve(import.meta.dirname, '../dist')
@@ -103,6 +127,74 @@ const playlistApi =
     createsPerIpPerHour,
   })
 
+const commissionStore = (() => {
+  const path = process.env.COMMISSIONS_DB_PATH
+  if (!path) {
+    console.warn(
+      'COMMISSIONS_DB_PATH is not set, so commissions are unavailable',
+    )
+    return undefined
+  }
+  try {
+    return openCommissionStore({ path })
+  } catch (error) {
+    console.error('Could not open the commissions database:', error)
+    return undefined
+  }
+})()
+
+const COMMISSIONS_SECRET = process.env.COMMISSIONS_SECRET
+if (commissionStore && !COMMISSIONS_SECRET) {
+  console.warn(
+    'COMMISSIONS_SECRET is not set, so the public commission routes are unavailable',
+  )
+}
+
+const commissionApi =
+  commissionStore &&
+  COMMISSIONS_SECRET &&
+  createCommissionApi({
+    store: commissionStore,
+    secret: COMMISSIONS_SECRET,
+    createsPerIpPerHour: Number(process.env.COMMISSIONS_IP_LIMIT_PER_HOUR) || 5,
+  })
+
+const DAY_MS = 24 * 60 * 60 * 1000
+
+const statStore = (() => {
+  const path = process.env.STATS_DB_PATH
+  if (!path) {
+    console.warn('STATS_DB_PATH is not set, so play statistics are unavailable')
+    return undefined
+  }
+  try {
+    const store = openStatStore({
+      path,
+      trailDays: Number(process.env.STATS_TRAIL_DAYS) || DEFAULT_TRAIL_DAYS,
+    })
+    store.prune()
+    setInterval(() => {
+      try {
+        store.prune()
+      } catch (error) {
+        console.error('Could not prune the listening trail:', error)
+      }
+    }, DAY_MS).unref()
+    return store
+  } catch (error) {
+    console.error('Could not open the statistics database:', error)
+    return undefined
+  }
+})()
+
+const statApi =
+  statStore &&
+  createStatApi({
+    store: statStore,
+    songExists: songId => findSongsForPlaylist([songId]).length > 0,
+    perIpPerHour: Number(process.env.STATS_IP_LIMIT_PER_HOUR) || 600,
+  })
+
 const SITE_ORIGIN = process.env.SITE_ORIGIN ?? 'https://fionastation.vercel.app'
 
 const discordApp = (() => {
@@ -129,15 +221,57 @@ const discordAuth =
     sessions: playlistStore.sessions,
   })
 
+const statReport =
+  statStore &&
+  createStatReport({ store: statStore, findSongs: findSongsForStats })
+
+const statExport =
+  statStore &&
+  createStatExport({ store: statStore, findSongs: findSongsForStats })
+
+const statsUserIds = parseStatsUserIds(process.env.STATS_USER_IDS)
+if (!statsUserIds) {
+  console.warn(
+    'STATS_USER_IDS is not set to a list of Discord user ids, so the statistics page is unavailable',
+  )
+}
+
+const statsGate = {
+  allowedIds: statsUserIds,
+  signedInId:
+    discordApp &&
+    discordAuth &&
+    ((cookie: string | undefined) => {
+      const viewer = discordAuth.viewer({
+        method: 'GET',
+        cookie,
+        origin: undefined,
+      })
+      return viewer.kind === 'Member' ? viewer.discordId : undefined
+    }),
+}
+
+const gatedReport = createGatedReport({ ...statsGate, report: statReport })
+const gatedExport = createGatedExport({
+  ...statsGate,
+  exportRows: statExport,
+})
+
+const STATS_ROUTE = '/api/stats'
 const PLAYLIST_ROUTE = /^\/api\/playlists(?:\/([^/]+))?$/
+const INQUIRY_PATH = '/api/inquiry'
+const COMMISSION_ROUTE = /^\/api\/commission\/([^/]+)$/
 const AUTH_ROUTE = /^\/api\/auth\/(.+)$/
 const isAuthRoute = (route: string | undefined): route is AuthRoute =>
   route !== undefined && Object.hasOwn(AUTH_ROUTES, route)
 const ADMIN_PATH = /^\/(?:api\/)?admin(?:\/|$)/
+const COMMISSION_ADMIN_PATH = /^\/admin\/commissions(?:\/|$)/
 
 // NOTE: keep in step with src/route.ts. Any other path gets the 404 status with the app's own 404 page.
-const PAGE_PATHS = new Set(['/', '/songs'])
+const PAGE_PATHS = new Set(['/', '/songs', '/hire', '/studio', '/endorse'])
+const STATS_PAGE_PATH = '/stats'
 const PLAYLIST_PAGE_PATH = /^\/p\/[0-9A-Za-z]{8}$/
+const COMMISSION_PAGE_PATH = /^\/commission\/([^/]+)$/
 
 const MOVED_PAGE_PATHS = new Set([
   '/radio',
@@ -327,6 +461,17 @@ const handle = async (req: IncomingMessage, res: ServerResponse) => {
   const replyShell = async (status: number) =>
     reply(status, HTML, await readFile(join(ROOT, 'index.html')))
 
+  const readCapped = async () => {
+    const declared = Number(req.headers['content-length'] ?? 0)
+    return declared > MAX_BODY_BYTES ? undefined : await readBody(req)
+  }
+
+  const tooLarge = () => {
+    res.once('finish', () => req.destroy())
+    res.setHeader('Connection', 'close')
+    return replyJson(413, { error: 'The request is too large' }, 'no-store')
+  }
+
   const path = parsePath(req.url ?? '/')
   if (!path) {
     return replyShell(404)
@@ -390,6 +535,75 @@ const handle = async (req: IncomingMessage, res: ServerResponse) => {
     return replyJson(answer.status, answer.body, 'no-store')
   }
 
+  if (pathname === STATS_REPORT_ROUTE) {
+    if (!hasProxySecret(req)) {
+      return replyJson(403, { error: 'Forbidden' })
+    }
+    if (req.method !== 'GET') {
+      return replyJson(405, { error: 'Method Not Allowed' }, 'no-store')
+    }
+    const { status, body } = gatedReport(
+      req.headers.cookie,
+      new URL(req.url ?? '/', 'http://localhost').searchParams.get('days'),
+    )
+    return replyJson(status, body, 'no-store')
+  }
+
+  if (pathname === STATS_EXPORT_ROUTE) {
+    if (!hasProxySecret(req)) {
+      return replyJson(403, { error: 'Forbidden' })
+    }
+    if (req.method !== 'GET') {
+      return replyJson(405, { error: 'Method Not Allowed' }, 'no-store')
+    }
+    const query = new URL(req.url ?? '/', 'http://localhost').searchParams
+    const answer = gatedExport(
+      req.headers.cookie,
+      query.get('days'),
+      query.get('table'),
+    )
+    if (!('lines' in answer)) {
+      return replyJson(answer.status, answer.body, 'no-store')
+    }
+    res.writeHead(200, {
+      ...SECURITY_HEADERS,
+      'Content-Type': 'application/x-ndjson; charset=utf-8',
+      'Content-Disposition': `attachment; filename="fio-radio-${query.get('table')}-${query.get('days') ?? 30}d.ndjson"`,
+      'Cache-Control': 'no-store',
+    })
+    await pipeline(Readable.from(answer.lines), res).catch(error => {
+      console.error('Stats export failed:', error)
+    })
+    return
+  }
+
+  if (pathname === STATS_ROUTE) {
+    if (!hasProxySecret(req)) {
+      return replyJson(403, { error: 'Forbidden' })
+    }
+    if (!statApi) {
+      return replyJson(
+        503,
+        { error: 'Statistics are unavailable right now' },
+        'no-store',
+      )
+    }
+    if (req.method !== 'POST') {
+      return replyJson(405, { error: 'Method Not Allowed' }, 'no-store')
+    }
+    const body = await readCapped()
+    if (body === undefined) {
+      return tooLarge()
+    }
+    const { status, body: payload } = statApi({ ip: visitorIp(req), body })
+    if (status === 204) {
+      res.writeHead(204, { ...SECURITY_HEADERS, 'Cache-Control': 'no-store' })
+      res.end()
+      return
+    }
+    return replyJson(status, payload, 'no-store')
+  }
+
   const playlistRoute = PLAYLIST_ROUTE.exec(pathname)
   if (playlistRoute) {
     if (!hasProxySecret(req)) {
@@ -402,12 +616,9 @@ const handle = async (req: IncomingMessage, res: ServerResponse) => {
         'no-store',
       )
     }
-    const declared = Number(req.headers['content-length'] ?? 0)
-    const body = declared > MAX_BODY_BYTES ? undefined : await readBody(req)
+    const body = await readCapped()
     if (body === undefined) {
-      res.once('finish', () => req.destroy())
-      res.setHeader('Connection', 'close')
-      return replyJson(413, { error: 'The request is too large' }, 'no-store')
+      return tooLarge()
     }
     const method = req.method ?? 'GET'
     const { status, body: payload } = playlistApi({
@@ -422,6 +633,35 @@ const handle = async (req: IncomingMessage, res: ServerResponse) => {
       }),
       body,
     })
+    return replyJson(status, payload, 'no-store')
+  }
+
+  const commissionRoute = COMMISSION_ROUTE.exec(pathname)
+  if (pathname === INQUIRY_PATH || commissionRoute) {
+    if (!hasProxySecret(req)) {
+      return replyJson(403, { error: 'Forbidden' })
+    }
+    if (!commissionApi) {
+      return replyJson(
+        503,
+        { error: 'Commissions are unavailable right now' },
+        'no-store',
+      )
+    }
+    const body = await readCapped()
+    if (body === undefined) {
+      return tooLarge()
+    }
+    const method = req.method ?? 'GET'
+    const { status, body: payload } = commissionRoute
+      ? commissionApi.track({
+          method,
+          id: commissionRoute[1] ?? '',
+          token:
+            new URL(req.url ?? '/', 'http://localhost').searchParams.get('t') ??
+            undefined,
+        })
+      : commissionApi.submit({ method, ip: visitorIp(req), body })
     return replyJson(status, payload, 'no-store')
   }
 
@@ -448,7 +688,15 @@ const handle = async (req: IncomingMessage, res: ServerResponse) => {
     return reply(405, TEXT, Buffer.from('Method Not Allowed'))
   }
 
-  if (PAGE_PATHS.has(pathname) || PLAYLIST_PAGE_PATH.test(pathname)) {
+  if (pathname === STATS_PAGE_PATH) {
+    return reply(200, HTML, await readFile(join(ROOT, 'stats.html')))
+  }
+
+  if (
+    PAGE_PATHS.has(pathname) ||
+    PLAYLIST_PAGE_PATH.test(pathname) ||
+    isUuid(COMMISSION_PAGE_PATH.exec(pathname)?.[1] ?? '')
+  ) {
     return replyShell(200)
   }
 
@@ -491,18 +739,42 @@ const ADMIN_SECRET = process.env.ADMIN_SECRET
 const ADMIN_PORT = Number(process.env.ADMIN_PORT ?? 3001)
 
 const startAdminListener = (secret: string) => {
-  if (!playlistStore) {
-    console.warn('The playlists database is unavailable, so no admin listener')
+  if (!playlistStore && !statStore && !commissionStore) {
+    console.warn(
+      'No playlists, statistics or commissions database is available, so no admin listener',
+    )
     return
   }
-  const adminApi = createAdminApi({
-    store: playlistStore,
-    secret,
-    findSongs: findSongsForPlaylist,
-  })
+  const holdsSecret = bearerHolder(secret)
+  const playlistAdminApi =
+    playlistStore &&
+    createAdminApi({
+      store: playlistStore,
+      secret,
+      findSongs: findSongsForPlaylist,
+    })
+  const commissionAdminApi =
+    commissionStore &&
+    createCommissionAdminApi({ store: commissionStore, secret })
   const answer = async (req: IncomingMessage) => {
-    if (!adminApi.holdsSecret(req.headers.authorization)) {
+    if (!holdsSecret(req.headers.authorization)) {
       return { status: 403, body: { error: 'Forbidden' } }
+    }
+    const url = new URL(req.url ?? '/', 'http://localhost')
+    if (url.pathname === '/stats') {
+      if (req.method !== 'GET') {
+        return { status: 405, body: { error: 'Method Not Allowed' } }
+      }
+      return statReport
+        ? statReport(url.searchParams.get('days'))
+        : { status: 503, body: { error: 'Statistics are unavailable' } }
+    }
+    const pathname = parsePath(req.url ?? '/')?.pathname ?? ''
+    const adminApi = COMMISSION_ADMIN_PATH.test(pathname)
+      ? commissionAdminApi
+      : playlistAdminApi
+    if (!adminApi) {
+      return { status: 404, body: { error: 'Not Found' } }
     }
     const acting = req.headers['x-acting-discord-id']
     const body = await readBody(req)
@@ -510,7 +782,7 @@ const startAdminListener = (secret: string) => {
       ? { status: 413, body: { error: 'The request is too large' } }
       : adminApi({
           method: req.method ?? 'GET',
-          pathname: parsePath(req.url ?? '/')?.pathname ?? '',
+          pathname,
           authorization: req.headers.authorization,
           actingDiscordId: typeof acting === 'string' ? acting : undefined,
           body,

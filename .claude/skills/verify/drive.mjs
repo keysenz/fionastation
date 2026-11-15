@@ -521,7 +521,7 @@ const waitUntilUp = async (url, ok) => {
   throw new Error(`${url} did not come up`);
 };
 
-const startDiscordStack = async () => {
+const startDiscordStack = async (extraEnv = {}) => {
   const first = Number(process.env.VERIFY_PORT ?? 3456) + 1;
   const [serverPort, fakePort, adminPort] = [first, first + 1, first + 2];
   const base = `http://127.0.0.1:${serverPort}`;
@@ -553,6 +553,7 @@ const startDiscordStack = async () => {
           SITE_ORIGIN: base,
           ADMIN_SECRET: secret,
           ADMIN_PORT: String(adminPort),
+          ...extraEnv,
         },
         stdio: 'ignore',
       }),
@@ -633,7 +634,172 @@ const openFromList = async (page, id) => {
 
 const barKind = (page) => page.locator('[data-playlist-bar]').getAttribute('data-playlist-bar');
 
+const STATS_MOD = { id: '244661517356761089', name: 'Mod Person' };
+const STATS_FIONA = { id: '927090060480905276', name: 'Fiona' };
+const STATS_STRANGER = { id: '111111111111111111', name: 'Stranger' };
+
+const seedStats = async (path, songs) => {
+  const { openStatStore } = await import('../../../server/stats.ts');
+  const [first, second] = songs;
+  const daysAgo = (days) => new Date(Date.now() - days * 86400000);
+  const at = (days) => openStatStore({ path, now: () => daysAgo(days) });
+  const today = at(0);
+  const repeat = (times, event) => Array.from({ length: times }, () => event);
+  [
+    ...repeat(3, { kind: 'Click', songId: first.id, origin: 'Visitor' }),
+    ...repeat(5, { kind: 'Play', songId: first.id, origin: 'Visitor' }),
+    ...repeat(2, { kind: 'Play', songId: first.id, origin: 'Autoplay' }),
+    ...repeat(2, { kind: 'Finish', songId: first.id, origin: 'Visitor' }),
+    { kind: 'Play', songId: second.id, origin: 'Visitor' },
+    { kind: 'Skip', songId: first.id, origin: 'Visitor', secondsIntoSong: 12 },
+    { kind: 'Skip', songId: first.id, origin: 'Visitor', secondsIntoSong: 14 },
+    { kind: 'Skip', songId: first.id, origin: 'Visitor', secondsIntoSong: 95 },
+  ].forEach((event) => today.record(event));
+  const tenAgo = at(10);
+  repeat(4, { kind: 'Play', songId: first.id, origin: 'Visitor' }).forEach((event) => tenAgo.record(event));
+  tenAgo.record({ kind: 'Skip', songId: first.id, origin: 'Visitor', secondsIntoSong: 200 });
+  const vote = (store, songId, moods, times) => repeat(times, { kind: 'Mood', songId, moods }).forEach((event) => store.record(event));
+  vote(today, first.id, ['ceria', 'hype'], 2);
+  vote(today, first.id, ['ceria'], 1);
+  vote(today, second.id, ['sendu'], 1);
+  vote(tenAgo, second.id, ['sendu'], 2);
+  const fortyAgo = at(40);
+  repeat(10, { kind: 'Play', songId: second.id, origin: 'Visitor' }).forEach((event) => fortyAgo.record(event));
+};
+
 const journeys = {
+  async statsPage(page, context) {
+    const f = 'stats-page';
+    const [first, second] = distinctByTitle(await livePlayables(), 2);
+    const statsPath = join(mkdtempSync(join(tmpdir(), 'verify-stats-')), 'stats.db');
+    await seedStats(statsPath, [first, second]);
+    const stack = await startDiscordStack({ STATS_DB_PATH: statsPath, STATS_USER_IDS: `${STATS_MOD.id},${STATS_FIONA.id}` });
+    const tile = (key) => page.locator(`[data-tile="${key}"] [data-value]`).innerText();
+    const shows = async (key, want) => {
+      await page.waitForFunction(([k, w]) => document.querySelector(`[data-tile="${k}"] [data-value]`)?.textContent === w, [key, want]);
+    };
+    const signInAs = async (user) => {
+      await stack.actAs(user);
+      await page.goto(stack.base + '/stats');
+      await page.locator('[data-action="sign-in"]').click();
+      await page.waitForFunction(() => location.pathname === '/stats');
+    };
+    try {
+      await page.setViewportSize({ width: 1280, height: 800 });
+      await step(f, 'a signed-out visitor sees only the sign-in screen and no numbers', async () => {
+        await page.goto(stack.base + '/stats');
+        await page.locator('[data-action="sign-in"]').waitFor();
+        if ((await page.locator('[data-tile]').count()) !== 0) throw new Error('tiles shown while signed out');
+        const direct = await page.evaluate(() => fetch('/api/stats-page/report').then((res) => res.status));
+        if (direct !== 401) throw new Error(`report answered ${direct}`);
+        await page.screenshot({ path: join(out, 'stats-signed-out.png') });
+      }, page);
+      await step(f, 'signing in as a listed moderator returns to /stats and shows the seeded numbers', async () => {
+        await signInAs(STATS_MOD);
+        await shows('plays', '8');
+        if ((await tile('share')) !== '75%') throw new Error(`share ${await tile('share')}`);
+        if ((await tile('finishes')) !== '2') throw new Error(`finishes ${await tile('finishes')}`);
+        if ((await tile('skips')) !== '3') throw new Error(`skips ${await tile('skips')}`);
+        if ((await tile('finish-rate')) !== '25%') throw new Error(`rate ${await tile('finish-rate')}`);
+        const user = await page.locator('[data-user]').innerText();
+        if (user !== STATS_MOD.name) throw new Error(user);
+        await page.screenshot({ path: join(out, 'stats-dashboard-desktop.png'), fullPage: true });
+      }, page);
+      await step(f, 'the range picker changes the numbers', async () => {
+        for (const [days, plays] of [['30', '12'], ['90', '22'], ['1', '8']]) {
+          await page.locator(`[data-range="${days}"]`).click();
+          await page.waitForFunction((d) => document.querySelector(`[data-range="${d}"]`)?.getAttribute('aria-pressed') === 'true', days);
+          await shows('plays', plays);
+        }
+        await page.locator('[data-range="90"]').click();
+        await shows('plays', '22');
+        await page.screenshot({ path: join(out, 'stats-dashboard-90d.png'), fullPage: true });
+      }, page);
+      await step(f, 'the daily chart has a bar group for each UTC day and the table lists the seeded songs', async () => {
+        const days = await page.locator('[data-chart="daily"] [data-day]').count();
+        if (days !== 90) throw new Error(`${days} days`);
+        const rows = await page.locator('[data-table="songs"] tbody tr').count();
+        if (rows !== 2) throw new Error(`${rows} song rows`);
+        const videos = await page.locator('[data-table="videos"] tbody tr').count();
+        if (videos < 1) throw new Error('no video rows');
+      }, page);
+      await step(f, 'the Moods section shows the tiles, the days, the mix and the songs, and a mood chip filters the table', async () => {
+        await shows('mood-votes', '8');
+        await shows('mood-songs', '2');
+        await shows('mood-top', 'ceria / sendu');
+        const days = await page.locator('[data-chart="mood-daily"] [data-day]').count();
+        if (days !== 90) throw new Error(`${days} mood days`);
+        const ceria = await page.locator('[data-mood-share="ceria"]').innerText();
+        if (!ceria.includes('ceria 3')) throw new Error(`mix ${ceria}`);
+        const rows = () => page.locator('[data-table="moods"] tbody tr').evaluateAll((els) => els.map((el) => el.getAttribute('data-mood-song')));
+        if ((await rows()).join() !== [first.id, second.id].join()) throw new Error(`rows ${await rows()}`);
+        const top = await page.locator(`[data-mood-song="${first.id}"] [data-top-mood]`).innerText();
+        if (top !== 'ceria') throw new Error(`top ${top}`);
+        await page.locator('[data-mood-filter="sendu"]').click();
+        await page.waitForFunction(() => document.querySelectorAll('[data-table="moods"] tbody tr').length === 1);
+        if ((await rows()).join() !== second.id) throw new Error(`filtered ${await rows()}`);
+        if ((await page.locator('[data-mood-filter="sendu"]').getAttribute('aria-pressed')) !== 'true') throw new Error('chip not pressed');
+        await page.locator('[data-mood-filter="sendu"]').click();
+        await page.waitForFunction(() => document.querySelectorAll('[data-table="moods"] tbody tr').length === 2);
+        await page.locator('[data-range="1"]').click();
+        await shows('mood-votes', '6');
+        await page.locator(`[data-mood-song="${second.id}"] [data-few-votes]`).waitFor();
+        await page.screenshot({ path: join(out, 'stats-moods-desktop.png'), fullPage: true });
+        await page.locator('[data-range="90"]').click();
+        await shows('mood-votes', '8');
+      }, page);
+      await step(f, 'picking a song narrows the skip histogram and sorting reorders the table', async () => {
+        const all = await page.locator('[data-skip-total]').getAttribute('data-skip-total');
+        if (all !== '4') throw new Error(`all songs ${all}`);
+        await page.locator(`[data-pick="${first.id}"]`).first().click();
+        await page.waitForFunction(() => document.querySelector('[data-skip-total]')?.getAttribute('data-skip-total') === '4');
+        await page.locator(`[data-pick="${second.id}"]`).first().click();
+        await page.waitForFunction(() => document.querySelector('[data-skip-total]')?.getAttribute('data-skip-total') === '0');
+        await page.locator('[data-sort="title"]').click();
+        await page.locator('[data-sort="title"]').click();
+        await page.screenshot({ path: join(out, 'stats-histogram-one-song.png'), fullPage: true });
+      }, page);
+      await step(f, 'a phone has no sideways scroll', async () => {
+        await page.setViewportSize({ width: 375, height: 667 });
+        await shows('plays', '22');
+        if (!(await noSidewaysScroll(page))) throw new Error('the page scrolls sideways');
+        await page.locator('[data-panel="moods"]').waitFor();
+        await page.screenshot({ path: join(out, 'stats-dashboard-phone.png'), fullPage: true });
+        await page.setViewportSize({ width: 1280, height: 800 });
+      }, page);
+      await step(f, 'logout returns to the sign-in screen and the report is closed again', async () => {
+        await page.locator('[data-action="logout"]').click();
+        await page.locator('[data-action="sign-in"]').waitFor();
+        const direct = await page.evaluate(() => fetch('/api/stats-page/report').then((res) => res.status));
+        if (direct !== 401) throw new Error(`report answered ${direct}`);
+      }, page);
+      await step(f, 'a signed-in person who is not listed sees no access and no numbers', async () => {
+        await signInAs(STATS_STRANGER);
+        await page.getByRole('heading', { name: 'No access' }).waitFor();
+        if ((await page.locator('[data-tile]').count()) !== 0) throw new Error('tiles shown without access');
+        const direct = await page.evaluate(() => fetch('/api/stats-page/report').then((res) => res.status));
+        if (direct !== 403) throw new Error(`report answered ${direct}`);
+        await page.screenshot({ path: join(out, 'stats-no-access.png') });
+        await page.locator('[data-action="logout"]').click();
+        await page.locator('[data-action="sign-in"]').waitFor();
+      }, page);
+      await step(f, 'Fiona, listed by user id, gets in', async () => {
+        await signInAs(STATS_FIONA);
+        await shows('plays', '8');
+        await page.locator('[data-action="logout"]').click();
+        await page.locator('[data-action="sign-in"]').waitFor();
+      }, page);
+      await step(f, 'an off-site return path is ignored and the login lands on the home page', async () => {
+        await stack.actAs(STATS_MOD);
+        await page.goto(stack.base + '/api/auth/discord/start?return=' + encodeURIComponent('https://evil.test/'));
+        await page.waitForFunction(() => location.pathname === '/');
+        if (new URL(await page.url()).origin !== stack.base) throw new Error(await page.url());
+      }, page);
+    } finally {
+      stack.close();
+    }
+  },
+
   async site(page) {
     await page.goto(BASE + '/');
     await page.getByRole('heading', { name: 'Fio Radio' }).waitFor();
@@ -1162,6 +1328,331 @@ const journeys = {
       await page.locator('[data-player-bar]').getByRole('heading', { name: last.song_title }).first().waitFor({ timeout: 20000 });
       await timeNear(secondsOf(last.timestamp));
     }, page);
+  },
+  async playStats(page) {
+    const adminPort = process.env.ADMIN_PORT ?? '3911';
+    const adminSecret = process.env.ADMIN_SECRET ?? 'verify-admin-secret';
+    const report = async () => (await fetch(`http://127.0.0.1:${adminPort}/stats?days=1`, { headers: { authorization: `Bearer ${adminSecret}` } })).json();
+    const songStat = async (song) => (await report()).songs.find((s) => s.songId === song.id);
+    const until = async (what, ready) => {
+      for (let i = 0; i < 40; i++) {
+        const seen = await ready();
+        if (seen) return seen;
+        await page.waitForTimeout(500);
+      }
+      throw new Error(`never saw ${what}: ${JSON.stringify((await report()).songs)}`);
+    };
+    const { body: videos } = await pageVideos();
+    const live = videos.filter((v) => !v.is_gone);
+    const video = live.find((v) => v.karaoke_song.length >= 3 && secondsOf(v.karaoke_song[1].timestamp) - secondsOf(v.karaoke_song[0].timestamp) > 20);
+    if (!video) throw new Error('no live video with three songs and a long first song');
+    const sorted = songRows([video]).toSorted((a, b) => secondsOf(a.timestamp) - secondsOf(b.timestamp));
+    const [first, second, third] = sorted;
+    const last = sorted.at(-1);
+    const seekTo = (seconds) =>
+      page.evaluate((to) => window.YT.get(document.querySelector('iframe[src*="youtube"]').id).seekTo(to, true), seconds);
+    const playheadPast = (seconds) =>
+      page.waitForFunction((want) => window.YT.get(document.querySelector('iframe[src*="youtube"]').id).getCurrentTime() >= want, seconds, { timeout: 30000 });
+    await page.goto(BASE + '/');
+    await videoRows(page).first().waitFor();
+
+    await step('playStats', 'a clicked song counts one click and, once it plays, one visitor play', async () => {
+      await (await songRowOf(page, videos, first)).click();
+      await playerReady(page);
+      await playVideo(page);
+      await videoLoads(page, [video.video_url], { startSeconds: secondsOf(first.timestamp), isPlaying: true });
+      const stat = await until('the first play', async () => (await songStat(first))?.plays.Visitor === 1 && (await songStat(first)));
+      if (stat.clicks !== 1 || stat.plays.Autoplay !== 0) throw new Error(JSON.stringify(stat));
+    }, page);
+
+    await step('playStats', 'a stream playing into its second song by itself finishes the first and plays the second', async () => {
+      await seekTo(secondsOf(second.timestamp) - 4);
+      await playheadPast(secondsOf(second.timestamp) + 1);
+      const stat = await until('the second play', async () => (await songStat(second))?.plays.Visitor === 1 && (await songStat(second)));
+      const before = await songStat(first);
+      if (before.finishes.Visitor !== 1 || before.plays.Visitor !== 1) throw new Error(JSON.stringify(before));
+      if (stat.clicks !== 0) throw new Error(`a play by itself counted a click: ${JSON.stringify(stat)}`);
+    }, page);
+
+    await step('playStats', 'Next partway through a song records one skip with the seconds into that song', async () => {
+      await page.waitForTimeout(3000);
+      await barButton(page, 'fa-step-forward').click();
+      const stat = await until('the skip', async () => (await songStat(second))?.skips.Visitor === 1 && (await songStat(second)));
+      const seconds = stat.medianSecondsIntoSkip;
+      if (!(seconds >= 3 && seconds <= 20)) throw new Error(`seconds into the song: ${seconds}`);
+      if (stat.finishes.Visitor !== 0) throw new Error('a skipped song counted as finished');
+      await until('the third song playing', async () => (await songStat(third))?.plays.Visitor === 1);
+    }, page);
+
+    await step('playStats', 'Next on the last song lets the radio pick the next video, which counts as an autoplay play', async () => {
+      await (await songRowOf(page, videos, last)).click();
+      await page.locator('[data-player-bar]').getByRole('heading', { name: last.song_title }).first().waitFor({ timeout: 10000 });
+      await playerReady(page);
+      await playVideo(page);
+      await videoLoads(page, [video.video_url], { startSeconds: secondsOf(last.timestamp), isPlaying: true });
+      await page.waitForTimeout(2000);
+      await barButton(page, 'fa-step-forward').click();
+      const others = live.filter((v) => v.video_url !== video.video_url).map((v) => v.video_url);
+      await videoLoads(page, others, { isPlaying: true, timeout: 40000 });
+      const autoplayed = await until('an autoplay play', async () => (await report()).songs.find((s) => s.plays.Autoplay === 1));
+      if (autoplayed.plays.Visitor !== 0) throw new Error(JSON.stringify(autoplayed));
+      const lastStat = await songStat(last);
+      if (lastStat.skips.Visitor !== 1) throw new Error(JSON.stringify(lastStat));
+    }, page);
+    console.log(JSON.stringify(await report(), null, 2));
+  },
+  async moodPrompt(page) {
+    const adminPort = process.env.ADMIN_PORT ?? '3911';
+    const adminSecret = process.env.ADMIN_SECRET ?? 'verify-admin-secret';
+    const report = async () => (await fetch(`http://127.0.0.1:${adminPort}/stats?days=1`, { headers: { authorization: `Bearer ${adminSecret}` } })).json();
+    const votesFor = async (song) => (await report()).moods?.find((m) => m.songId === song.id);
+    const { body: videos } = await pageVideos();
+    const video = videos
+      .filter((v) => !v.is_gone)
+      .find((v) => {
+        const songs = v.karaoke_song.toSorted((a, b) => secondsOf(a.timestamp) - secondsOf(b.timestamp));
+        return songs.length >= 5 && [2, 3].every((i) => secondsOf(songs[i + 1].timestamp) - secondsOf(songs[i].timestamp) > 60);
+      });
+    if (!video) throw new Error('no live video with five songs and long third and fourth songs');
+    const [first, second, third, fourth] = songRows([video]).toSorted((a, b) => secondsOf(a.timestamp) - secondsOf(b.timestamp));
+    const seekTo = (seconds) =>
+      page.evaluate((to) => window.YT.get(document.querySelector('iframe[src*="youtube"]').id).seekTo(to, true), seconds);
+    const playheadPast = (seconds) =>
+      page.waitForFunction((want) => window.YT.get(document.querySelector('iframe[src*="youtube"]').id).getCurrentTime() >= want, seconds, { timeout: 30000 });
+    const card = page.locator('[data-mood-prompt]');
+    await page.goto(BASE + '/');
+    await videoRows(page).first().waitFor();
+
+    await step('moodPrompt', 'no card shows during the third song, even well past 45 seconds', async () => {
+      await (await songRowOf(page, videos, first)).click();
+      await playerReady(page);
+      await playVideo(page);
+      await videoLoads(page, [video.video_url], { startSeconds: secondsOf(first.timestamp), isPlaying: true });
+      await seekTo(secondsOf(second.timestamp) + 1);
+      await playheadPast(secondsOf(second.timestamp) + 1);
+      await seekTo(secondsOf(third.timestamp) + 50);
+      await playheadPast(secondsOf(third.timestamp) + 50);
+      await page.waitForTimeout(1500);
+      if ((await card.count()) !== 0) throw new Error('the card showed during the third song');
+    }, page);
+
+    await step('moodPrompt', 'the card appears 45 seconds into the fourth song, and picking a third mood changes nothing', async () => {
+      await seekTo(secondsOf(fourth.timestamp) + 1);
+      await playheadPast(secondsOf(fourth.timestamp) + 1);
+      await page.waitForTimeout(1500);
+      if ((await card.count()) !== 0) throw new Error('the card showed before 45 seconds');
+      await seekTo(secondsOf(fourth.timestamp) + 46);
+      await playheadPast(secondsOf(fourth.timestamp) + 46);
+      await card.waitFor({ timeout: 10000 });
+      for (const mood of ['ceria', 'hype', 'chill']) await card.getByRole('button', { name: mood, exact: true }).click();
+      const pressed = await card.locator('button[aria-pressed="true"]').evaluateAll((els) => els.map((el) => el.textContent.trim()));
+      if (pressed.join() !== 'ceria,hype') throw new Error(`pressed ${pressed}`);
+      await page.screenshot({ path: join(out, 'mood-card.png') });
+    }, page);
+
+    await step('moodPrompt', 'Send records the vote once, the card goes away and the counters change', async () => {
+      await card.getByRole('button', { name: 'Send', exact: true }).click();
+      await card.waitFor({ state: 'hidden' });
+      let seen;
+      for (let i = 0; i < 40 && !seen; i++) {
+        seen = await votesFor(fourth);
+        if (!seen) await page.waitForTimeout(500);
+      }
+      if (!seen || seen.votes.ceria !== 1 || seen.votes.hype !== 1 || seen.total !== 2) throw new Error(JSON.stringify(seen));
+    }, page);
+
+    await step('moodPrompt', 'the card does not come back this visit, and a reload counts songs from zero again', async () => {
+      await page.waitForTimeout(2000);
+      if ((await card.count()) !== 0) throw new Error('the card came back');
+      await page.reload();
+      await videoRows(page).first().waitFor();
+      await (await songRowOf(page, videos, first)).click();
+      await playerReady(page);
+      await playVideo(page);
+      await seekTo(secondsOf(first.timestamp) + 50);
+      await page.waitForTimeout(2000);
+      if ((await card.count()) !== 0) throw new Error('the card showed on the first song of a new visit');
+      if ((await votesFor(second)) !== undefined) throw new Error('a vote was recorded for a song nobody voted on');
+    }, page);
+  },
+
+  async listeningTrail(page) {
+    const statsPath = readFileSync(join(RUN_DIR, 'stats.path'), 'utf8').trim();
+    const rows = (table) => {
+      const db = new DatabaseSync(statsPath, { readOnly: true });
+      try {
+        return db.prepare(`SELECT * FROM ${table} ORDER BY minute, session_id, seq`).all();
+      } finally {
+        db.close();
+      }
+    };
+    const until = async (what, ready) => {
+      for (let i = 0; i < 40; i++) {
+        const seen = ready();
+        if (seen) return seen;
+        await page.waitForTimeout(500);
+      }
+      throw new Error(`never saw ${what}: ${JSON.stringify(rows('listen_events'))}`);
+    };
+    const { body: videos } = await pageVideos();
+    const live = videos.filter((v) => !v.is_gone);
+    const video = live.find((v) => v.karaoke_song.length >= 3 && secondsOf(v.karaoke_song[1].timestamp) - secondsOf(v.karaoke_song[0].timestamp) > 20);
+    if (!video) throw new Error('no live video with three songs and a long first song');
+    const sorted = songRows([video]).toSorted((a, b) => secondsOf(a.timestamp) - secondsOf(b.timestamp));
+    const [first, second, third] = sorted;
+    const last = sorted.at(-1);
+    const seekTo = (seconds) =>
+      page.evaluate((to) => window.YT.get(document.querySelector('iframe[src*="youtube"]').id).seekTo(to, true), seconds);
+    const playheadPast = (seconds) =>
+      page.waitForFunction((want) => window.YT.get(document.querySelector('iframe[src*="youtube"]').id).getCurrentTime() >= want, seconds, { timeout: 30000 });
+    const playFirstSong = async () => {
+      await page.goto(BASE + '/');
+      await videoRows(page).first().waitFor();
+      await (await songRowOf(page, videos, first)).click();
+      await playerReady(page);
+      await playVideo(page);
+      await videoLoads(page, [video.video_url], { startSeconds: secondsOf(first.timestamp), isPlaying: true });
+    };
+    const trailOf = (events) => events.map((r) => `${r.seq} ${r.kind} ${r.song_id} <- ${r.prev_song_id}`);
+    const sessionIds = () => [...new Set(rows('listen_events').map((r) => r.session_id))];
+    const f = 'listeningTrail';
+
+    await step(f, 'a visit records its clicks, plays, finishes and skips in order, with the song before each play', async () => {
+      await playFirstSong();
+      await until('the first play', () => rows('listen_events').some((r) => r.kind === 'Play' && r.song_id === first.id));
+      await seekTo(secondsOf(second.timestamp) - 4);
+      await playheadPast(secondsOf(second.timestamp) + 1);
+      await until('the second play', () => rows('listen_events').some((r) => r.kind === 'Play' && r.song_id === second.id));
+      await page.waitForTimeout(3000);
+      await barButton(page, 'fa-step-forward').click();
+      await until('the skip', () => rows('listen_events').some((r) => r.kind === 'Skip' && r.song_id === second.id));
+      await until('the third song', () => rows('listen_events').some((r) => r.kind === 'Play' && r.song_id === third.id));
+      const events = rows('listen_events');
+      const want = [
+        `1 Click ${first.id} <- null`,
+        `2 Play ${first.id} <- null`,
+        `3 Finish ${first.id} <- null`,
+        `4 Play ${second.id} <- ${first.id}`,
+        `5 Skip ${second.id} <- ${first.id}`,
+        `6 Play ${third.id} <- ${second.id}`,
+      ];
+      if (JSON.stringify(trailOf(events)) !== JSON.stringify(want)) throw new Error(`got ${JSON.stringify(trailOf(events), null, 1)}`);
+      if (new Set(events.map((r) => r.minute)).size < 1 || !events.every((r) => /^\d{4}-\d\d-\d\dT\d\d:\d\d$/.test(r.minute))) throw new Error('minute precision');
+      if (sessionIds().length !== 1) throw new Error(`session ids ${sessionIds()}`);
+    }, page);
+
+    await step(f, 'the session id lives only in memory', async () => {
+      const stored = await page.evaluate(() => JSON.stringify([document.cookie, { ...localStorage }, { ...sessionStorage }]));
+      if (stored.includes(sessionIds()[0])) throw new Error(`the session id is stored in the browser: ${stored}`);
+      if (/session/i.test(await page.evaluate(() => document.cookie))) throw new Error('a session cookie was set');
+    }, page);
+
+    await step(f, 'an autoplay pick is logged before the play it causes, with the pool size and 1/pool propensity', async () => {
+      await (await songRowOf(page, videos, last)).click();
+      await page.locator('[data-player-bar]').getByRole('heading', { name: last.song_title }).first().waitFor({ timeout: 10000 });
+      await playerReady(page);
+      await playVideo(page);
+      await videoLoads(page, [video.video_url], { startSeconds: secondsOf(last.timestamp), isPlaying: true });
+      await page.waitForTimeout(2000);
+      await barButton(page, 'fa-step-forward').click();
+      const others = live.filter((v) => v.video_url !== video.video_url).map((v) => v.video_url);
+      await videoLoads(page, others, { isPlaying: true, timeout: 40000 });
+      const decision = await until('a decision', () => rows('autoplay_decisions')[0]);
+      const play = await until('the autoplay play', () => rows('listen_events').find((r) => r.kind === 'Play' && r.origin === 'Autoplay'));
+      if (decision.policy !== 'uniform-v1') throw new Error(decision.policy);
+      if (Math.abs(decision.propensity - 1 / decision.pool_size) > 1e-12) throw new Error(`propensity ${decision.propensity} for pool ${decision.pool_size}`);
+      if (decision.pool_size < 1) throw new Error('empty pool');
+      if (decision.picked_song_id !== play.song_id) throw new Error(`picked ${decision.picked_song_id} but played ${play.song_id}`);
+      if (!(decision.seq < play.seq)) throw new Error(`decision seq ${decision.seq} is not before play seq ${play.seq}`);
+      if (decision.prev_song_id !== last.id) throw new Error(`decision prev ${decision.prev_song_id}, expected ${last.id}`);
+      if (play.prev_song_id !== last.id) throw new Error(`play prev ${play.prev_song_id}`);
+      const skip = rows('listen_events').find((r) => r.kind === 'Skip' && r.song_id === last.id);
+      if (!skip || !(skip.seq < decision.seq)) throw new Error('the skip of the last song does not sort before the decision');
+    }, page);
+
+    await step(f, 'a reload starts a new session that shares nothing with the first', async () => {
+      const before = sessionIds();
+      await playFirstSong();
+      await until('the second session', () => sessionIds().length === 2);
+      await until('its play', () => rows('listen_events').some((r) => r.session_id !== before[0] && r.kind === 'Play'));
+      await seekTo(secondsOf(second.timestamp) - 4);
+      await playheadPast(secondsOf(second.timestamp) + 1);
+      await until('its second song', () => rows('listen_events').some((r) => r.session_id !== before[0] && r.kind === 'Play' && r.song_id === second.id));
+      const mine = rows('listen_events').filter((r) => r.session_id !== before[0]);
+      if (mine[0].seq !== 1) throw new Error(`the new session starts at seq ${mine[0].seq}`);
+      if (mine.some((r) => before.includes(r.session_id))) throw new Error('sessions mixed');
+      if (!mine.every((r) => /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(r.session_id))) throw new Error('not a UUID v4');
+      const first1 = mine.find((r) => r.kind === 'Play' && r.song_id === first.id);
+      if (first1.prev_song_id !== null) throw new Error('a new session must not know the last visit');
+    }, page);
+
+    console.log(JSON.stringify({ listen_events: rows('listen_events'), autoplay_decisions: rows('autoplay_decisions') }, null, 2));
+
+    const stack = await startDiscordStack({ STATS_DB_PATH: statsPath, STATS_USER_IDS: `${STATS_MOD.id},${STATS_FIONA.id}` });
+    try {
+      await page.setViewportSize({ width: 1280, height: 900 });
+      await step(f, 'the export is closed to a signed-out visitor and to an unlisted user', async () => {
+        await page.goto(stack.base + '/stats');
+        await page.locator('[data-action="sign-in"]').waitFor();
+        const status = (table) => page.evaluate((t) => fetch(`/api/stats-page/export?days=7&table=${t}`).then((r) => r.status), table);
+        if ((await status('events')) !== 401) throw new Error('signed-out export is open');
+        await stack.actAs(STATS_STRANGER);
+        await page.locator('[data-action="sign-in"]').click();
+        await page.waitForFunction(() => location.pathname === '/stats');
+        await page.getByRole('heading', { name: 'No access' }).waitFor();
+        if ((await status('decisions')) !== 403) throw new Error('unlisted export is open');
+        await page.locator('[data-action="logout"]').click();
+        await page.locator('[data-action="sign-in"]').waitFor();
+      }, page);
+
+      await step(f, 'the outcome and transition panels show the trail, and the first to second transition has two plays', async () => {
+        await stack.actAs(STATS_MOD);
+        await page.locator('[data-action="sign-in"]').click();
+        await page.waitForFunction(() => location.pathname === '/stats');
+        await page.locator('[data-panel="origin-outcomes"]').waitFor();
+        const visitor = await page.locator('[data-table="outcomes"] [data-origin="Visitor"]').innerText();
+        const autoplay = await page.locator('[data-table="outcomes"] [data-origin="Autoplay"]').innerText();
+        if (!/Visitor\s+\d+/.test(visitor) || !/Autoplay\s+\d+/.test(autoplay)) throw new Error(`${visitor} | ${autoplay}`);
+        const row = page.locator(`[data-table="transitions"] [data-transition="${first.id}>${second.id}"]`);
+        await row.waitFor();
+        const cells = await row.locator('td').evaluateAll((tds) => tds.map((td) => td.textContent.trim()));
+        if (cells[1] !== '2' || cells[3] !== '50%') throw new Error(`transition row: ${JSON.stringify(cells)}`);
+        await page.locator('[data-min-plays="5"]').click();
+        await page.waitForFunction(() => document.querySelectorAll('[data-table="transitions"] tbody tr').length === 0);
+        await page.locator('[data-min-plays="2"]').click();
+        await row.waitFor();
+        await page.locator('[data-sort-transition="skipRate"]').click();
+        await page.screenshot({ path: join(out, 'trail-panels-desktop.png'), fullPage: true });
+      }, page);
+
+      await step(f, 'each export link downloads valid NDJSON for the range, with titles joined', async () => {
+        for (const table of ['events', 'decisions']) {
+          const href = await page.locator(`[data-export="${table}"]`).getAttribute('href');
+          if (href !== `/api/stats-page/export?days=7&table=${table}`) throw new Error(href);
+          const result = await page.evaluate((url) => fetch(url).then(async (r) => ({ status: r.status, type: r.headers.get('content-type'), disposition: r.headers.get('content-disposition'), body: await r.text() })), href);
+          if (result.status !== 200 || !result.type.includes('x-ndjson') || !result.disposition.includes('attachment')) throw new Error(JSON.stringify({ ...result, body: '' }));
+          const lines = result.body.trimEnd().split('\n').map((line) => JSON.parse(line));
+          const want = rows(table === 'events' ? 'listen_events' : 'autoplay_decisions').length;
+          if (lines.length !== want || want === 0) throw new Error(`${table}: ${lines.length} lines for ${want} rows`);
+          if (!result.body.endsWith('\n')) throw new Error('the last line is not terminated');
+          const titled = table === 'events' ? lines.find((l) => l.songId === first.id) : lines[0];
+          if (!(titled.title ?? titled.pickedTitle)) throw new Error(`no title: ${JSON.stringify(titled)}`);
+          console.log(`${table} sample: ${JSON.stringify(lines[0])}`);
+        }
+        const bad = await page.evaluate(() => fetch('/api/stats-page/export?days=7&table=sessions').then((r) => r.status));
+        if (bad !== 400) throw new Error(`unknown table answered ${bad}`);
+      }, page);
+
+      await step(f, 'the panels fit a phone', async () => {
+        await page.setViewportSize({ width: 375, height: 667 });
+        await page.locator('[data-panel="transitions"]').waitFor();
+        if (!(await noSidewaysScroll(page))) throw new Error('the page scrolls sideways');
+        await page.screenshot({ path: join(out, 'trail-panels-phone.png'), fullPage: true });
+        await page.setViewportSize({ width: 1280, height: 800 });
+      }, page);
+    } finally {
+      stack.close();
+    }
   },
   async coverEnd(page) {
     const { body: videos } = await pageVideos();

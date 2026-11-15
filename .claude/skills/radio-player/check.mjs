@@ -257,7 +257,7 @@ function transitions(state) {
   pending.forEach((item, index) => {
     if (item.kind === 'pick') {
       for (const song of item.candidates) {
-        out.push({ message: K.Message.CompletedPickRandomVideo({ playId: item.playId, song }), label: `CompletedPickRandomVideo(playId ${item.playId}, ${song.id})`, kind: 'pick', playId: item.playId, song, consumes: index });
+        out.push({ message: K.Message.CompletedPickRandomVideo({ playId: item.playId, song, poolSize: item.candidates.length }), label: `CompletedPickRandomVideo(playId ${item.playId}, ${song.id})`, kind: 'pick', playId: item.playId, song, consumes: index });
       }
     } else if (item.kind === 'retry') {
       out.push({ message: K.Message.CompletedWaitBeforeRetryLoad({ playId: item.playId }), label: `CompletedWaitBeforeRetryLoad(playId ${item.playId})`, kind: 'retry', playId: item.playId, consumes: index });
@@ -270,10 +270,18 @@ function transitions(state) {
   return out;
 }
 
+const NO_TRAIL = K.init().maybeTrail;
+const NO_MOOD_PROMPT = K.init().moodPrompt;
+
+function withoutPlayStats(updated) {
+  return {
+    model: { ...updated.model, listens: [], maybeTrail: NO_TRAIL, moodPrompt: NO_MOOD_PROMPT },
+    commands: (updated.commands ?? []).filter((command) => !['RecordStat', 'RecordDecision', 'RecordMoodVote'].includes(command.name)),
+  };
+}
+
 function step(state, transition) {
-  const result = K.update(state.model, transition.message);
-  const model = result.model;
-  const commands = result.commands ?? [];
+  const { model, commands } = withoutPlayStats(K.update(state.model, transition.message));
   const isNewTimer = commands.some((command) => command.name === 'WaitBeforeDismissToast');
   let pending = state.pending
     .filter((_, index) => index !== transition.consumes)
@@ -762,7 +770,7 @@ function walk(config, names, seed) {
 
 // MUTANTS: broken copies of the real code. Each must make its property fail.
 const MUTANTS = [
-  { property: "stale-results-never-act", file: "src/page/karaoke/karaoke.ts", from: "CompletedPickRandomVideo: ({ playId, song }) =>\n      Option.match(\n        Option.filter(\n          model.setlist.maybeNowPlaying,\n          nowPlaying => nowPlaying.playId === playId,", to: "CompletedPickRandomVideo: ({ playId, song }) =>\n      Option.match(\n        Option.filter(\n          model.setlist.maybeNowPlaying,\n          () => true," },
+  { property: "stale-results-never-act", file: "src/page/karaoke/karaoke.ts", from: "CompletedPickRandomVideo: ({ playId, song, poolSize }) =>\n      Option.match(\n        Option.filter(\n          model.setlist.maybeNowPlaying,\n          nowPlaying => nowPlaying.playId === playId,", to: "CompletedPickRandomVideo: ({ playId, song, poolSize }) =>\n      Option.match(\n        Option.filter(\n          model.setlist.maybeNowPlaying,\n          () => true," },
   { property: 'stale-results-never-act', file: 'src/page/karaoke/karaoke.ts', from: 'ReceivedPlayerEvent: ({ playId, event }) =>\n      Option.match(\n        Option.filter(\n          model.setlist.maybeNowPlaying,\n          nowPlaying => nowPlaying.playId === playId,', to: 'ReceivedPlayerEvent: ({ playId, event }) =>\n      Option.match(\n        Option.filter(\n          model.setlist.maybeNowPlaying,\n          () => true,' },
   { property: 'next-plays-queue-then-stream-then-other-video', file: 'src/page/karaoke/karaoke.ts', from: 'ClickedNext: () =>\n      Array.isReadonlyArrayNonEmpty(model.setlist.queue)\n        ? changeSetlist(model, playNext(model.setlist, model.repeat))\n        : seekBeside(model, 1, () =>', to: 'ClickedNext: () =>\n      false\n        ? changeSetlist(model, playNext(model.setlist, model.repeat))\n        : seekBeside(model, 1, () =>' },
   { property: 'next-plays-queue-then-stream-then-other-video', file: 'src/page/karaoke/setlist.ts', from: 'song => !isGone(song) && song.video_url !== current.video_url,', to: 'song => !isGone(song),' },
@@ -864,11 +872,17 @@ if (!isMainThread) {
   const started = Date.now();
   // One worker per autoplay and repeat setting, because no step changes either.
   const indexes = CONFIGS.flatMap((config, index) => (names.some((name) => belongsTo(name, config)) ? [index] : []));
-  const results = await Promise.all(indexes.map((index) => new Promise((resolve, reject) => {
+  const JOBS = Number(flag('--jobs') ?? indexes.length);
+  const runWorker = (index) => new Promise((resolve, reject) => {
     const worker = new Worker(new URL(import.meta.url), { workerData: index, argv: args });
     worker.once('message', resolve);
     worker.once('error', reject);
-  })));
+  });
+  const results = [];
+  const queue = [...indexes];
+  await Promise.all(Array.from({ length: Math.max(1, JOBS) }, async () => {
+    for (let index = queue.shift(); index !== undefined; index = queue.shift()) results.push(await runWorker(index));
+  }));
   const total = (key) => results.reduce((sum, result) => sum + result[key], 0);
   console.log(`explored ${total('states')} states and ${total('steps')} steps to depth ${DEPTH} (lyrics scope ${LYRIC_DEPTH}), then ${total('walkSteps')} steps of random walks, in ${((Date.now() - started) / 1000).toFixed(1)}s`);
   const shortest = (key, name) => results.map((result) => new Map(result[key]).get(name)).filter(Boolean).sort((a, b) => a.steps.length - b.steps.length)[0];

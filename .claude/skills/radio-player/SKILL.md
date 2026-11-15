@@ -37,6 +37,7 @@ The run uses one worker thread for each autoplay and repeat setting, and one mor
 
 - `--only <property>` checks one property.
 - `--depth <n>` changes the bound. The default is 6, and each extra step costs about 5 times more time. The stale-timer case of `skip-toast-always-clears` needs exactly six steps, so a lower depth leaves it to the random walks. The fourth failed load, where the automatic retries stop, needs eight steps, so only the random walks reach it. The karaoke-queue check and a story test cover that stop directly.
+- `--jobs <n>` runs at most n workers at once. Each worker holds its own state set, so peak memory is roughly n times one worker's. Use `--jobs 1` on a machine with a memory cap.
 - `--lyrics-depth <n>` changes the bound of the lyrics scope. The default is 8, which reaches the fourth failed fetch, where the automatic retries stop. Depth 9 takes about 135 s.
 - `--walks <n>` sets the number of random walks for each setting. The default is 300.
 
@@ -56,6 +57,7 @@ Exit code 0 means that every property passes, except any known findings listed b
   - An error does not stop the events. The listener and its tick keep running, so a play that failed or is gone can still get every event above. This is more than a real player sends, and `update` must ignore it.
   - `Progressed` reports one of these seconds. For `stream`: 0, 60, 120, 180, 240, 300 and 360, which are each song's start, a point inside each song, and a point before the first song. For the single-song videos: 30 and 90.
   - `Ended` arrives only after the playhead has passed the start of the video's last song, because YouTube ends a video at its end.
+- **Statistics.** `withoutPlayStats` resets `listens`, `maybeTrail` and `moodPrompt` after every step and drops the `RecordStat`, `RecordDecision` and `RecordMoodVote` Commands. Listens are reset, so the mood prompt's `heard` count would grow with every play and multiply the explored states if it were kept. The mood prompt has its own tests in `moodPrompt.test.ts` and `story.test.ts`.
 - **Replaced players.** A replaced player can deliver any event at any time. `update` only checks whether a playId equals the current one, so one older playId stands for all older playIds.
 - **Command results.**
   - `PickRandomVideo` stays pending with the candidates it was issued with, and the explorer tries each candidate as the result. Several picks can be pending at once.

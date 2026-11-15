@@ -116,3 +116,25 @@ export function findSongsForPlaylist(ids: readonly string[]): PlaylistEntry[] {
     )
     .all(...ids) as unknown as PlaylistEntry[]
 }
+
+export type SongForStats = Readonly<{
+  songId: string
+  title: string
+  artist: string
+  videoId: string
+  videoTitle: string
+  videoUrl: string
+}>
+
+export function findSongsForStats(ids: readonly string[]): SongForStats[] {
+  if (ids.length === 0) return []
+  return db()
+    .prepare(
+      `SELECT s.id AS songId, s.song_title AS title, COALESCE(s.artist, '') AS artist,
+              v.id AS videoId, v.video_title AS videoTitle, v.video_url AS videoUrl
+       FROM karaoke_song s
+       JOIN karaoke_video v ON v.id = s.video_id
+       WHERE s.id IN (${ids.map(() => '?').join(', ')})`,
+    )
+    .all(...ids) as unknown as SongForStats[]
+}

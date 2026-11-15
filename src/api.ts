@@ -121,3 +121,23 @@ export const sendJson = <A>(
       Effect.mapError(() => WriteFailure.Unreadable()),
     )
   })
+
+export const postWithoutReply = (
+  path: string,
+  body: unknown,
+): Effect.Effect<void, WriteFailure> =>
+  Effect.gen(function* () {
+    const response = yield* Effect.tryPromise({
+      try: () =>
+        fetch(path, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(body),
+          keepalive: true,
+        }),
+      catch: () => WriteFailure.Unreachable(),
+    })
+    if (!response.ok) {
+      return yield* Effect.fail(writeFailureOfStatus(response.status))
+    }
+  })

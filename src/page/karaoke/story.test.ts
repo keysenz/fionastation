@@ -13,6 +13,7 @@ import {
   ApplyVolume,
   CopyLink,
   CreatePlaylist,
+  CreateSessionId,
   FetchLyrics,
   FetchPlaylist,
   FetchSongs,
@@ -34,6 +35,8 @@ import {
   type Model,
   PickRandomVideo,
   RecheckAccount,
+  RecordMoodVote,
+  RecordStat,
   RefreshPlaylist,
   RemovePlaylist,
   ReplacePlaylist,
@@ -62,6 +65,7 @@ import {
   update as pageUpdate,
 } from './karaoke'
 import { layersToUrl, parseLayers } from './layers.ts'
+import { type Mood, MoodPrompt } from './moodPrompt.ts'
 import {
   EditToken,
   type Owned,
@@ -80,7 +84,6 @@ import {
   toVolumeJson,
 } from './setlist.ts'
 
-// NOTE: every new play starts a load timeout. Only the tests about that timer look at it, so the rest drive the page without it.
 const update = (current: Model, next: Message): UpdateReturn => {
   const result = pageUpdate(current, next)
   return result.commands === undefined
@@ -88,7 +91,8 @@ const update = (current: Model, next: Message): UpdateReturn => {
     : {
         ...result,
         commands: result.commands.filter(
-          ({ name }) => name !== WaitBeforeLoadTimeout.name,
+          ({ name }) =>
+            name !== WaitBeforeLoadTimeout.name && name !== RecordStat.name,
         ),
       }
 }
@@ -120,7 +124,7 @@ const saved = Command.resolve(SaveSetlist, Message.CompletedSaveSetlist())
 const pickedFor = (song: PlayableSong, playId: number) =>
   Command.resolveAll(
     [SaveSetlist, Message.CompletedSaveSetlist()],
-    [PickRandomVideo, Message.CompletedPickRandomVideo({ playId, song })],
+    [PickRandomVideo, Message.CompletedPickRandomVideo({ playId, song, poolSize: 1 })],
   )
 
 const failVideo = (playId: number) =>
@@ -336,6 +340,7 @@ test('opening the page rereads saved data and fetches, and does not fetch twice'
     LoadRepeat.name,
     LoadVolume.name,
     LoadLyricNudges.name,
+    CreateSessionId.name,
     FetchSongs.name,
   ])
   const known = update(
@@ -349,6 +354,7 @@ test('opening the page rereads saved data and fetches, and does not fetch twice'
     LoadRepeat.name,
     LoadVolume.name,
     LoadLyricNudges.name,
+    CreateSessionId.name,
   ])
 })
 
@@ -763,7 +769,7 @@ test('the end of a stream clicked on its first song asks for another video, and 
     ),
     Command.resolve(
       PickRandomVideo,
-      Message.CompletedPickRandomVideo({ playId: 1, song: b }),
+      Message.CompletedPickRandomVideo({ playId: 1, song: b, poolSize: 1 }),
     ),
     saved,
     model(current => {
@@ -856,7 +862,7 @@ test('a pick that finishes after the visitor chose another song is ignored', () 
   )
   const late = update(
     chosen.model,
-    Message.CompletedPickRandomVideo({ playId: 1, song: b }),
+    Message.CompletedPickRandomVideo({ playId: 1, song: b, poolSize: 1 }),
   )
   expect(currentIdOf(late.model)).toEqual(Option.some('c'))
   expect(late.model.setlist).toEqual(chosen.model.setlist)
@@ -871,7 +877,7 @@ test('a pick that lands on a video reported gone since it was asked for draws ag
     Message.ClickedSong({ song: a2 }),
     Message.ReceivedPlayerEvent({ playId: 1, event: PlayerEvent.Ended() }),
     refetchGone(b.video_url),
-    Message.CompletedPickRandomVideo({ playId: 1, song: b }),
+    Message.CompletedPickRandomVideo({ playId: 1, song: b, poolSize: 1 }),
   )
   expect(currentIdOf(repicked.model)).toEqual(Option.some('a2'))
   expect(repicked.commands?.map(({ name, args }) => [name, args])).toEqual([
@@ -884,7 +890,7 @@ test('a pick after an end whose videos have all gone since pauses the same song'
     Message.ClickedSong({ song: a2 }),
     Message.ReceivedPlayerEvent({ playId: 1, event: PlayerEvent.Ended() }),
     refetchGone(b.video_url, c.video_url),
-    Message.CompletedPickRandomVideo({ playId: 1, song: b }),
+    Message.CompletedPickRandomVideo({ playId: 1, song: b, poolSize: 1 }),
   )
   expect(currentIdOf(stopped.model)).toEqual(Option.some('a2'))
   expect(statusOf(stopped.model)).toEqual(Option.some('Paused'))
@@ -898,7 +904,7 @@ test('a pick after a gone video whose videos have all gone since leaves the gone
     Message.ClickedSong({ song: a }),
     failVideo(1),
     refetchGone(b.video_url, c.video_url),
-    Message.CompletedPickRandomVideo({ playId: 1, song: b }),
+    Message.CompletedPickRandomVideo({ playId: 1, song: b, poolSize: 1 }),
   )
   expect(currentIdOf(stopped.model)).toEqual(Option.some('a'))
   expect(phaseOf(stopped.model)).toEqual(Option.some('Gone'))
@@ -2270,7 +2276,7 @@ test('every new play starts its own load timeout, and a seek or a pause starts n
     Message.SucceededFetchSongs({ songs: [a, b], goneVideoIds: [] }),
     Message.ClickedSong({ song: a }),
     failVideo(1),
-    Message.CompletedPickRandomVideo({ playId: 1, song: b }),
+    Message.CompletedPickRandomVideo({ playId: 1, song: b, poolSize: 1 }),
   )
   expect(loadTimeoutsOf(picked)).toEqual([{ playId: 2 }])
 })
@@ -4044,4 +4050,154 @@ test('claim attempts saved by a past page come back with the stored playlists', 
   expect(argsOf(connected, LoadAccountPlaylists.name)).toMatchObject({
     attempted: [openingId],
   })
+})
+
+const [m1, m2, m3, m4, m5] = [
+  makeSong('m1'),
+  makeSong('m2'),
+  makeSong('m3'),
+  makeSong('m4'),
+  makeSong('m5'),
+]
+const SONG_START_SECONDS = 60
+
+const progressed = (current: Model, playId: number, seconds: number) =>
+  pageUpdate(
+    current,
+    Message.ReceivedPlayerEvent({
+      playId,
+      event: PlayerEvent.Progressed({ seconds: SONG_START_SECONDS + seconds }),
+    }),
+  )
+
+const heard = (
+  current: Model,
+  song: PlayableSong,
+  playId: number,
+  seconds: number,
+): UpdateReturn =>
+  progressed(
+    [
+      Message.ClickedSong({ song }),
+      Message.ReceivedPlayerEvent({ playId, event: PlayerEvent.Playing() }),
+    ].reduce((previous, next) => pageUpdate(previous, next).model, current),
+    playId,
+    seconds,
+  )
+
+const moodArchiveLoaded = (): Model =>
+  pageUpdate(
+    init(),
+    Message.SucceededFetchSongs({ songs: [m1, m2, m3, m4, m5], goneVideoIds: [] }),
+  ).model
+
+const afterSongs = (
+  songs: ReadonlyArray<PlayableSong>,
+  seconds: number,
+): UpdateReturn =>
+  songs.reduce<UpdateReturn>(
+    (previous, song, index) => heard(previous.model, song, index + 1, seconds),
+    { model: moodArchiveLoaded() },
+  )
+
+const afterFourSongs = (): Model => afterSongs([m1, m2, m3, m4], 45).model
+
+const picked = (current: Model, ...moods: ReadonlyArray<Mood>): Model =>
+  moods.reduce(
+    (previous, mood) =>
+      pageUpdate(previous, Message.ToggledMood({ mood })).model,
+    current,
+  )
+
+test('no mood question comes during the third song, however long it plays', () => {
+  expect(afterSongs([m1, m2, m3], 90).model.moodPrompt).toEqual(
+    MoodPrompt.Counting({ heard: 3 }),
+  )
+})
+
+test('no mood question comes before the song has played for 45 seconds, and it comes at 45', () => {
+  const justBefore = afterSongs([m1, m2, m3, m4], 44).model
+  expect(justBefore.moodPrompt._tag).toBe('Counting')
+  expect(progressed(justBefore, 4, 45).model.moodPrompt).toEqual(
+    MoodPrompt.Asking({ songId: 'm4', playId: 4, picked: [] }),
+  )
+})
+
+test('a third mood is ignored, and tapping a picked mood takes it back', () => {
+  const asking = afterFourSongs()
+  const three = picked(asking, 'ceria', 'hype', 'chill')
+  expect(three.moodPrompt).toEqual(
+    MoodPrompt.Asking({ songId: 'm4', playId: 4, picked: ['ceria', 'hype'] }),
+  )
+  expect(picked(three, 'ceria').moodPrompt).toEqual(
+    MoodPrompt.Asking({ songId: 'm4', playId: 4, picked: ['hype'] }),
+  )
+})
+
+test('dismissing the question ends it for the visit, even after more songs', () => {
+  const dismissed = pageUpdate(
+    afterFourSongs(),
+    Message.DismissedMoodPrompt(),
+  ).model
+  expect(dismissed.moodPrompt).toEqual(MoodPrompt.Done())
+  const more = heard(dismissed, m5, 5, 90)
+  expect(more.model.moodPrompt).toEqual(MoodPrompt.Done())
+})
+
+test('sending the picked moods records exactly one vote for the song and ends the question', () => {
+  const sent = pageUpdate(
+    picked(afterFourSongs(), 'sendu', 'galau'),
+    Message.SubmittedMoods(),
+  )
+  expect(sent.model.moodPrompt).toEqual(MoodPrompt.Done())
+  const votes = (sent.commands ?? []).filter(
+    ({ name }) => name === RecordMoodVote.name,
+  )
+  expect(votes.map(({ args }) => args)).toEqual([
+    { songId: 'm4', moods: ['sendu', 'galau'] },
+  ])
+  const again = pageUpdate(sent.model, Message.SubmittedMoods())
+  expect(again.commands ?? []).toEqual([])
+})
+
+test('sending with no mood picked does nothing', () => {
+  const asking = afterFourSongs()
+  const sent = pageUpdate(asking, Message.SubmittedMoods())
+  expect(sent.model.moodPrompt).toEqual(asking.moodPrompt)
+  expect(sent.commands).toBeUndefined()
+})
+
+test('a song change while asking drops the picks and asks again 45 seconds into the next song', () => {
+  const asking = picked(afterFourSongs(), 'ceria')
+  const next = heard(asking, m5, 5, 10)
+  expect(next.model.moodPrompt).toEqual(MoodPrompt.Counting({ heard: 5 }))
+  const later = pageUpdate(
+    next.model,
+    Message.ReceivedPlayerEvent({
+      playId: 5,
+      event: PlayerEvent.Progressed({ seconds: SONG_START_SECONDS + 50 }),
+    }),
+  )
+  expect(later.model.moodPrompt).toEqual(
+    MoodPrompt.Asking({ songId: 'm5', playId: 5, picked: [] }),
+  )
+})
+
+test('pausing and resuming while asking keeps the question and its picks', () => {
+  const asking = picked(afterFourSongs(), 'ceria')
+  const paused = pageUpdate(
+    asking,
+    Message.ReceivedPlayerEvent({ playId: 4, event: PlayerEvent.Paused() }),
+  ).model
+  const keptAsking = MoodPrompt.Asking({
+    songId: 'm4',
+    playId: 4,
+    picked: ['ceria'],
+  })
+  expect(paused.moodPrompt).toEqual(keptAsking)
+  const resumed = pageUpdate(
+    paused,
+    Message.ReceivedPlayerEvent({ playId: 4, event: PlayerEvent.Playing() }),
+  ).model
+  expect(resumed.moodPrompt).toEqual(keptAsking)
 })

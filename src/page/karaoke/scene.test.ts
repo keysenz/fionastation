@@ -20,6 +20,8 @@ import {
   Message,
   type Model,
   MountPlayer,
+  RecordMoodVote,
+  Toast,
   WaitBeforeLoadTimeout,
   init,
   update,
@@ -391,5 +393,123 @@ test('the collapsed bar shows the next line through an instrumental break', () =
     given(singingFirstAt(95)),
     playerMounted,
     expect(barLyric).toHaveText('after the break'),
+  )
+})
+
+const [mood1, mood2, mood3, mood4] = [
+  makeSong('mood1'),
+  makeSong('mood2'),
+  makeSong('mood3'),
+  makeSong('mood4'),
+]
+const moodCard = role('region', { name: /^Song mood$/ })
+
+const songPlayedFor45Seconds = (song: PlayableSong, playId: number) => [
+  Message.ClickedSong({ song }),
+  Message.ReceivedPlayerEvent({ playId, event: PlayerEvent.Playing() }),
+  Message.ReceivedPlayerEvent({
+    playId,
+    event: PlayerEvent.Progressed({ seconds: 60 + 45 }),
+  }),
+]
+
+const askingForMoods = (...more: ReadonlyArray<Message>): Model =>
+  after(
+    fetched(a, b, mood1, mood2, mood3, mood4),
+    ...songPlayedFor45Seconds(mood1, 1),
+    ...songPlayedFor45Seconds(mood2, 2),
+    ...songPlayedFor45Seconds(mood3, 3),
+    ...songPlayedFor45Seconds(mood4, 4),
+    ...more,
+  )
+
+const resolvedMoodVote = Command.resolve(
+  RecordMoodVote,
+  Message.CompletedRecordMoodVote(),
+)
+
+test('the mood card turns moods on and off, keeps Send off until one is picked, and goes away on Send', () => {
+  scene(
+    { update, view },
+    given(askingForMoods()),
+    playerMounted,
+    expect(moodCard).toExist(),
+    inside(moodCard, expect(button('Send')).toBeDisabled()),
+    inside(moodCard, click(button('ceria'))),
+    inside(moodCard, click(button('hype'))),
+    inside(
+      moodCard,
+      expect(button('ceria')).toHaveAttr('aria-pressed', 'true'),
+      expect(button('hype')).toHaveAttr('aria-pressed', 'true'),
+      expect(button('galau')).toHaveAttr('aria-pressed', 'false'),
+      expect(button('Send')).toBeEnabled(),
+    ),
+    inside(moodCard, click(button('galau'))),
+    inside(
+      moodCard,
+      expect(button('galau')).toHaveAttr('aria-pressed', 'false'),
+    ),
+    inside(moodCard, click(button('Send'))),
+    resolvedMoodVote,
+    expect(moodCard).toBeAbsent(),
+  )
+})
+
+test('the close button dismisses the mood card without sending anything', () => {
+  scene(
+    { update, view },
+    given(askingForMoods()),
+    playerMounted,
+    inside(moodCard, click(button('Close'))),
+    expect(moodCard).toBeAbsent(),
+  )
+})
+
+test('the mood card stays hidden before a few songs have played', () => {
+  scene(
+    { update, view },
+    given(after(fetched(a, b), ...songPlayedFor45Seconds(a, 1))),
+    playerMounted,
+    expect(moodCard).toBeAbsent(),
+  )
+})
+
+test('the mood card waits while a toast is showing', () => {
+  const asking = askingForMoods()
+  scene(
+    { update, view },
+    given({
+      ...asking,
+      maybeSkipToast: Option.some(Toast.PlaylistDeleted({ dismissId: 1 })),
+    }),
+    playerMounted,
+    expect(moodCard).toBeAbsent(),
+  )
+})
+
+test('the mood card waits while the playlist question is open', () => {
+  scene(
+    { update, view },
+    given(
+      askingForMoods(
+        Message.OpenedPlaylist({
+          id: playlistAB.id,
+          maybeEditToken: Option.none(),
+        }),
+        Message.CompletedLoadSavedSetlist({ maybeJson: Option.none() }),
+        Message.SucceededFetchPlaylist({ playlist: playlistAB }),
+      ),
+    ),
+    playerMounted,
+    expect(moodCard).toBeAbsent(),
+  )
+})
+
+test('the mood card waits while the player is expanded', () => {
+  scene(
+    { update, view },
+    given(askingForMoods(Message.ClickedToggleExpanded())),
+    playerMounted,
+    expect(moodCard).toBeAbsent(),
   )
 })
