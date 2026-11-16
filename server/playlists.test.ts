@@ -1072,3 +1072,193 @@ describe('admin api', () => {
     })
   })
 })
+
+describe('opens and report', () => {
+  const SINCE = '2026-11-01'
+  const open = (
+    api: ReturnType<typeof harness>['api'],
+    id: string,
+    { ip = '9.9.9.9', viewer = ANONYMOUS as Viewer, countOpen = true } = {},
+  ) =>
+    api({
+      method: 'GET',
+      id,
+      ip,
+      authorization: undefined,
+      viewer,
+      countOpen,
+      body: '',
+    })
+  const opensOf = (store: PlaylistStore, id: string) =>
+    store.report(SINCE).playlists.find(row => row.id === id)?.opens
+
+  test('a stranger who asks to count is counted once an hour per address', () => {
+    const { api, store, post } = harness()
+    const { id } = bodyOf(post({ name: 'one', songIds: ['s1'] }))
+    expect(open(api, id).status).toBe(200)
+    expect(open(api, id).status).toBe(200)
+    expect(opensOf(store, id)).toBe(1)
+    expect(open(api, id, { ip: '8.8.8.8' }).status).toBe(200)
+    expect(opensOf(store, id)).toBe(2)
+    clock = new Date(clock.getTime() + 61 * 60 * 1000)
+    open(api, id)
+    expect(opensOf(store, id)).toBe(3)
+  })
+
+  test('a read that does not ask to count is not counted', () => {
+    const { api, store, post } = harness()
+    const { id } = bodyOf(post({ name: 'one', songIds: ['s1'] }))
+    open(api, id, { countOpen: false })
+    expect(opensOf(store, id)).toBe(0)
+  })
+
+  test('the signed-in owner opening their own playlist is not counted, another member is', () => {
+    const { api, store, as } = harness()
+    const { id } = bodyOf(
+      as(member(ALICE)).post({ name: 'one', songIds: ['s1'] }),
+    )
+    open(api, id, { viewer: member(ALICE) })
+    expect(opensOf(store, id)).toBe(0)
+    open(api, id, { viewer: member(BOB), ip: '7.7.7.7' })
+    expect(opensOf(store, id)).toBe(1)
+  })
+
+  test('deleted and unknown playlists are not counted', () => {
+    const { api, store, post, send } = harness()
+    const { id, editToken } = bodyOf(post({ name: 'one', songIds: ['s1'] }))
+    send('DELETE', id, editToken)
+    expect(open(api, id).status).toBe(410)
+    expect(open(api, 'zzzzzzzz').status).toBe(404)
+    expect(store.report(SINCE).playlists.every(row => row.opens === 0)).toBe(
+      true,
+    )
+  })
+
+  test('a failure to record an open does not fail the read', () => {
+    const { store, post } = harness()
+    const { id } = bodyOf(post({ name: 'one', songIds: ['s1'] }))
+    const broken = createPlaylistApi({
+      store: {
+        ...store,
+        recordOpen: () => {
+          throw new Error('database is locked')
+        },
+      },
+      now,
+      findSongs: ids => ids.map(entry),
+    })
+    expect(open(broken, id).status).toBe(200)
+  })
+
+  test('a member name survives the session that carried it', () => {
+    const store = openPlaylistStore({ path: dbPath, now })
+    store.sessions.start(
+      'hash',
+      { discordId: ALICE, name: 'Alice' },
+      new Date('2026-11-15T10:00:00Z'),
+    )
+    store.create(
+      { name: 'one', entries: [entry('a')] },
+      { kind: 'Site', ownerDiscordId: ALICE },
+    )
+    clock = new Date('2027-01-01T00:00:00Z')
+    store.sessions.start(
+      'other',
+      { discordId: BOB, name: 'Bob' },
+      new Date('2027-02-01T00:00:00Z'),
+    )
+    expect(store.sessions.find('hash')).toBeUndefined()
+    expect(store.report(SINCE).owners[0]?.name).toBe('Alice')
+  })
+
+  test('the newest name wins and old sessions backfill members at open', () => {
+    const first = openPlaylistStore({ path: dbPath, now })
+    const later = new Date('2026-12-14T10:00:00Z')
+    first.sessions.start('a', { discordId: ALICE, name: 'Old' }, later)
+    clock = new Date('2026-11-14T11:00:00Z')
+    first.sessions.start('b', { discordId: ALICE, name: 'New' }, later)
+    first.create(
+      { name: 'one', entries: [entry('a')] },
+      { kind: 'Site', ownerDiscordId: ALICE },
+    )
+    const raw = new DatabaseSync(dbPath)
+    raw.exec('DROP TABLE members')
+    raw.close()
+    const reopened = openPlaylistStore({ path: dbPath, now })
+    expect(reopened.report(SINCE).owners[0]?.name).toBe('New')
+  })
+
+  test('the report totals, owners and ranking', () => {
+    const store = openPlaylistStore({ path: dbPath, now })
+    store.sessions.start(
+      'a',
+      { discordId: ALICE, name: 'Alice' },
+      new Date('2026-12-14T10:00:00Z'),
+    )
+    const make = (name: string, ownerDiscordId?: string) => {
+      const result = store.create(
+        { name, entries: [entry('a')] },
+        { kind: 'Site', ownerDiscordId },
+      )
+      if (result.kind !== 'Created') throw new Error(result.kind)
+      return result
+    }
+    const quiet = make('quiet', ALICE)
+    clock = new Date('2026-11-14T11:00:00Z')
+    const popular = make('popular', ALICE)
+    const stray = make('stray')
+    const gone = make('gone')
+    store.remove(gone.id)
+    store.recordOpen(popular.id)
+    store.recordOpen(popular.id)
+    store.recordOpen(stray.id)
+    clock = new Date('2026-10-01T00:00:00Z')
+    store.recordOpen(quiet.id)
+
+    const report = store.report(SINCE)
+    expect(report.made).toEqual({
+      total: 4,
+      live: 3,
+      deleted: 1,
+      signedIn: 2,
+      anonymous: 2,
+    })
+    expect(report.madeDaily).toEqual([{ day: '2026-11-14', created: 4 }])
+    expect(report.playlists.map(row => row.id)).toEqual([
+      popular.id,
+      stray.id,
+      gone.id,
+      quiet.id,
+    ])
+    expect(report.playlists[0]).toMatchObject({
+      name: 'popular',
+      entryCount: 1,
+      ownerDiscordId: ALICE,
+      ownerName: 'Alice',
+      opens: 2,
+      totalOpens: 2,
+      deleted: false,
+    })
+    expect(report.playlists.find(row => row.id === quiet.id)).toMatchObject({
+      opens: 0,
+      totalOpens: 1,
+    })
+    expect(report.playlists.find(row => row.id === gone.id)?.deleted).toBe(true)
+    expect(report.owners).toEqual([
+      {
+        discordId: ALICE,
+        name: 'Alice',
+        playlists: 2,
+        live: 2,
+        opensByOthers: 2,
+      },
+      {
+        discordId: null,
+        name: null,
+        playlists: 2,
+        live: 1,
+        opensByOthers: 1,
+      },
+    ])
+  })
+})
