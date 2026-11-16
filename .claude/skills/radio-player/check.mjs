@@ -203,7 +203,7 @@ function transitions(state) {
   const now = nowOf(model);
   const gone = new Set(model.goneVideoIds);
   const clickable = ARCHIVE.filter((song) => !gone.has(song.video_url));
-  const user = (message, label) => out.push({ message, label, kind: 'user' });
+  const user = (message, label, extra) => out.push({ message, label, kind: 'user', ...extra });
   for (const song of clickable) user(K.Message.ClickedSong({ song }), `ClickedSong(${song.id})`);
   if (model.setlist.queue.length < QUEUE_MAX) {
     for (const song of clickable) user(K.Message.ClickedAddToQueue({ song }), `ClickedAddToQueue(${song.id})`);
@@ -218,7 +218,9 @@ function transitions(state) {
   if (now) {
     user(K.Message.ClickedNext(), 'ClickedNext');
     user(K.Message.ClickedPrevious(), 'ClickedPrevious');
+    for (const by of [10, -10]) user(K.Message.PressedSeekKey({ by }), `PressedSeekKey(${by})`, { by });
   }
+  for (const by of [10, -10]) user(K.Message.PressedVolumeKey({ by }), `PressedVolumeKey(${by})`);
   if (some(model.maybeSkipToast)) user(K.Message.ClickedDismissToast(), 'ClickedDismissToast');
   if (!env.refetched && pending.some((item) => item.kind === 'pick')) {
     out.push({ message: K.Message.SucceededFetchSongs({ songs: ARCHIVE, goneVideoIds: REFETCH_GONE }), label: `SucceededFetchSongs(refetch, gone [${REFETCH_GONE}])`, kind: 'refetch' });
@@ -424,6 +426,22 @@ const PROPERTIES = {
         const did = named(post.commands, 'PickRandomVideo').length ? 'asked for a random other video' : startedNewPlay(pre, post) ? `started ${startedNewPlay(pre, post).song.id}` : 'did not seek';
         return `the bar shows ${now.song.id} with the playhead ${seconds === undefined ? 'unknown' : `at ${seconds}s`}, and it ${did} instead of seeking to ${target.id}`;
       }
+    },
+  },
+  'seek-key-moves-ten-seconds': {
+    promise: 'The seek keys move a live play ten seconds from a known playhead and not before the start of the video, through a seek that never reloads. With no known playhead or a play that cannot sound, they do nothing.',
+    check(pre, t, post) {
+      if (!t.label.startsWith('PressedSeekKey')) return;
+      const now = nowOf(pre.model);
+      const seconds = playheadOf(pre.model);
+      const seeks = named(post.commands, 'SeekPlayer');
+      if (!now || !isLive(now) || seconds === undefined) {
+        if (post.commands.length || !same(post.model, pre.model)) return `${t.label} did something with ${!now ? 'nothing playing' : !isLive(now) ? `a ${tagOf(now)} play` : 'no known playhead'}`;
+        return;
+      }
+      const expected = Math.max(0, seconds + t.by);
+      if (seeks.length !== 1 || seeks[0].args.seconds !== expected) return `at ${seconds}s ${t.label} sought ${JSON.stringify(seeks.map((c) => c.args.seconds))}, expected ${expected}`;
+      if (!sameSetlist(pre, post)) return 'the setlist changed, so the video reloaded or the queue moved';
     },
   },
   'seek-never-reloads': {
@@ -781,7 +799,10 @@ const MUTANTS = [
   { property: 'next-and-previous-with-unknown-playhead', file: 'src/lyrics.ts', from: 'onNone: () =>\n      Array.findFirstIndex(spans, ({ song }) => song.id === playing.id),', to: 'onNone: () => Option.none(),' },
   { property: 'next-and-previous-with-unknown-playhead', file: 'src/lyrics.ts', from: '        () => -1,\n', to: '        () => -2,\n' },
   { property: "next-plays-queue-then-stream-then-other-video", file: "src/page/karaoke/karaoke.ts", from: "        Option.isSome(intentOf(phase)),\n      ),\n      nowPlaying =>", to: "        true,\n      ),\n      nowPlaying =>" },
-  { property: 'seek-never-reloads', file: 'src/page/karaoke/karaoke.ts', from: '          model: moved.model,\n          commands: [...(moved.commands ?? []), SeekPlayer({ seconds })],', to: '          model: modifyFields(moved.model, { setlist: setlist => play(setlist, song) }),\n          commands: [...(moved.commands ?? []), SeekPlayer({ seconds })],' },
+  { property: 'seek-never-reloads', file: 'src/page/karaoke/karaoke.ts', from: '    model: moved.model,\n    commands: [...(moved.commands ?? []), SeekPlayer({ seconds })],', to: '    model: modifyFields(moved.model, { setlist: setlist => play(setlist, nowPlaying.song) }),\n    commands: [...(moved.commands ?? []), SeekPlayer({ seconds })],' },
+  { property: 'seek-key-moves-ten-seconds', file: 'src/page/karaoke/karaoke.ts', from: 'seconds: Math.max(0, seconds + by),', to: 'seconds: seconds + by,' },
+  { property: 'seek-key-moves-ten-seconds', file: 'src/page/karaoke/karaoke.ts', from: 'seconds: Math.max(0, seconds + by),', to: 'seconds: Math.max(0, seconds - by),' },
+  { property: 'seek-key-moves-ten-seconds', file: 'src/page/karaoke/karaoke.ts', from: '      Option.filter(model.setlist.maybeNowPlaying, ({ phase }) =>\n        Option.isSome(intentOf(phase)),\n      ),\n      nowPlaying =>\n        Option.map(playheadOf(model, nowPlaying), ({ seconds }) => ({', to: '      Option.filter(model.setlist.maybeNowPlaying, () => true),\n      nowPlaying =>\n        Option.map(playheadOf(model, nowPlaying), ({ seconds }) => ({' },
   { property: 'seek-never-reloads', file: 'src/page/karaoke/karaoke.ts', from: 'const moved = progressed(model, nowPlaying.playId, seconds)', to: 'const moved = { model }' },
   { property: 'gone-video-never-auto-starts', file: 'src/page/karaoke/setlist.ts', from: 'song => !isGone(song) && song.video_url !== current.video_url,', to: 'song => song.video_url !== current.video_url,' },
   { property: 'gone-video-never-auto-starts', file: 'src/page/karaoke/karaoke.ts', from: 'isGone: song => goneIds.has(song.video_url),', to: 'isGone: () => false,' },

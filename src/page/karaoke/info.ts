@@ -2,6 +2,7 @@ import { Option } from 'effect'
 import { type Html, type HtmlBuilder } from 'foldkit/html'
 
 import { INFO_BUTTON_ID, INFO_PANEL_ID, Message } from './karaoke'
+import { ariaKeyShortcutsOf, shortcutHelp } from './shortcuts.ts'
 
 const INFO_TITLE_ID = 'karaoke-info-title'
 
@@ -270,6 +271,49 @@ const creditsView = (h: HtmlBuilder<Message>): Html =>
     ],
   )
 
+const keyCombinationView = (
+  keys: ReadonlyArray<string>,
+  h: HtmlBuilder<Message>,
+): Html =>
+  h.span(
+    [h.Class('inline-flex items-center gap-1')],
+    keys.flatMap((key, index) => [
+      ...(index > 0 ? ['+'] : []),
+      h.keyed('kbd')(
+        key,
+        [
+          h.Class(
+            'min-w-6 rounded border border-white/20 bg-white/10 px-1.5 py-0.5 text-center font-mono text-xs',
+          ),
+        ],
+        [key],
+      ),
+    ]),
+  )
+
+const shortcutsView = (h: HtmlBuilder<Message>): Html =>
+  h.section(
+    [h.Class('space-y-3')],
+    [
+      sectionHeading('Keyboard shortcuts', h),
+      h.dl(
+        [h.Class('rounded-lg bg-black/30 p-4 space-y-2')],
+        shortcutHelp.map(({ label, alternatives }) =>
+          h.div(
+            [h.Class('flex items-center justify-between gap-4')],
+            [
+              h.dt([], [label]),
+              h.dd(
+                [h.Class('flex flex-wrap justify-end gap-2')],
+                alternatives.map(keys => keyCombinationView(keys, h)),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ],
+  )
+
 export const infoButtonView = (
   isInfoOpen: boolean,
   h: HtmlBuilder<Message>,
@@ -280,6 +324,7 @@ export const infoButtonView = (
       h.Id(INFO_BUTTON_ID),
       h.AriaLabel('About Fio Radio'),
       h.AriaHasPopup('dialog'),
+      h.Attribute('aria-keyshortcuts', ariaKeyShortcutsOf('ClickedToggleInfo')),
       h.AriaExpanded(isInfoOpen),
       h.OnClick(Message.ClickedToggleInfo()),
       h.Class(
@@ -347,7 +392,7 @@ export const infoPanelView = (h: HtmlBuilder<Message>): Html =>
           ),
           h.div(
             [h.Class('space-y-8 px-5 py-5 text-sm leading-relaxed')],
-            [whoIsFionaView(h), creditsView(h)],
+            [whoIsFionaView(h), shortcutsView(h), creditsView(h)],
           ),
         ],
       ),

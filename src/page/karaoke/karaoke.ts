@@ -115,16 +115,6 @@ import {
   stepStats,
 } from './playStats.ts'
 import {
-  type AutoplayPick,
-  TrailDecision,
-  TrailSession,
-  TrailTag,
-  claimSeqs,
-  newSessionId,
-  startedTrail,
-  trailFields,
-} from './trail.ts'
-import {
   type OpenedPlaylist,
   PlaylistFailure,
   PlaylistOpen,
@@ -174,6 +164,7 @@ import {
   failLoad,
   firstSongOfEachOtherLiveVideo,
   intentOf,
+  isSilent,
   isStreamGone,
   loadPlaylist,
   loadRetryDelaySeconds,
@@ -202,6 +193,17 @@ import {
   toggleMute,
   togglePlaying,
 } from './setlist.ts'
+import { decideShortcut, targetKindOf } from './shortcuts.ts'
+import {
+  type AutoplayPick,
+  TrailDecision,
+  TrailSession,
+  TrailTag,
+  claimSeqs,
+  newSessionId,
+  startedTrail,
+  trailFields,
+} from './trail.ts'
 
 const STORAGE_KEY = 'karaoke-storage'
 const AUTOPLAY_KEY = 'karaoke-autoplay'
@@ -215,6 +217,7 @@ export const SONG_LIST_ID = 'karaoke-song-list'
 export const SETLIST_PANE_ID = 'karaoke-setlist-pane'
 export const INFO_PANEL_ID = 'karaoke-info-panel'
 export const INFO_BUTTON_ID = 'karaoke-info-button'
+export const SEARCH_INPUT_ID = 'karaoke-search-input'
 export const PLAYLIST_PROMPT_ID = 'karaoke-playlist-prompt'
 export const REPLACE_CHOICE = '[data-playlist-choice="Replace"]'
 export const CANCEL_CHOICE = '[data-playlist-choice="Cancel"]'
@@ -413,6 +416,9 @@ export const Message = defineMessageUnion({
   DraggedOverQueueSlot: { index: Schema.Number },
   DroppedQueueSong: { index: Schema.Number },
   EndedQueueDrag: {},
+  PressedSeekKey: { by: Schema.Literals([-10, 10]) },
+  PressedVolumeKey: { by: Schema.Literals([-10, 10]) },
+  PressedSearchKey: {},
   PressedQueueMoveKey: {
     index: Schema.Number,
     by: Schema.Literals([-1, 1]),
@@ -430,6 +436,7 @@ export const Message = defineMessageUnion({
   CompletedFocusQueueHandle: {},
   CompletedFocusInfoPanel: {},
   CompletedFocusInfoButton: {},
+  CompletedFocusSearch: {},
   CompletedFocusPlaylistPrompt: {},
   CompletedPickRandomVideo: {
     playId: Schema.Number,
@@ -921,6 +928,14 @@ export const FocusInfoPanel = Command.define('FocusInfoPanel', {
   ),
 })
 
+export const FocusSearch = Command.define('FocusSearch', {
+  messages: [Message.CompletedFocusSearch],
+  execute: Dom.focus(`#${SEARCH_INPUT_ID}`).pipe(
+    Effect.ignore,
+    Effect.as(Message.CompletedFocusSearch()),
+  ),
+})
+
 export const FocusInfoButton = Command.define('FocusInfoButton', {
   messages: [Message.CompletedFocusInfoButton],
   execute: Dom.focus(`#${INFO_BUTTON_ID}`).pipe(
@@ -1203,6 +1218,33 @@ const queueDragStream = Stream.callback<Message>(queue =>
   ).pipe(Effect.flatMap(() => Effect.never)),
 )
 
+const shortcutsStream = Stream.callback<Message>(queue =>
+  Effect.acquireRelease(
+    Effect.sync(() => {
+      const onKeyDown = (event: KeyboardEvent) => {
+        const maybeMessage = decideShortcut({
+          key: event.key,
+          shiftKey: event.shiftKey,
+          ctrlKey: event.ctrlKey,
+          metaKey: event.metaKey,
+          altKey: event.altKey,
+          repeat: event.repeat,
+          defaultPrevented: event.defaultPrevented,
+          target: targetKindOf(event.target),
+        })
+        if (Option.isSome(maybeMessage)) {
+          event.preventDefault()
+          Queue.offerUnsafe(queue, maybeMessage.value)
+        }
+      }
+      window.addEventListener('keydown', onKeyDown)
+      return onKeyDown
+    }),
+    onKeyDown =>
+      Effect.sync(() => window.removeEventListener('keydown', onKeyDown)),
+  ).pipe(Effect.flatMap(() => Effect.never)),
+)
+
 const myPlaylistsStream = Stream.callback<Message>(queue =>
   Effect.acquireRelease(
     Effect.sync(() => {
@@ -1261,6 +1303,17 @@ export const subscriptions = Subscription.make<Model, Message>()(entry => ({
     {
       modelToDependencies: () => ({}),
       dependenciesToStream: () => myPlaylistsStream,
+    },
+  ),
+  shortcuts: entry(
+    { isListening: Schema.Boolean },
+    {
+      modelToDependencies: model => ({ isListening: !isModalOpen(model) }),
+      dependenciesToStream: ({ isListening }) =>
+        Stream.when(
+          shortcutsStream,
+          Effect.sync(() => isListening),
+        ),
     },
   ),
   queueDrag: entry(
@@ -1464,14 +1517,39 @@ const seekBeside = (
     ),
     {
       onNone: otherwise,
-      onSome: ({ song, nowPlaying }) => {
-        const seconds = timestampToSeconds(song.timestamp)
-        const moved = progressed(model, nowPlaying.playId, seconds)
-        return {
-          model: moved.model,
-          commands: [...(moved.commands ?? []), SeekPlayer({ seconds })],
-        }
-      },
+      onSome: ({ song, nowPlaying }) =>
+        seekToSeconds(model, nowPlaying, timestampToSeconds(song.timestamp)),
+    },
+  )
+
+const seekToSeconds = (
+  model: Model,
+  nowPlaying: NowPlaying,
+  seconds: number,
+): UpdateReturn => {
+  const moved = progressed(model, nowPlaying.playId, seconds)
+  return {
+    model: moved.model,
+    commands: [...(moved.commands ?? []), SeekPlayer({ seconds })],
+  }
+}
+
+const seekBy = (model: Model, by: number): UpdateReturn =>
+  Option.match(
+    Option.flatMap(
+      Option.filter(model.setlist.maybeNowPlaying, ({ phase }) =>
+        Option.isSome(intentOf(phase)),
+      ),
+      nowPlaying =>
+        Option.map(playheadOf(model, nowPlaying), ({ seconds }) => ({
+          nowPlaying,
+          seconds: Math.max(0, seconds + by),
+        })),
+    ),
+    {
+      onNone: () => ({ model }),
+      onSome: ({ nowPlaying, seconds }) =>
+        seekToSeconds(model, nowPlaying, seconds),
     },
   )
 
@@ -1651,6 +1729,22 @@ const changeVolume = (model: Model, volume: Volume): UpdateReturn => ({
   model: modifyFields(model, { volume: () => volume }),
   commands: [ApplyVolume(volume), SaveVolume({ volume })],
 })
+
+const stepVolume = (model: Model, by: number): UpdateReturn =>
+  isSilent(model.volume) && by < 0
+    ? { model }
+    : changeVolume(
+        model,
+        setLevel(
+          model.volume,
+          (isSilent(model.volume) ? 0 : model.volume.level) + by,
+        ),
+      )
+
+const isModalOpen = (model: Model): boolean =>
+  model.isInfoOpen ||
+  PlaylistOpen.guards.Asking(model.playlistOpen) ||
+  !PlaylistDialog.guards.Closed(model.playlistDialog)
 
 /** Anything but a saved mode name means Off, so corrupt data repeats nothing. */
 const parseRepeat = (maybeValue: Option.Option<string>): Repeat =>
@@ -2692,7 +2786,10 @@ const updateModel = (model: Model, message: Message) =>
                     songLabel(previousSong),
                     dismissId,
                   ),
-                  commands: [saveSetlist, WaitBeforeDismissToast({ dismissId })],
+                  commands: [
+                    saveSetlist,
+                    WaitBeforeDismissToast({ dismissId }),
+                  ],
                 }
               : {
                   model: picked,
@@ -2759,6 +2856,13 @@ const updateModel = (model: Model, message: Message) =>
       model: modifyFields(model, { repeat: nextRepeat }),
       commands: [SaveRepeat({ repeat: nextRepeat(model.repeat) })],
     }),
+
+    PressedSeekKey: ({ by }) => seekBy(model, by),
+
+    PressedVolumeKey: ({ by }) => stepVolume(model, by),
+
+    PressedSearchKey: () =>
+      model.isExpanded ? { model } : { model, commands: [FocusSearch()] },
 
     ChangedVolume: ({ level }) =>
       changeVolume(model, setLevel(model.volume, level)),
@@ -2930,6 +3034,7 @@ const updateModel = (model: Model, message: Message) =>
     CompletedFocusQueueHandle: () => ({ model }),
     CompletedFocusInfoPanel: () => ({ model }),
     CompletedFocusInfoButton: () => ({ model }),
+    CompletedFocusSearch: () => ({ model }),
     CompletedFocusPlaylistPrompt: () => ({ model }),
 
     CompletedLoadMyPlaylists: ({ maybeJson, maybeAttemptsJson, origin }) => ({

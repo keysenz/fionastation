@@ -22,6 +22,7 @@ import {
   FocusPlaylistDialog,
   FocusPlaylistPrompt,
   FocusQueueHandle,
+  FocusSearch,
   LoadAccount,
   LoadAccountPlaylists,
   LoadAutoplay,
@@ -4200,4 +4201,125 @@ test('pausing and resuming while asking keeps the question and its picks', () =>
     Message.ReceivedPlayerEvent({ playId: 4, event: PlayerEvent.Playing() }),
   ).model
   expect(resumed.moodPrompt).toEqual(keptAsking)
+})
+
+const seeked = (current: Model, by: -10 | 10) =>
+  update(current, Message.PressedSeekKey({ by }))
+
+test('the forward seek key moves the playhead ten seconds in the same play', () => {
+  const inFirst = tick(playingStream(), 70).model
+  const sought = seeked(inFirst, 10)
+  expect(seeksOf(sought)).toEqual([80])
+  expect(sought.model.maybePlayhead).toEqual(
+    Option.some({ playId: 1, seconds: 80 }),
+  )
+  expect(sought.model.setlist).toEqual(inFirst.setlist)
+})
+
+test('the forward seek key across a song boundary names the next song and has its lyrics', () => {
+  const nearEnd = tick(playingStream(), 295).model
+  expect(singingId(nearEnd)).toEqual(Option.some('early'))
+  const sought = seeked(nearEnd, 10)
+  expect(seeksOf(sought)).toEqual([305])
+  expect(singingId(sought.model)).toEqual(Option.some('late'))
+  expect(sought.model.lyricsBySongId).toHaveProperty('late')
+  expect(sought.model.setlist).toEqual(nearEnd.setlist)
+})
+
+test('the back seek key across a song boundary names the song before', () => {
+  const inLate = tick(playingStream(), 305).model
+  const sought = seeked(inLate, -10)
+  expect(seeksOf(sought)).toEqual([295])
+  expect(singingId(sought.model)).toEqual(Option.some('early'))
+  expect(sought.model.setlist).toEqual(inLate.setlist)
+})
+
+test('the back seek key stops at the start of the video', () => {
+  const sought = seeked(tick(playingStream(), 4).model, -10)
+  expect(seeksOf(sought)).toEqual([0])
+  expect(sought.model.maybePlayhead).toEqual(
+    Option.some({ playId: 1, seconds: 0 }),
+  )
+})
+
+test('a seek key before any position report does nothing', () => {
+  const clicked = playingStream()
+  const sought = seeked(clicked, 10)
+  expect(sought.model).toEqual(clicked)
+  expect(sought.commands).toBeUndefined()
+})
+
+test('a seek key on a play that failed to load does nothing', () => {
+  const failed = update(
+    tick(playingStream(), 70).model,
+    Message.ReceivedPlayerEvent({
+      playId: 1,
+      event: PlayerEvent.LoadFailed({ reason: 'PlayerUnavailable' }),
+    }),
+  ).model
+  const sought = seeked(failed, 10)
+  expect(sought.model).toEqual(failed)
+  expect(sought.commands).toBeUndefined()
+})
+
+test('a seek key with nothing playing does nothing', () => {
+  const sought = seeked(init(), 10)
+  expect(sought.model).toEqual(init())
+  expect(sought.commands).toBeUndefined()
+})
+
+const withVolume = (volume: Model['volume']): Model => ({
+  ...init(),
+  volume,
+})
+
+test('the volume keys step by ten, clamp at 100 and 0, and apply and save each change', () => {
+  story(
+    update,
+    given(withVolume({ level: 95, isMuted: false })),
+    message(Message.PressedVolumeKey({ by: 10 })),
+    ...volumeChanged,
+    model(current => expect(current.volume.level).toBe(100)),
+    message(Message.PressedVolumeKey({ by: -10 })),
+    ...volumeChanged,
+    model(current => expect(current.volume.level).toBe(90)),
+  )
+  const nearSilent = update(
+    withVolume({ level: 5, isMuted: false }),
+    Message.PressedVolumeKey({ by: -10 }),
+  )
+  expect(nearSilent.model.volume.level).toBe(0)
+})
+
+test('volume up from muted unmutes at one step above silence, as the slider shows 0 when muted', () => {
+  story(
+    update,
+    given(withVolume({ level: 80, isMuted: true })),
+    message(Message.PressedVolumeKey({ by: 10 })),
+    ...volumeChanged,
+    model(current =>
+      expect(current.volume).toEqual({ level: 10, isMuted: false }),
+    ),
+  )
+})
+
+test('volume down while muted keeps the saved level and sends nothing', () => {
+  const muted = withVolume({ level: 80, isMuted: true })
+  const stepped = update(muted, Message.PressedVolumeKey({ by: -10 }))
+  expect(stepped.model.volume).toEqual({ level: 80, isMuted: true })
+  expect(stepped.commands).toBeUndefined()
+})
+
+test('the search key focuses the search input unless the expanded player covers it', () => {
+  story(
+    update,
+    given(init()),
+    message(Message.PressedSearchKey()),
+    Command.resolve(FocusSearch, Message.CompletedFocusSearch()),
+  )
+  const covered = update(
+    { ...init(), isExpanded: true },
+    Message.PressedSearchKey(),
+  )
+  expect(covered.commands).toBeUndefined()
 })
