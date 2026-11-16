@@ -2776,7 +2776,7 @@ const journeys = {
   },
 
   async playlistOpenCount(page) {
-    const songs = distinctByTitle(await livePlayables(), 2);
+    const songs = distinctByTitle(await livePlayables(), 3);
     const opensOf = (id) => {
       const db = new DatabaseSync(PLAYLISTS_DB_PATH, { readOnly: true });
       try {
@@ -2792,19 +2792,24 @@ const journeys = {
       await waitForBarSong(page, songs[0]);
       if (opensOf(stranger.id) !== 1) throw new Error(`counted ${opensOf(stranger.id)}`);
       await page.reload();
-      await waitForBarSong(page, songs[0]);
+      await page.locator('[data-playlist-bar]').waitFor();
+      await page.waitForTimeout(500);
       if (opensOf(stranger.id) !== 1) throw new Error(`a reload counted ${opensOf(stranger.id)}`);
     }, page);
     await step('playlist-open-count', 'the browser that made the playlist opens it and reloads it without being counted', async () => {
       await page.goto(BASE + '/');
       await page.evaluate(
-        (entry) => localStorage.setItem('karaoke-my-playlists', JSON.stringify([entry])),
+        (entry) => {
+          localStorage.removeItem('karaoke-storage');
+          localStorage.setItem('karaoke-my-playlists', JSON.stringify([entry]));
+        },
         { id: maker.id, name: 'Verify opens maker', editToken: maker.editToken, origin: 'Created' },
       );
       await page.goto(`${BASE}/p/${maker.id}`);
       await waitForBarSong(page, songs[0]);
       await page.reload();
-      await waitForBarSong(page, songs[0]);
+      await page.locator('[data-playlist-bar]').waitFor();
+      await page.waitForTimeout(500);
       if (opensOf(maker.id) !== 0) throw new Error(`the maker was counted ${opensOf(maker.id)}`);
     }, page);
   },

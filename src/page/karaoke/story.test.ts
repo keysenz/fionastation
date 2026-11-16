@@ -333,8 +333,8 @@ test('a failed fetch keeps data it already has and reports the error', () => {
 test('opening the page rereads saved data and fetches, and does not fetch twice', () => {
   const opened = entered(init())
   expect(opened.commands?.map(({ name }) => name)).toEqual([
-    LoadSavedSetlist.name,
     LoadMyPlaylists.name,
+    LoadSavedSetlist.name,
     LoadAccount.name,
     LoadAutoplay.name,
     LoadRepeat.name,
@@ -348,8 +348,8 @@ test('opening the page rereads saved data and fetches, and does not fetch twice'
     Message.FailedLoadAccount({ kind: 'SignedOut' }),
   )
   expect(entered(known.model).commands?.map(({ name }) => name)).toEqual([
-    LoadSavedSetlist.name,
     LoadMyPlaylists.name,
+    LoadSavedSetlist.name,
     LoadAutoplay.name,
     LoadRepeat.name,
     LoadVolume.name,
