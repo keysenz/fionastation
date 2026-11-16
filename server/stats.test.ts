@@ -374,6 +374,32 @@ describe('write api', () => {
 })
 
 describe('report', () => {
+  test('carries the playlist report for the window only when one is supplied', () => {
+    const store = openStatStore({ path: dbPath, now })
+    const playlists = {
+      made: { total: 1, live: 1, deleted: 0, signedIn: 0, anonymous: 1 },
+      madeDaily: [],
+      owners: [],
+      playlists: [],
+    }
+    const asked: string[] = []
+    const withReport = createStatReport({
+      store,
+      findSongs,
+      now,
+      playlists: sinceDay => {
+        asked.push(sinceDay)
+        return playlists
+      },
+    })('4')
+    expect((withReport.body as { playlists?: unknown }).playlists).toEqual(
+      playlists,
+    )
+    expect(asked).toEqual([(withReport.body as { since: string }).since])
+    const without = createStatReport({ store, findSongs, now })('4')
+    expect(without.body).not.toHaveProperty('playlists')
+  })
+
   test('carries per-song mood counts, most voted first, with titles', () => {
     const store = openStatStore({ path: dbPath, now })
     record(
