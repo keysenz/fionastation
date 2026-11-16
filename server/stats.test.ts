@@ -406,6 +406,21 @@ describe('report', () => {
     expect(without.body).not.toHaveProperty('playlists')
   })
 
+  test('a failing playlist report drops only its section', () => {
+    const store = openStatStore({ path: dbPath, now })
+    const answer = createStatReport({
+      store,
+      findSongs,
+      now,
+      playlists: () => {
+        throw new Error('playlists db is gone')
+      },
+    })('4')
+    expect(answer.status).toBe(200)
+    expect(answer.body).not.toHaveProperty('playlists')
+    expect(answer.body).toHaveProperty('daily')
+  })
+
   test('carries per-song mood counts, most voted first, with titles', () => {
     const store = openStatStore({ path: dbPath, now })
     record(

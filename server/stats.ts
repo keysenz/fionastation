@@ -549,6 +549,19 @@ const withEveryDay = (
   return { ...report, madeDaily }
 }
 
+const readPlaylists = (
+  playlists: (sinceDay: string) => PlaylistReport,
+  firstDay: string,
+  lastDay: string,
+) => {
+  try {
+    return { playlists: withEveryDay(playlists(firstDay), firstDay, lastDay) }
+  } catch (error) {
+    console.error('Could not read the playlist report:', error)
+    return {}
+  }
+}
+
 export type DayReport = Tally & Readonly<{ day: string }>
 
 export const SKIP_BUCKET_SECONDS = 10
@@ -752,9 +765,7 @@ export const createStatReport = ({
           moodNames: MOODS,
           moods: buildMoodReport(moods, known),
           moodDaily: buildMoodDays(moods, since, today),
-          ...(playlists && {
-            playlists: withEveryDay(playlists(since), since, today),
-          }),
+          ...(playlists && readPlaylists(playlists, since, today)),
         },
       }
     } catch (error) {
