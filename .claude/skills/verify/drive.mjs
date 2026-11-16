@@ -1378,6 +1378,189 @@ const journeys = {
       await timeNear(secondsOf(last.timestamp));
     }, page);
   },
+  async shortcuts(page) {
+    const { body: videos } = await pageVideos();
+    const video = videos.find((v) => !v.is_gone && v.karaoke_song.length >= 3);
+    if (!video) throw new Error('no live video with three songs');
+    const [, second, third] = songRows([video]).toSorted((a, b) => secondsOf(a.timestamp) - secondsOf(b.timestamp));
+    const search = page.getByPlaceholder('Search songs...');
+    const slider = page.locator('input[aria-label="Volume"]:visible');
+    const state = () => page.evaluate(() => window.YT.get(document.querySelector('iframe[src*="youtube"]').id).getPlayerState());
+    const timeNow = () => page.evaluate(() => window.YT.get(document.querySelector('iframe[src*="youtube"]').id).getCurrentTime());
+    const level = () => page.evaluate(() => window.YT.get(document.querySelector('iframe[src*="youtube"]').id).getVolume());
+    const levelBecomes = (want) => page.waitForFunction((w) => window.YT.get(document.querySelector('iframe[src*="youtube"]').id).getVolume() === w, want, { timeout: 10000 });
+    const timeBeyond = (seconds) => page.waitForFunction((t) => window.YT.get(document.querySelector('iframe[src*="youtube"]').id).getCurrentTime() >= t, seconds, { timeout: 10000 });
+    const timeBelow = (seconds) => page.waitForFunction((t) => window.YT.get(document.querySelector('iframe[src*="youtube"]').id).getCurrentTime() <= t, seconds, { timeout: 10000 });
+    const focused = () => page.evaluate(() => `${document.activeElement?.tagName}:${document.activeElement?.getAttribute('placeholder') ?? document.activeElement?.getAttribute('aria-label') ?? ''}`);
+    const releaseFocus = () => page.evaluate(() => document.activeElement?.blur());
+    const timeNear = (seconds) =>
+      page
+        .waitForFunction(
+          (want) => {
+            const t = window.YT.get(document.querySelector('iframe[src*="youtube"]').id).getCurrentTime();
+            return t >= want - 1 && t < want + 10;
+          },
+          seconds,
+          { timeout: 20000 },
+        )
+        .catch(async () => {
+          throw new Error(`wanted about ${seconds}s, saw ${await timeNow()}s`);
+        });
+    const attribute = (selector, name) => page.evaluate(([s, n]) => document.querySelector(s)?.getAttribute(n), [selector, name]);
+    await page.goto(BASE + '/');
+    await videoRows(page).first().waitFor();
+    await (await songRowOf(page, videos, second)).click();
+    await playerReady(page);
+    await playVideo(page);
+    await videoLoads(page, [video.video_url], { startSeconds: secondsOf(second.timestamp), isPlaying: true });
+    await releaseFocus();
+    await step('shortcuts', 'Space pauses and plays again with nothing focused', async () => {
+      await page.keyboard.press('Space');
+      await playerState(page, 2);
+      await page.keyboard.press('Space');
+      await playerState(page, 1);
+    }, page);
+    await step('shortcuts', 'the semicolon key also toggles play', async () => {
+      await page.keyboard.press(';');
+      await playerState(page, 2);
+      await page.keyboard.press(';');
+      await playerState(page, 1);
+    }, page);
+    await step('shortcuts', 'Space with the play button focused toggles play exactly once', async () => {
+      await page.getByRole('button', { name: 'Pause', exact: true }).first().focus();
+      await page.keyboard.press('Space');
+      await playerState(page, 2);
+      await page.waitForTimeout(1500);
+      if ((await state()) !== 2) throw new Error(`state ${await state()} after one Space on the focused button`);
+      await page.keyboard.press('Space');
+      await playerState(page, 1);
+      await page.waitForTimeout(1500);
+      if ((await state()) !== 1) throw new Error(`state ${await state()} after the second Space`);
+      await releaseFocus();
+    }, page);
+    await step('shortcuts', 'l and h seek ten seconds forward and back in the same video', async () => {
+      await page.waitForTimeout(1500);
+      const before = await timeNow();
+      await page.keyboard.press('l');
+      await timeBeyond(before + 9);
+      const ahead = await timeNow();
+      await page.keyboard.press('h');
+      await timeBelow(ahead - 7);
+      if ((await loadedVideoId(page)) !== video.video_url) throw new Error('the video changed');
+      if ((await page.locator('iframe[src*="youtube"]').count()) !== 1) throw new Error('more than one player');
+    }, page);
+    await step('shortcuts', 'Shift+ArrowRight seeks forward too', async () => {
+      const before = await timeNow();
+      await page.keyboard.press('Shift+ArrowRight');
+      await timeBeyond(before + 9);
+    }, page);
+    await step('shortcuts', 'j moves to the next song in the stream and k comes back', async () => {
+      await page.keyboard.press('j');
+      await timeNear(secondsOf(third.timestamp));
+      await page.waitForTimeout(2000);
+      await page.keyboard.press('k');
+      await timeNear(secondsOf(second.timestamp));
+      if ((await loadedVideoId(page)) !== video.video_url) throw new Error('the video changed');
+    }, page);
+    await step('shortcuts', '= raises and - lowers the real player volume by ten', async () => {
+      await slider.fill('50');
+      await levelBecomes(50);
+      await releaseFocus();
+      await page.keyboard.press('=');
+      await levelBecomes(60);
+      await page.keyboard.press('-');
+      await page.keyboard.press('-');
+      await levelBecomes(40);
+      if ((await slider.inputValue()) !== '40') throw new Error(`slider ${await slider.inputValue()}`);
+    }, page);
+    await step('shortcuts', 'm mutes and = from muted unmutes one step above silence', async () => {
+      await page.keyboard.press('m');
+      await page.getByRole('button', { name: 'Unmute', exact: true }).waitFor();
+      await page.keyboard.press('=');
+      await page.getByRole('button', { name: 'Mute', exact: true }).waitFor();
+      await levelBecomes(10);
+      await slider.fill('100');
+      await releaseFocus();
+    }, page);
+    await step('shortcuts', 'r cycles repeat', async () => {
+      const selector = '[data-player-bar] button[aria-label^="Repeat"]';
+      const before = await attribute(selector, 'aria-label');
+      await page.keyboard.press('r');
+      await page.waitForFunction(([s, b]) => document.querySelector(s).getAttribute('aria-label') !== b, [selector, before], { timeout: 5000 });
+      await page.keyboard.press('r');
+      await page.keyboard.press('r');
+      await page.waitForFunction(([s, b]) => document.querySelector(s).getAttribute('aria-label') === b, [selector, before], { timeout: 5000 });
+    }, page);
+    await step('shortcuts', 'q opens and closes the queue drawer', async () => {
+      const expanded = (want) => page.waitForFunction((w) => document.querySelector('button[aria-label="Queue"]').getAttribute('aria-expanded') === w, want, { timeout: 5000 });
+      await page.keyboard.press('q');
+      await expanded('true');
+      await page.keyboard.press('q');
+      await expanded('false');
+    }, page);
+    await step('shortcuts', '/ focuses the search box without typing a slash', async () => {
+      await page.keyboard.press('/');
+      await page.waitForFunction(() => document.activeElement?.getAttribute('placeholder') === 'Search songs...', null, { timeout: 5000 });
+      if ((await search.inputValue()) !== '') throw new Error(`typed ${JSON.stringify(await search.inputValue())}`);
+    }, page);
+    await step('shortcuts', 'typing j, a space, k, = and ? in the search box changes only the search text', async () => {
+      const timeBefore = await timeNow();
+      const levelBefore = await level();
+      const loadedBefore = await loadedVideoId(page);
+      for (const key of ['j', 'Space', 'k', '=', '?']) await page.keyboard.press(key);
+      await page.waitForTimeout(1500);
+      const value = await search.inputValue();
+      if (value !== 'j k=?') throw new Error(`search holds ${JSON.stringify(value)}`);
+      if ((await state()) !== 1) throw new Error(`player state ${await state()}`);
+      if ((await level()) !== levelBefore) throw new Error('the volume changed');
+      if ((await loadedVideoId(page)) !== loadedBefore) throw new Error('the video changed');
+      const timeAfter = await timeNow();
+      if (timeAfter < timeBefore || timeAfter > timeBefore + 6) throw new Error(`playhead ${timeBefore} to ${timeAfter}`);
+      if ((await page.locator('[role="dialog"]').count()) !== 0) throw new Error('a dialog opened');
+      await page.screenshot({ path: join(out, 'shortcuts-search.png') });
+    }, page);
+    await step('shortcuts', 'clearing the search and leaving the box gives the keys back', async () => {
+      for (let i = 0; i < 5; i++) await page.keyboard.press('Backspace');
+      if ((await search.inputValue()) !== '') throw new Error(`search holds ${JSON.stringify(await search.inputValue())}`);
+      await releaseFocus();
+      await page.keyboard.press('Space');
+      await playerState(page, 2);
+      await page.keyboard.press('Space');
+      await playerState(page, 1);
+    }, page);
+    await step('shortcuts', '? opens the info panel with the shortcut list, and the keys stop while it is open', async () => {
+      await page.keyboard.press('?');
+      const dialog = page.getByRole('dialog', { name: 'About Fio Radio' });
+      await dialog.waitFor();
+      const keyCaps = await dialog.locator('kbd').count();
+      if (keyCaps < 20) throw new Error(`only ${keyCaps} key caps listed`);
+      await page.screenshot({ path: join(out, 'shortcuts-info.png') });
+      await page.keyboard.press('m');
+      await page.waitForTimeout(800);
+      if ((await page.getByRole('button', { name: 'Unmute', exact: true }).count()) !== 0) throw new Error('m muted the player while the dialog was open');
+      await page.keyboard.press('Escape');
+      await dialog.waitFor({ state: 'detached' });
+    }, page);
+    await step('shortcuts', 'the controls announce their shortcuts', async () => {
+      const shortcuts = await page.evaluate(() =>
+        Object.fromEntries([...document.querySelectorAll('[aria-keyshortcuts]')].map((el) => [el.getAttribute('aria-label'), el.getAttribute('aria-keyshortcuts')])),
+      );
+      const want = { 'Next song': 'j Shift+N', 'Previous song': 'k Shift+P', Pause: 'Space ;' };
+      for (const [name, keys] of Object.entries(want)) {
+        if (shortcuts[name] !== keys) throw new Error(`${name} has ${shortcuts[name]}`);
+      }
+    }, page);
+    const observed = [];
+    await releaseFocus();
+    await page.evaluate(() => document.querySelector('iframe[src*="youtube"]').focus());
+    observed.push(`the active element after focusing the iframe is ${await focused()}`);
+    const timeBeforeKey = await timeNow();
+    await page.keyboard.press('j');
+    await page.waitForTimeout(1500);
+    const timeAfterKey = await timeNow();
+    observed.push(`j with the iframe focused moved the playhead from ${Math.round(timeBeforeKey)}s to ${Math.round(timeAfterKey)}s`);
+    check('shortcuts', `observed, not asserted: ${observed.join('; ')}`, true);
+  },
   async playStats(page) {
     const adminPort = process.env.ADMIN_PORT ?? '3911';
     const adminSecret = process.env.ADMIN_SECRET ?? 'verify-admin-secret';

@@ -20,6 +20,7 @@ import {
   MountPlayer,
   PLAYLIST_PROMPT_ID,
   REPLACE_CHOICE,
+  SEARCH_INPUT_ID,
   SETLIST_PANE_ID,
   SONG_LIST_ID,
   Toast,
@@ -28,11 +29,7 @@ import {
   queueHandleId,
   songOnBar,
 } from './karaoke'
-import {
-  barLineOf,
-  lyricsColumnView,
-  lyricsWindowView,
-} from './lyricsView.ts'
+import { barLineOf, lyricsColumnView, lyricsWindowView } from './lyricsView.ts'
 import { MOODS, type Mood, MoodPrompt } from './moodPrompt.ts'
 import { PlaylistOpen } from './playlistOpen.ts'
 import {
@@ -52,6 +49,7 @@ import {
   isSilent,
   loadRetryDelaySeconds,
 } from './setlist.ts'
+import { ariaKeyShortcutsOf } from './shortcuts.ts'
 import {
   type VideoGroup,
   groupByVideo,
@@ -819,7 +817,13 @@ const headerView = (model: Model, h: HtmlBuilder<Message>): Html =>
             [h.i([h.Class('fas fa-search')])],
           ),
           h.input([
+            h.Id(SEARCH_INPUT_ID),
             h.Type('text'),
+            h.AriaLabel('Search songs'),
+            h.Attribute(
+              'aria-keyshortcuts',
+              ariaKeyShortcutsOf('PressedSearchKey'),
+            ),
             h.Placeholder('Search songs...'),
             h.Class(
               'w-full bg-black/60 backdrop-blur-md text-white placeholder:text-gray-300 rounded-full py-2 pl-12 pr-4 text-sm border border-white/10 focus:border-[#446e92] focus:outline-none transition-all shadow-lg',
@@ -1100,6 +1104,13 @@ const queuePanelView = (model: Model, h: HtmlBuilder<Message>): Html =>
     [
       h.button(
         [
+          h.Type('button'),
+          h.AriaLabel('Queue'),
+          h.AriaExpanded(model.isQueueOpen),
+          h.Attribute(
+            'aria-keyshortcuts',
+            ariaKeyShortcutsOf('ClickedQueueHandle'),
+          ),
           h.OnClick(Message.ClickedQueueHandle()),
           h.Class(
             'w-10 h-40 bg-[#446e92]/90 backdrop-blur-md rounded-l-2xl flex flex-col items-center justify-center shadow-[-4px_0_15px_rgba(0,0,0,0.5)] cursor-pointer hover:bg-[#578bb8] active:bg-[#3a5d7c] transition-all border-l border-t border-b border-white/20 gap-6 group',
@@ -1208,6 +1219,7 @@ const muteButtonView = (volume: Volume, h: HtmlBuilder<Message>): Html => {
       h.Type('button'),
       h.AriaLabel(isSilentNow ? 'Unmute' : 'Mute'),
       h.Title(isSilentNow ? 'Unmute' : 'Mute'),
+      h.Attribute('aria-keyshortcuts', ariaKeyShortcutsOf('ClickedToggleMute')),
       h.OnClick(Message.ClickedToggleMute()),
       h.Class(
         'flex items-center justify-center min-h-10 min-w-10 shrink-0 rounded-full text-gray-300 hover:text-white transition active:scale-95',
@@ -1246,6 +1258,10 @@ const repeatButtonView = (
       h.Type('button'),
       h.AriaLabel(`Repeat: ${repeat}`),
       h.Title(`Repeat: ${repeat}. Press to change.`),
+      h.Attribute(
+        'aria-keyshortcuts',
+        ariaKeyShortcutsOf('ClickedCycleRepeat'),
+      ),
       h.OnClick(Message.ClickedCycleRepeat()),
       h.Class(
         twMerge(
@@ -1309,6 +1325,10 @@ const playControlView = (
       [
         h.Type('button'),
         h.AriaLabel(intent === 'Playing' ? 'Pause' : 'Play'),
+        h.Attribute(
+          'aria-keyshortcuts',
+          ariaKeyShortcutsOf('ClickedPlayPause'),
+        ),
         h.OnClick(Message.ClickedPlayPause()),
         h.Class(shapeClass),
       ],
@@ -1493,6 +1513,12 @@ const playerBarView = (
             [
               h.button(
                 [
+                  h.Type('button'),
+                  h.AriaLabel('Previous song'),
+                  h.Attribute(
+                    'aria-keyshortcuts',
+                    ariaKeyShortcutsOf('ClickedPrevious'),
+                  ),
                   h.OnClick(Message.ClickedPrevious()),
                   h.Class(
                     'hidden sm:flex items-center justify-center min-h-10 min-w-10 text-gray-300 hover:text-white transition hover:scale-110 active:scale-95',
@@ -1507,6 +1533,12 @@ const playerBarView = (
               ),
               h.button(
                 [
+                  h.Type('button'),
+                  h.AriaLabel('Next song'),
+                  h.Attribute(
+                    'aria-keyshortcuts',
+                    ariaKeyShortcutsOf('ClickedNext'),
+                  ),
                   h.OnClick(Message.ClickedNext()),
                   h.Class(
                     'flex items-center justify-center min-h-10 min-w-10 text-gray-300 hover:text-white transition hover:scale-110 active:scale-95',
@@ -1729,6 +1761,10 @@ const phoneControlsView = (
         [
           h.Type('button'),
           h.AriaLabel('Previous song'),
+          h.Attribute(
+            'aria-keyshortcuts',
+            ariaKeyShortcutsOf('ClickedPrevious'),
+          ),
           h.OnClick(Message.ClickedPrevious()),
           h.Class(sideButtonClass),
         ],
@@ -1743,6 +1779,7 @@ const phoneControlsView = (
         [
           h.Type('button'),
           h.AriaLabel('Next song'),
+          h.Attribute('aria-keyshortcuts', ariaKeyShortcutsOf('ClickedNext')),
           h.OnClick(Message.ClickedNext()),
           h.Class(sideButtonClass),
         ],
