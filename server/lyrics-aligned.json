@@ -2002,6 +2002,78 @@
     "songTitle": "Love wins all",
     "status": "Rejected"
   },
+  "3918b28e-49a9-5d8d-8d07-092833faf7c6": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lines": [
+      {
+        "atMs": 23900,
+        "text": "Hitori ni shite hoshii to anata wa tsukihanasukeredo"
+      },
+      {
+        "atMs": 40160,
+        "text": "Hontou wa mune no naka ni aru mono wo nozokaretaku nai no deshou?"
+      },
+      {
+        "atMs": 61040,
+        "text": "Ikari osore kanashimi"
+      },
+      {
+        "atMs": 67720,
+        "text": "Kakae kirenu yoru"
+      },
+      {
+        "atMs": 73380,
+        "text": "De mo kuchi ni dekinai"
+      },
+      {
+        "atMs": 82860,
+        "text": "Kikasete kakusou to suru anata no koe wo"
+      },
+      {
+        "atMs": 96320,
+        "text": "Misete kakurete shimau anata no kokoro"
+      },
+      {
+        "atMs": 109460,
+        "text": "Hitori de ikite yukeru to anata wa iihanatsukeredo"
+      },
+      {
+        "atMs": 157560,
+        "text": "Hontou wa nan do mo nan do mo jibun ni iikikaseta yoru ga atta no deshou"
+      },
+      {
+        "atMs": 177180,
+        "text": "Kedo ne anata anata wo"
+      },
+      {
+        "atMs": 184500,
+        "text": "Donna anata de mo mitai to"
+      },
+      {
+        "atMs": 190960,
+        "text": "Itsu mo kangaete shimau"
+      },
+      {
+        "atMs": 202860,
+        "text": "Kikasete kakusou to suru anata no kao wo"
+      },
+      {
+        "atMs": 216240,
+        "text": "Misete kakurete shimau anata no kokoro kikasete"
+      },
+      {
+        "atMs": 233520,
+        "text": "Donna koto kara de mo ii saigo made kikukara"
+      },
+      {
+        "atMs": 242820,
+        "text": "Hiraite soba ni yukitai anata no kokoro"
+      }
+    ],
+    "lrclibId": 5291963,
+    "songTitle": "Lend Me Your Voice",
+    "status": "Aligned"
+  },
   "3b1d9b56-0846-5b1e-a155-87954bc9a67e": {
     "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
     "lines": [
