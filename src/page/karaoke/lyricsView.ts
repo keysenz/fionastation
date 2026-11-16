@@ -123,10 +123,12 @@ const lyricLinesView = (
   lines: ReadonlyArray<LyricLine>,
   active: number,
   maybeUnderActive: Option.Option<string>,
+  shows: 'Sung' | 'Translation',
   h: HtmlBuilder<Message>,
 ): Html =>
   h.div(
     [
+      h.DataAttribute('lyrics-lines', shows),
       h.Class(
         'absolute inset-x-0 top-1/2 transition-transform duration-300 ease-out motion-reduce:transition-none',
       ),
@@ -150,6 +152,7 @@ const lyricLinesView = (
             ),
           ),
           h.Style({ height: `${ROW_REM}rem` }),
+          h.DataAttribute('lyrics-row', distance === 0 ? 'Active' : 'Other'),
         ],
         [
           text === '' ? '♪' : text,
@@ -159,6 +162,7 @@ const lyricLinesView = (
                 onSome: underActive =>
                   h.span(
                     [
+                      h.DataAttribute('lyrics-translation', ''),
                       h.Class(
                         'text-xs font-normal text-white/50 leading-tight',
                       ),
@@ -334,6 +338,7 @@ const lyricsBodyView = (
                     synced.lines,
                     activeIndexOf(singing, synced.lines.length),
                     translationTextOf(singing),
+                    'Sung',
                     h,
                   ),
                 Missing: ({ reason, translation }) =>
@@ -344,6 +349,7 @@ const lyricsBodyView = (
                         translation.lines,
                         translationActiveIndexOf(singing, translation),
                         Option.none(),
+                        'Translation',
                         h,
                       ),
               }),

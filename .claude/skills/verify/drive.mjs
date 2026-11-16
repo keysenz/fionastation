@@ -1654,6 +1654,75 @@ const journeys = {
       stack.close();
     }
   },
+  async translations(page) {
+    const { body: videos } = await pageVideos();
+    const live = videos.filter((v) => !v.is_gone);
+    const rowOf = (song) => ({ ...song, video_url: live.find((v) => v.karaoke_song.some((s) => s.id === song.id)).video_url });
+    const lyricsOf = async (song) => (await api(`/api/get-lyrics?song=${song.id}`)).body;
+    const answers = await Promise.all(live.filter((v) => v.kind !== 'karaoke').flatMap((v) => v.karaoke_song).map(async (s) => [s, await lyricsOf(s)]));
+    const translationOnly = answers.find(([, l]) => l?.translation && l._tag === 'Missing');
+    if (!translationOnly) throw new Error('no song has a translation without synced lyrics');
+    const aligned = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../../../server/lyrics-aligned.json'), 'utf8'));
+    const plain = [];
+    for (const s of live.flatMap((v) => v.karaoke_song).filter((s) => aligned[s.id]?.status === 'Aligned')) {
+      const l = await lyricsOf(s);
+      if (l?._tag === 'Synced' && !l.translation) plain.push([s, l]);
+      if (plain.length === 2) break;
+    }
+    if (plain.length < 2) throw new Error('fewer than two songs have synced lyrics without a translation');
+    const youtube = (call, ...args) => page.evaluate(([c, a]) => window.YT.get(document.querySelector('iframe[src*="youtube"]').id)[c](...a), [call, args]);
+    const lineAt = (lines, ms) => lines.findLast((l) => l.atMs <= ms);
+    const expanded = page.locator('[data-player-bar]').getByRole('button', { name: 'Expand player' });
+    const play = async (song, lines) => {
+      if (await page.getByRole('button', { name: 'Collapse player' }).count()) await page.getByRole('button', { name: 'Collapse player' }).first().click();
+      await (await songRowOf(page, videos, rowOf(song))).click();
+      await playerReady(page);
+      await playVideo(page);
+      await videoLoads(page, [rowOf(song).video_url], { isPlaying: true });
+      const line = lines.find((l, i) => l.text !== '' && i > 1);
+      const target = secondsOf(song.timestamp) + line.atMs / 1000 + 0.6;
+      await youtube('seekTo', target, true);
+      await page.waitForFunction((want) => window.YT.get(document.querySelector('iframe[src*="youtube"]').id).getCurrentTime() >= want, target, { timeout: 15000 });
+      await expanded.click();
+      return line;
+    };
+    await page.goto(BASE + '/');
+    await videoRows(page).first().waitFor();
+    await step('translations', 'a song with only a translation scrolls its translation lines with the playhead', async () => {
+      const [song, lyrics] = translationOnly;
+      const line = await play(song, lyrics.translation.lines);
+      const active = page.locator('[data-lyrics-lines="Translation"] [data-lyrics-row="Active"]').first();
+      await page.waitForFunction((want) => document.querySelector('[data-lyrics-lines="Translation"] [data-lyrics-row="Active"]')?.textContent.includes(want), line.text, { timeout: 10000 })
+        .catch(async () => { throw new Error(`active row reads "${await active.textContent().catch(() => '')}", wanted "${line.text}"`); });
+      await page.screenshot({ path: join(out, 'translations-only.png') });
+    }, page);
+    await step('translations', 'a song without a translation shows its sung lyrics and no translation', async () => {
+      const [song, lyrics] = plain[0];
+      await play(song, lyrics.lines);
+      await page.locator('[data-lyrics-lines="Sung"] [data-lyrics-row="Active"]').first().waitFor({ timeout: 10000 });
+      await page.waitForTimeout(1500);
+      if (await page.locator('[data-lyrics-translation], [data-lyrics-lines="Translation"]').count()) throw new Error('a translation shows for a song that has none');
+      await page.screenshot({ path: join(out, 'translations-none.png') });
+    }, page);
+    await step('translations', 'a song with sung lyrics and a translation shows the caption under the active sung line', async () => {
+      const [song, lyrics] = plain[1];
+      const translation = { language: 'id', lines: lyrics.lines.map((l, i) => ({ atMs: l.atMs, text: l.text === '' ? '' : `translated line ${i}` })) };
+      await page.routeBody('**/api/get-lyrics*', JSON.stringify({ ...lyrics, translation }));
+      try {
+        await play(song, lyrics.lines);
+        const under = page.locator('[data-lyrics-lines="Sung"] [data-lyrics-row="Active"] [data-lyrics-translation]').first();
+        await under.waitFor({ timeout: 10000 });
+        const shown = await under.textContent();
+        const ms = Math.round(((await youtube('getCurrentTime')) - secondsOf(song.timestamp)) * 1000);
+        const nearby = [lineAt(translation.lines, ms - 1500), lineAt(translation.lines, ms)].map((l) => l?.text);
+        if (!nearby.includes(shown)) throw new Error(`translation under the sung line reads "${shown}", wanted one of ${JSON.stringify(nearby)}`);
+        await page.screenshot({ path: join(out, 'translations-under-sung.png') });
+      } finally {
+        await page.unroute('**/api/get-lyrics*');
+      }
+    }, page);
+  },
+
   async coverEnd(page) {
     const { body: videos } = await pageVideos();
     const live = displayOrder(videos).filter((v) => !v.is_gone);
