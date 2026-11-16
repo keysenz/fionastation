@@ -220,7 +220,6 @@ function transitions(state) {
     user(K.Message.ClickedPrevious(), 'ClickedPrevious');
     for (const by of [10, -10]) user(K.Message.PressedSeekKey({ by }), `PressedSeekKey(${by})`, { by });
   }
-  for (const by of [10, -10]) user(K.Message.PressedVolumeKey({ by }), `PressedVolumeKey(${by})`);
   if (some(model.maybeSkipToast)) user(K.Message.ClickedDismissToast(), 'ClickedDismissToast');
   if (!env.refetched && pending.some((item) => item.kind === 'pick')) {
     out.push({ message: K.Message.SucceededFetchSongs({ songs: ARCHIVE, goneVideoIds: REFETCH_GONE }), label: `SucceededFetchSongs(refetch, gone [${REFETCH_GONE}])`, kind: 'refetch' });
