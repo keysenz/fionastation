@@ -10,6 +10,9 @@ class Words(unittest.TestCase):
     def test_kana_becomes_romaji(self):
         self.assertEqual(to_latin("それは予想通り"), "Sore wa yosou toori")
 
+    def test_kangxi_radicals_romanize_as_their_kanji(self):
+        self.assertEqual(to_latin("\u2f00\u2f08で"), to_latin("一人で"))
+
     def test_kanji_becomes_romaji(self):
         self.assertEqual(to_latin("君の心へ"), "Kimi no kokoro e")
 

@@ -14,6 +14,7 @@ Run it on an existing file to romanize lines an older run wrote:
 import json
 import re
 import sys
+import unicodedata
 from pathlib import Path
 
 import cutlet
@@ -23,6 +24,9 @@ from korean_romanizer.romanizer import Romanizer
 JAPANESE = re.compile(r"[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]+")
 HANGUL = re.compile(r"[\u1100-\u11ff\u3130-\u318f\ua960-\ua97f\uac00-\ud7af]+")
 NON_LATIN = re.compile(r"[^\x00-\x7f\u00c0-\u024f\u1e00-\u1eff]+")
+# Some LRCLIB text uses Kangxi radicals that look like kanji (⼀⼈ for 一人), and the
+# Japanese romanizer skips them. Each has a compatibility mapping to its kanji.
+RADICALS = re.compile(r"[\u2e80-\u2fdf]")
 
 # Full-width and CJK punctuation becomes the ASCII mark with the same job, so
 # a line never keeps a character outside the Latin block.
@@ -40,6 +44,7 @@ KAKASI.use_foreign_spelling = False
 
 def to_latin(text: str) -> str:
     """`text` with every non-Latin letter romanized and punctuation left alone."""
+    text = RADICALS.sub(lambda m: unicodedata.normalize("NFKC", m.group()), text)
     text = HANGUL.sub(_korean, text)
     text = JAPANESE.sub(_japanese, text)
     text = text.translate(PUNCTUATION)
