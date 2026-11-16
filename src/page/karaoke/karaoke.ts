@@ -55,6 +55,8 @@ import {
   segmentOf,
   songBeside,
   toNudgesJson,
+  translationCursorAt,
+  translationOf,
 } from '../../lyrics.ts'
 import { Playlist, PlaylistId } from '../../playlist.ts'
 import {
@@ -1375,6 +1377,7 @@ export type NowSinging = Readonly<{
   maybeLyrics: Option.Option<LyricsFetch>
   nudge: LaterNudgeSteps
   maybeCursor: Option.Option<LyricCursor>
+  maybeTranslationCursor: Option.Option<LyricCursor>
 }>
 
 const playheadOf = (
@@ -1418,7 +1421,21 @@ export const nowSingingOf = (model: Model): Option.Option<NowSinging> =>
           Missing: () => Option.none(),
         }),
     )
-    return { segment, maybeLyrics, nudge: nudgeSteps, maybeCursor }
+    const maybeTranslationCursor = Option.map(
+      Option.flatMap(
+        Option.flatMap(maybeLyrics, loadedLyricsOf),
+        translationOf,
+      ),
+      translation =>
+        translationCursorAt(translation, playhead.seconds, segment),
+    )
+    return {
+      segment,
+      maybeLyrics,
+      nudge: nudgeSteps,
+      maybeCursor,
+      maybeTranslationCursor,
+    }
   })
 
 const seekBeside = (

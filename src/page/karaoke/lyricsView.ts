@@ -7,8 +7,11 @@ import {
   LyricCursor,
   Lyrics,
   type LyricsCredit,
+  type LyricLine,
   type MissingReason,
   NUDGE_STEP_MS,
+  type Translation,
+  translationOf,
 } from '../../lyrics.ts'
 import {
   LyricsFetch,
@@ -79,13 +82,51 @@ const formatNudge = (steps: number): string => {
   return `${seconds > 0 ? '+' : ''}${seconds.toFixed(1)} s`
 }
 
+const loadedOf = (singing: NowSinging): Option.Option<Lyrics> =>
+  Option.flatMap(singing.maybeLyrics, loadedLyricsOf)
+
+const translationOfSinging = (
+  singing: NowSinging,
+): Option.Option<Translation> =>
+  Option.flatMap(loadedOf(singing), translationOf)
+
+const translationActiveIndexOf = (
+  singing: NowSinging,
+  translation: Translation,
+): number =>
+  Option.match(singing.maybeTranslationCursor, {
+    onNone: () => -1,
+    onSome: cursor =>
+      LyricCursor.match(cursor, {
+        Before: () => -1,
+        OnLine: ({ index }) => index,
+        After: () => translation.lines.length,
+      }),
+  })
+
+/** The translation line under the active sung line, none through a gap. */
+const translationTextOf = (singing: NowSinging): Option.Option<string> =>
+  Option.flatMap(translationOfSinging(singing), translation =>
+    Option.filter(
+      Option.map(
+        Array.get(
+          translation.lines,
+          translationActiveIndexOf(singing, translation),
+        ),
+        ({ text }) => text,
+      ),
+      text => text !== '',
+    ),
+  )
+
 const lyricLinesView = (
   singing: NowSinging,
-  lyrics: SyncedLyrics,
+  lines: ReadonlyArray<LyricLine>,
+  active: number,
+  maybeUnderActive: Option.Option<string>,
   h: HtmlBuilder<Message>,
-): Html => {
-  const active = activeIndexOf(singing, lyrics.lines.length)
-  return h.div(
+): Html =>
+  h.div(
     [
       h.Class(
         'absolute inset-x-0 top-1/2 transition-transform duration-300 ease-out motion-reduce:transition-none',
@@ -94,14 +135,14 @@ const lyricLinesView = (
         transform: `translateY(${-(active + 0.5) * ROW_REM}rem)`,
       }),
     ],
-    lyrics.lines.map(({ atMs, text }, index) => {
+    lines.map(({ atMs, text }, index) => {
       const distance = Math.abs(index - active)
       return h.keyed('div')(
         `${singing.segment.song.id}-${atMs}-${text}`,
         [
           h.Class(
             twMerge(
-              'flex items-center justify-center px-2 text-center leading-snug transition-colors duration-300',
+              'flex flex-col items-center justify-center px-2 text-center leading-snug transition-colors duration-300',
               distance === 0
                 ? 'text-white text-base font-semibold'
                 : distance === 1
@@ -111,11 +152,26 @@ const lyricLinesView = (
           ),
           h.Style({ height: `${ROW_REM}rem` }),
         ],
-        [text === '' ? '♪' : text],
+        [
+          text === '' ? '♪' : text,
+          distance === 0
+            ? Option.match(maybeUnderActive, {
+                onNone: () => h.empty,
+                onSome: underActive =>
+                  h.span(
+                    [
+                      h.Class(
+                        'text-xs font-normal text-white/50 leading-tight',
+                      ),
+                    ],
+                    [underActive],
+                  ),
+              })
+            : h.empty,
+        ],
       )
     }),
   )
-}
 
 const skeletonView = (h: HtmlBuilder<Message>): Html =>
   h.div(
@@ -273,8 +329,24 @@ const lyricsBodyView = (
             GaveUp: () => retryView(singing.segment.song.id, 'GaveUp', h),
             Loaded: ({ lyrics }) =>
               Lyrics.match(lyrics, {
-                Synced: synced => lyricLinesView(singing, synced, h),
-                Missing: ({ reason }) => noteView(MISSING_TEXT[reason], h),
+                Synced: synced =>
+                  lyricLinesView(
+                    singing,
+                    synced.lines,
+                    activeIndexOf(singing, synced.lines.length),
+                    translationTextOf(singing),
+                    h,
+                  ),
+                Missing: ({ reason, translation }) =>
+                  translation === undefined || reason === 'Hidden'
+                    ? noteView(MISSING_TEXT[reason], h)
+                    : lyricLinesView(
+                        singing,
+                        translation.lines,
+                        translationActiveIndexOf(singing, translation),
+                        Option.none(),
+                        h,
+                      ),
               }),
           }),
       }),
@@ -283,6 +355,33 @@ const lyricsBodyView = (
 
 const creditOf = (singing: NowSinging): Option.Option<LyricsCredit> =>
   Option.map(syncedOf(singing), ({ credit }) => credit)
+
+const creditClass = 'text-xs text-gray-500 text-center truncate max-w-full'
+
+const translationCreditView = (
+  singing: NowSinging,
+  h: HtmlBuilder<Message>,
+): Html =>
+  Option.match(translationOfSinging(singing), {
+    onNone: () => h.empty,
+    onSome: ({ language }) =>
+      h.p(
+        [h.Class(twMerge(creditClass, 'pt-1'))],
+        [`Translation (${language}) · captions by Fiona Clearesta`],
+      ),
+  })
+
+const footerView = (singing: NowSinging, h: HtmlBuilder<Message>): Html =>
+  h.div(
+    [h.Class('flex flex-col items-center')],
+    [
+      Option.match(creditOf(singing), {
+        onNone: () => h.empty,
+        onSome: credit => nudgeControlsView(singing, credit, h),
+      }),
+      translationCreditView(singing, h),
+    ],
+  )
 
 export const lyricsColumnView = (
   singing: NowSinging,
@@ -295,10 +394,7 @@ export const lyricsColumnView = (
         [
           captionView(singing, clickedSongId, h),
           lyricsBodyView(singing, Option.none(), h),
-          Option.match(creditOf(singing), {
-            onNone: () => h.empty,
-            onSome: credit => nudgeControlsView(singing, credit, h),
-          }),
+          footerView(singing, h),
         ],
       )
     : h.empty
@@ -314,10 +410,7 @@ export const lyricsWindowView = (
         [
           captionView(singing, clickedSongId, h),
           lyricsBodyView(singing, Option.some(WINDOW_ROWS * ROW_REM), h),
-          Option.match(creditOf(singing), {
-            onNone: () => h.empty,
-            onSome: credit => nudgeControlsView(singing, credit, h),
-          }),
+          footerView(singing, h),
         ],
       )
     : h.empty
