@@ -1705,9 +1705,12 @@ const journeys = {
       await page.screenshot({ path: join(out, 'translations-none.png') });
     }, page);
     await step('translations', 'a song with sung lyrics and a translation shows the caption under the active sung line', async () => {
-      const [song, lyrics] = plain[1];
-      const translation = { language: 'id', lines: lyrics.lines.map((l, i) => ({ atMs: l.atMs, text: l.text === '' ? '' : `translated line ${i}` })) };
-      await page.routeBody('**/api/get-lyrics*', JSON.stringify({ ...lyrics, translation }));
+      const real = answers.find(([, l]) => l?.translation && l._tag === 'Synced');
+      const [song, lyrics] = real ?? plain[1];
+      const translation = real
+        ? lyrics.translation
+        : { language: 'id', lines: lyrics.lines.map((l, i) => ({ atMs: l.atMs, text: l.text === '' ? '' : `translated line ${i}` })) };
+      if (!real) await page.routeBody('**/api/get-lyrics*', JSON.stringify({ ...lyrics, translation }));
       try {
         await play(song, lyrics.lines);
         const under = page.locator('[data-lyrics-lines="Sung"] [data-lyrics-row="Active"] [data-lyrics-translation]').first();
@@ -1718,7 +1721,7 @@ const journeys = {
         if (!nearby.includes(shown)) throw new Error(`translation under the sung line reads "${shown}", wanted one of ${JSON.stringify(nearby)}`);
         await page.screenshot({ path: join(out, 'translations-under-sung.png') });
       } finally {
-        await page.unroute('**/api/get-lyrics*');
+        if (!real) await page.unroute('**/api/get-lyrics*');
       }
     }, page);
   },
