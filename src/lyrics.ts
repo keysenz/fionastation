@@ -19,6 +19,14 @@ export const LyricsCredit = Schema.Struct({
 })
 export type LyricsCredit = typeof LyricsCredit.Type
 
+/** Fiona's own caption track for a video, as lines timed from the song's start.
+ *  An empty line marks a gap, as in the sung lyrics. */
+export const Translation = Schema.Struct({
+  language: Schema.String,
+  lines: Schema.NonEmptyArray(LyricLine),
+})
+export type Translation = typeof Translation.Type
+
 export const MissingReason = Schema.Literals(['NotFound', 'Unsure', 'Hidden'])
 export type MissingReason = typeof MissingReason.Type
 
@@ -29,10 +37,17 @@ export const Lyrics = defineTaggedUnion({
     lines: Schema.NonEmptyArray(LyricLine),
     offsetMs: Schema.Int,
     credit: LyricsCredit,
+    translation: Schema.optional(Translation),
   },
-  Missing: { reason: MissingReason },
+  Missing: {
+    reason: MissingReason,
+    translation: Schema.optional(Translation),
+  },
 })
 export type Lyrics = typeof Lyrics.Type
+
+export const translationOf = (lyrics: Lyrics): Option.Option<Translation> =>
+  Option.fromNullishOr(lyrics.translation)
 
 export const Playhead = Schema.Struct({
   playId: Schema.Number,
@@ -213,3 +228,14 @@ export const cursorAt = (
     ? LyricCursor.After()
     : LyricCursor.OnLine({ index })
 }
+
+/** Captions are timed to the video, so the sung lyrics' offset and the viewer's nudges do not apply. */
+export const translationCursorAt = (
+  translation: Translation,
+  playheadSeconds: number,
+  segment: Segment,
+): LyricCursor =>
+  cursorAt(
+    translation.lines,
+    Math.round((playheadSeconds - segment.startSeconds) * 1000),
+  )

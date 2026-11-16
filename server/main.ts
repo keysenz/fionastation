@@ -51,6 +51,7 @@ import {
   parseStatsUserIds,
 } from './statsAccess.ts'
 import { DEFAULT_TRAIL_DAYS } from './trail.ts'
+import { loadTranslations, withTranslation } from './translations.ts'
 import { isGone, startRefreshing } from './videoStatus.ts'
 
 const ROOT = resolve(import.meta.dirname, '../dist')
@@ -300,6 +301,10 @@ const lyricsLocal = loadLocalLyrics(
   join(import.meta.dirname, 'lyrics-local.json'),
 )
 
+const lyricsTranslations = loadTranslations(
+  join(import.meta.dirname, 'lyrics-translations.json'),
+)
+
 const lyricsRoute = async (songId: string | null): Promise<ApiReply> => {
   if (!songId) {
     return {
@@ -323,7 +328,11 @@ const lyricsRoute = async (songId: string | null): Promise<ApiReply> => {
     lyricsLocal,
   )
   return lookup.kind === 'Answered'
-    ? { status: 200, body: lookup.lyrics, cacheControl: LYRICS_CACHE }
+    ? {
+        status: 200,
+        body: withTranslation(lookup.lyrics, lyricsTranslations.get(songId)),
+        cacheControl: LYRICS_CACHE,
+      }
     : {
         status: 503,
         body: { error: 'Lyrics are unavailable right now' },

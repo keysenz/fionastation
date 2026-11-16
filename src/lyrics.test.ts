@@ -15,7 +15,10 @@ import {
   parseNudges,
   segmentAt,
   songBeside,
+  Lyrics,
   toNudgesJson,
+  translationCursorAt,
+  translationOf,
 } from './lyrics.ts'
 
 const song = (
@@ -193,4 +196,86 @@ test('the nudge schemas reject a zero entry and a step past the limit', () => {
   expect(Option.isSome(decode({ a: 3 }))).toBe(true)
   expect(Option.isNone(decode({ a: 0 }))).toBe(true)
   expect(Option.isNone(decode({ a: NUDGE_LIMIT + 1 }))).toBe(true)
+})
+
+const translation = {
+  language: 'id',
+  lines: [
+    { atMs: 1000, text: 'satu' },
+    { atMs: 5000, text: '' },
+    { atMs: 9000, text: 'dua' },
+    { atMs: 12000, text: '' },
+  ],
+} as const
+
+const translationSegment = {
+  song: first,
+  startSeconds: 60,
+  maybeEndSeconds: Option.none<number>(),
+}
+
+const translationLineAt = (seconds: number) => {
+  const cursor = translationCursorAt(
+    {
+      language: translation.language,
+      lines: [
+        { atMs: 1000, text: 'satu' },
+        { atMs: 5000, text: '' },
+        { atMs: 9000, text: 'dua' },
+        { atMs: 12000, text: '' },
+      ],
+    },
+    seconds,
+    translationSegment,
+  )
+  return cursor._tag === 'OnLine'
+    ? translation.lines[cursor.index]?.text
+    : cursor._tag
+}
+
+test('the translation line follows the playhead from the start of the song', () => {
+  expect(translationLineAt(60)).toBe('Before')
+  expect(translationLineAt(61)).toBe('satu')
+  expect(translationLineAt(64.9)).toBe('satu')
+  expect(translationLineAt(69)).toBe('dua')
+})
+
+test('a translation gap is an empty line, so no translation shows inside it', () => {
+  expect(translationLineAt(65)).toBe('')
+  expect(translationLineAt(68.9)).toBe('')
+})
+
+test('after the last caption ends the translation line stays empty', () => {
+  expect(translationLineAt(72)).toBe('')
+})
+
+const decodeLyrics = Schema.decodeUnknownOption(Lyrics)
+const caption = { language: 'id', lines: [{ atMs: 0, text: 'a' }] }
+
+test('a lyrics response without a translation still decodes', () => {
+  const missing = decodeLyrics({ _tag: 'Missing', reason: 'NotFound' })
+  expect(Option.isSome(missing)).toBe(true)
+  expect(Option.flatMap(missing, translationOf)).toEqual(Option.none())
+})
+
+test('a translation decodes on both variants', () => {
+  const missing = decodeLyrics({
+    _tag: 'Missing',
+    reason: 'NotFound',
+    translation: caption,
+  })
+  const synced = decodeLyrics({
+    _tag: 'Synced',
+    lines: [{ atMs: 0, text: 'x' }],
+    offsetMs: 0,
+    credit: { source: 'LRCLIB', track: 't', artist: 'a' },
+    translation: caption,
+  })
+  const languageOf = (lyrics: typeof missing) =>
+    Option.map(
+      Option.flatMap(lyrics, translationOf),
+      ({ language }) => language,
+    )
+  expect(languageOf(missing)).toEqual(Option.some('id'))
+  expect(languageOf(synced)).toEqual(Option.some('id'))
 })
