@@ -1,7 +1,7 @@
 import { DatabaseSync } from 'node:sqlite'
 
 import type { SongForStats } from './db.ts'
-import { windowLimiter } from './playlists.ts'
+import { windowLimiter, type PlaylistReport } from './playlists.ts'
 import {
   DEFAULT_TRAIL_DAYS,
   EXPORT_TABLES,
@@ -531,6 +531,37 @@ export const buildMoodDays = (
   return series
 }
 
+const withEveryDay = (
+  report: PlaylistReport,
+  firstDay: string,
+  lastDay: string,
+): PlaylistReport => {
+  const created = new Map(report.madeDaily.map(row => [row.day, row.created]))
+  const madeDaily: PlaylistReport['madeDaily'][number][] = []
+  for (
+    let time = Date.parse(firstDay);
+    time <= Date.parse(lastDay);
+    time += DAY_MS
+  ) {
+    const day = dayOf(new Date(time))
+    madeDaily.push({ day, created: created.get(day) ?? 0 })
+  }
+  return { ...report, madeDaily }
+}
+
+const readPlaylists = (
+  playlists: (sinceDay: string) => PlaylistReport,
+  firstDay: string,
+  lastDay: string,
+) => {
+  try {
+    return { playlists: withEveryDay(playlists(firstDay), firstDay, lastDay) }
+  } catch (error) {
+    console.error('Could not read the playlist report:', error)
+    return {}
+  }
+}
+
 export type DayReport = Tally & Readonly<{ day: string }>
 
 export const SKIP_BUCKET_SECONDS = 10
@@ -688,10 +719,12 @@ export const buildStatReport = (
 export const createStatReport = ({
   store,
   findSongs,
+  playlists,
   now = () => new Date(),
 }: Readonly<{
   store: StatStore
   findSongs: (ids: readonly string[]) => readonly SongForStats[]
+  playlists?: ((sinceDay: string) => PlaylistReport) | undefined
   now?: () => Date
 }>) => {
   return (rawDays: string | null): StatReply => {
@@ -732,6 +765,7 @@ export const createStatReport = ({
           moodNames: MOODS,
           moods: buildMoodReport(moods, known),
           moodDaily: buildMoodDays(moods, since, today),
+          ...(playlists && readPlaylists(playlists, since, today)),
         },
       }
     } catch (error) {

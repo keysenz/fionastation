@@ -463,10 +463,13 @@ export const FetchSongs = Command.define('FetchSongs', {
 })
 
 export const FetchPlaylist = Command.define('FetchPlaylist', {
-  args: { id: PlaylistId },
+  args: { id: PlaylistId, countOpen: Schema.Boolean },
   messages: [Message.SucceededFetchPlaylist, Message.FailedFetchPlaylist],
-  execute: ({ id }) =>
-    fetchJsonOrFailure(`/api/playlists/${id}`, Playlist).pipe(
+  execute: ({ id, countOpen }) =>
+    fetchJsonOrFailure(
+      `/api/playlists/${id}${countOpen ? '?open=1' : ''}`,
+      Playlist,
+    ).pipe(
       Effect.match({
         onFailure: failure =>
           Message.FailedFetchPlaylist({
@@ -1354,8 +1357,8 @@ export const entered = (model: Model): UpdateReturn => {
   return {
     model: fetched.model,
     commands: [
-      LoadSavedSetlist(),
       LoadMyPlaylists(),
+      LoadSavedSetlist(),
       ...(Account.guards.Loading(model.account) ? [LoadAccount()] : []),
       LoadAutoplay(),
       LoadRepeat(),
@@ -2726,7 +2729,15 @@ const updateModel = (model: Model, message: Message) =>
             model: modifyFields(restored, {
               playlistOpen: () => PlaylistOpen.Fetching({ id, maybeEditToken }),
             }),
-            commands: [FetchPlaylist({ id })],
+            commands: [
+              FetchPlaylist({
+                id,
+                countOpen: !Array.some(
+                  model.mine,
+                  entry => entry.id === id && entry.origin === 'Created',
+                ),
+              }),
+            ],
           }),
         },
         () => ({ model: restored }),

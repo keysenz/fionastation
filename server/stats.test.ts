@@ -374,6 +374,53 @@ describe('write api', () => {
 })
 
 describe('report', () => {
+  test('carries the playlist report for the window only when one is supplied', () => {
+    const store = openStatStore({ path: dbPath, now })
+    const playlists = {
+      made: { total: 1, live: 1, deleted: 0, signedIn: 0, anonymous: 1 },
+      madeDaily: [{ day: '2026-11-14', created: 1 }],
+      owners: [],
+      playlists: [],
+    }
+    const asked: string[] = []
+    const withReport = createStatReport({
+      store,
+      findSongs,
+      now,
+      playlists: sinceDay => {
+        asked.push(sinceDay)
+        return playlists
+      },
+    })('4')
+    expect((withReport.body as { playlists?: unknown }).playlists).toEqual({
+      ...playlists,
+      madeDaily: [
+        { day: '2026-11-11', created: 0 },
+        { day: '2026-11-12', created: 0 },
+        { day: '2026-11-13', created: 0 },
+        { day: '2026-11-14', created: 1 },
+      ],
+    })
+    expect(asked).toEqual([(withReport.body as { since: string }).since])
+    const without = createStatReport({ store, findSongs, now })('4')
+    expect(without.body).not.toHaveProperty('playlists')
+  })
+
+  test('a failing playlist report drops only its section', () => {
+    const store = openStatStore({ path: dbPath, now })
+    const answer = createStatReport({
+      store,
+      findSongs,
+      now,
+      playlists: () => {
+        throw new Error('playlists db is gone')
+      },
+    })('4')
+    expect(answer.status).toBe(200)
+    expect(answer.body).not.toHaveProperty('playlists')
+    expect(answer.body).toHaveProperty('daily')
+  })
+
   test('carries per-song mood counts, most voted first, with titles', () => {
     const store = openStatStore({ path: dbPath, now })
     record(

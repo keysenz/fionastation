@@ -5,6 +5,7 @@ A visitor who opens `/p/<id>` gets that playlist on the Fio Radio page. With an 
 ## Journeys
 
 - `playlistOpen` seeds a playlist through `POST /api/playlists`, opens its link, and expects the first song in the player bar, the rest in `karaoke-storage` in order, the link kept in the address bar, and the name in the page title.
+- `playlistOpenCount` opens a link from a browser with no saved playlists and expects one row of `playlist_opens` in `PLAYLISTS_DB_PATH`, still one after a reload. A browser whose `karaoke-my-playlists` holds that playlist as `Created` opens and reloads it and expects no count.
 - `playlistChoice` saves a two-song queue, opens a link, and expects the question (`role=dialog`, buttons by `data-playlist-choice`). Replace leaves only the playlist, Append keeps the queue first and starts nothing, Cancel and Escape change nothing.
 - `playlistNavigation` opens a link, goes to the song list and Back, reloads, and expects no question and an unchanged queue each time. The same link again after the visitor queued another song asks, with the playlist name out of the title. A different link still asks.
 - `playlistSlowFetch` holds the playlist response in the page (an init script on `fetch`) and releases it later. It expects a question when the visitor started a song meanwhile, and nothing loaded when the visitor left for `/songs` first.

@@ -13,6 +13,7 @@
 - `stats-transitions` shows the top transitions table (previous song to song) with a minimum plays choice and sortable plays, finish rate and skip rate.
 - `stats-export` offers one download per table (`events`, `decisions`) for the current range, and each streams valid NDJSON for a listed user and answers 401 or 403 otherwise.
 - `stats-moods` shows the Moods section: tiles for mood votes, songs with votes and the top mood (ties are listed), a votes-per-day chart, one stacked bar of the six moods with counts and percentages, and a per-song table sorted by votes with a stacked bar, the top mood (ties marked, songs with fewer than 3 votes marked `few votes`) and the video link. A mood chip lists only the songs it leads, and a second click clears it.
+- `stats-playlists` shows the Playlists section when the playlists store is up: tiles for made, live, deleted, signed in and anonymous playlists, a made-per-day chart, an owners table (Discord name, falling back to the id, or Anonymous) and a playlists table sorted by opens by others in the range. A read with `?open=1` by a stranger is counted once an hour per address.
 - `stats-phone` has no sideways scroll at 375px.
 
 ## Driving it with drive.mjs
@@ -21,7 +22,8 @@
 
 - **Numbers.** The seed is 8 plays today (6 visitor, 2 autoplay), 4 more visitor plays 10 days ago and 10 more 40 days ago. 7 d shows 8, 30 d 12 and 90 d 22.
 - **Mood seed.** Today the first song has ceria 3 and hype 2, the second has sendu 1, and 10 days ago the second gets sendu 2. 90 d shows 8 votes, 2 songs and the tied top mood `ceria / sendu`, the sendu chip leaves only the second song, and 1 d shows 6 votes with `few votes` on the second song.
-- **Evidence.** `stats-moods-desktop.png`, `stats-dashboard-desktop.png`, `stats-dashboard-90d.png`, `stats-dashboard-phone.png`, `stats-histogram-one-song.png`, `stats-signed-out.png` and `stats-no-access.png`.
+- **Playlist seed.** Four playlists in a scratch `PLAYLISTS_DB_PATH` seeded through `server/playlists.ts`: two by the owner `Playlist Owner` (one with 3 opens), one anonymous with 1 open, one anonymous and deleted. The tiles show 4, 3, 1, 2 and 2.
+- **Evidence.** `stats-playlists-desktop.png`, `stats-moods-desktop.png`, `stats-dashboard-desktop.png`, `stats-dashboard-90d.png`, `stats-dashboard-phone.png`, `stats-histogram-one-song.png`, `stats-signed-out.png` and `stats-no-access.png`.
 
 ## Driving the listening trail with drive.mjs
 

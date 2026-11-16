@@ -636,6 +636,7 @@ const barKind = (page) => page.locator('[data-playlist-bar]').getAttribute('data
 
 const STATS_MOD = { id: '244661517356761089', name: 'Mod Person' };
 const STATS_FIONA = { id: '927090060480905276', name: 'Fiona' };
+const STATS_OWNER = { id: '333333333333333333', name: 'Playlist Owner' };
 const STATS_STRANGER = { id: '111111111111111111', name: 'Stranger' };
 
 const seedStats = async (path, songs) => {
@@ -667,13 +668,34 @@ const seedStats = async (path, songs) => {
   repeat(10, { kind: 'Play', songId: second.id, origin: 'Visitor' }).forEach((event) => fortyAgo.record(event));
 };
 
+const seedPlaylists = async (path, song) => {
+  const { openPlaylistStore } = await import('../../../server/playlists.ts');
+  const store = openPlaylistStore({ path });
+  const entries = [{ songId: song.id, videoUrl: song.video_url, timestamp: '0:30', title: song.song_title }];
+  store.sessions.start('verify-owner', { discordId: STATS_OWNER.id, name: STATS_OWNER.name }, new Date(Date.now() + 86400000));
+  const make = (name, owner) => {
+    const made = store.create({ name, entries }, { kind: 'Site', ownerDiscordId: owner });
+    if (made.kind !== 'Created') throw new Error(made.kind);
+    return made.id;
+  };
+  const popular = make('Popular seed', STATS_OWNER.id);
+  const quiet = make('Quiet seed', STATS_OWNER.id);
+  const stray = make('Stray seed', undefined);
+  store.remove(make('Gone seed', undefined));
+  for (let i = 0; i < 3; i++) store.recordOpen(popular);
+  store.recordOpen(stray);
+  return { popular, quiet, stray };
+};
+
 const journeys = {
   async statsPage(page, context) {
     const f = 'stats-page';
     const [first, second] = distinctByTitle(await livePlayables(), 2);
     const statsPath = join(mkdtempSync(join(tmpdir(), 'verify-stats-')), 'stats.db');
     await seedStats(statsPath, [first, second]);
-    const stack = await startDiscordStack({ STATS_DB_PATH: statsPath, STATS_USER_IDS: `${STATS_MOD.id},${STATS_FIONA.id}` });
+    const playlistsPath = join(dirname(statsPath), 'playlists.db');
+    const seeded = await seedPlaylists(playlistsPath, first);
+    const stack = await startDiscordStack({ STATS_DB_PATH: statsPath, PLAYLISTS_DB_PATH: playlistsPath, STATS_USER_IDS: `${STATS_MOD.id},${STATS_FIONA.id}` });
     const tile = (key) => page.locator(`[data-tile="${key}"] [data-value]`).innerText();
     const shows = async (key, want) => {
       await page.waitForFunction(([k, w]) => document.querySelector(`[data-tile="${k}"] [data-value]`)?.textContent === w, [key, want]);
@@ -747,6 +769,33 @@ const journeys = {
         await page.screenshot({ path: join(out, 'stats-moods-desktop.png'), fullPage: true });
         await page.locator('[data-range="90"]').click();
         await shows('mood-votes', '8');
+      }, page);
+      await step(f, 'the Playlists section shows who made which playlists and how often others opened them', async () => {
+        await shows('playlists-made', '4');
+        await shows('playlists-live', '3');
+        await shows('playlists-deleted', '1');
+        await shows('playlists-signed-in', '2');
+        await shows('playlists-anonymous', '2');
+        const made = await page.locator('[data-chart="playlists-daily"] [data-day]').count();
+        if (made !== 90) throw new Error(`${made} playlist days`);
+        const owner = await page.locator(`[data-playlist-owner="${STATS_OWNER.id}"]`).innerText();
+        if (!owner.includes(STATS_OWNER.name)) throw new Error(`owner row ${owner}`);
+        await page.locator('[data-playlist-owner=""]').waitFor();
+        const ids = await page.locator('[data-table="playlists"] tbody tr').evaluateAll((els) => els.map((el) => el.getAttribute('data-playlist')));
+        if (ids[0] !== seeded.popular || ids[1] !== seeded.stray) throw new Error(`order ${ids}`);
+        const opens = (id) => page.locator(`[data-playlist="${id}"] td`).nth(4).innerText();
+        if ((await opens(seeded.popular)) !== '3' || (await opens(seeded.quiet)) !== '0') throw new Error('seeded opens');
+        await page.screenshot({ path: join(out, 'stats-playlists-desktop.png'), fullPage: true });
+      }, page);
+      await step(f, 'a stranger opening a playlist with the open signal is counted once an hour and a plain read is not', async () => {
+        const status = (query) => page.evaluate((url) => fetch(url).then((res) => res.status), `/api/playlists/${seeded.quiet}${query}`);
+        if ((await status('')) !== 200) throw new Error('plain read failed');
+        if ((await status('?open=1')) !== 200 || (await status('?open=1')) !== 200) throw new Error('open read failed');
+        await page.reload();
+        await page.locator('[data-range="90"]').click();
+        await shows('plays', '22');
+        const opens = await page.locator(`[data-playlist="${seeded.quiet}"] td`).nth(4).innerText();
+        if (opens !== '1') throw new Error(`counted ${opens} opens`);
       }, page);
       await step(f, 'picking a song narrows the skip histogram and sorting reorders the table', async () => {
         const all = await page.locator('[data-skip-total]').getAttribute('data-skip-total');
@@ -2796,6 +2845,45 @@ const journeys = {
     }, page);
     await step('playlist-open', 'the first song loads in the YouTube player', () => videoLoads(page, [songs[0].video_url]), page);
     await page.screenshot({ path: join(out, 'playlist-open.png') });
+  },
+
+  async playlistOpenCount(page) {
+    const songs = distinctByTitle(await livePlayables(), 3);
+    const opensOf = (id) => {
+      const db = new DatabaseSync(PLAYLISTS_DB_PATH, { readOnly: true });
+      try {
+        return db.prepare('SELECT COALESCE(SUM(opens), 0) AS n FROM playlist_opens WHERE playlist_id = ?').get(id).n;
+      } finally {
+        db.close();
+      }
+    };
+    const stranger = await createPlaylist('Verify opens stranger', songs);
+    const maker = await createPlaylist('Verify opens maker', songs);
+    await step('playlist-open-count', 'a visitor with no saved playlists who opens a link is counted once', async () => {
+      await page.goto(`${BASE}/p/${stranger.id}`);
+      await waitForBarSong(page, songs[0]);
+      if (opensOf(stranger.id) !== 1) throw new Error(`counted ${opensOf(stranger.id)}`);
+      await page.reload();
+      await page.locator('[data-playlist-bar]').waitFor();
+      await page.waitForTimeout(500);
+      if (opensOf(stranger.id) !== 1) throw new Error(`a reload counted ${opensOf(stranger.id)}`);
+    }, page);
+    await step('playlist-open-count', 'the browser that made the playlist opens it and reloads it without being counted', async () => {
+      await page.goto(BASE + '/');
+      await page.evaluate(
+        (entry) => {
+          localStorage.removeItem('karaoke-storage');
+          localStorage.setItem('karaoke-my-playlists', JSON.stringify([entry]));
+        },
+        { id: maker.id, name: 'Verify opens maker', editToken: maker.editToken, origin: 'Created' },
+      );
+      await page.goto(`${BASE}/p/${maker.id}`);
+      await waitForBarSong(page, songs[0]);
+      await page.reload();
+      await page.locator('[data-playlist-bar]').waitFor();
+      await page.waitForTimeout(500);
+      if (opensOf(maker.id) !== 0) throw new Error(`the maker was counted ${opensOf(maker.id)}`);
+    }, page);
   },
 
   async playlistChoice(page) {

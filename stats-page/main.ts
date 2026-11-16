@@ -1,4 +1,4 @@
-import { histogram, moodTimeSeries, stackedBar, timeSeries } from './charts.ts'
+import { countSeries, histogram, stackedBar, timeSeries } from './charts.ts'
 import {
   EXPORT_TABLES,
   FEW_MOOD_VOTES,
@@ -6,6 +6,7 @@ import {
   RANGES,
   SONG_COLUMNS,
   TRANSITION_COLUMNS,
+  type PlaylistsReport,
   type Report,
   type SongColumn,
   type SongMoodRow,
@@ -515,7 +516,11 @@ const moodSection = (report: Report) => {
       h('p', { class: 'note' }, [
         'Shows whether viewers answer the question at all.',
       ]),
-      moodTimeSeries(report.moodDaily),
+      countSeries(
+        report.moodDaily.map(({ day, votes }) => ({ day, count: votes })),
+        'Mood votes',
+        'mood-daily',
+      ),
     ]),
     h('section', { class: 'panel wide', 'data-panel': 'mood-mix' }, [
       h('h2', {}, ['Mood mix']),
@@ -558,6 +563,135 @@ const moodSection = (report: Report) => {
     ]),
   ]
 }
+
+const ownerLabel = (discordId: string | null, name: string | null) =>
+  discordId === null ? 'Anonymous' : (name ?? discordId)
+
+const playlistOwnersTable = (owners: PlaylistsReport['owners']) =>
+  h('div', { class: 'scroll' }, [
+    h('table', { 'data-table': 'playlist-owners' }, [
+      h('thead', {}, [
+        h('tr', {}, [
+          h('th', { class: 'text', scope: 'col' }, ['Owner']),
+          ...['Playlists', 'Live', 'Opens by others'].map(label =>
+            h('th', { class: 'num', scope: 'col' }, [label]),
+          ),
+        ]),
+      ]),
+      h(
+        'tbody',
+        {},
+        owners.map(owner =>
+          h('tr', { 'data-playlist-owner': owner.discordId ?? '' }, [
+            h('td', { class: 'text' }, [
+              ownerLabel(owner.discordId, owner.name),
+            ]),
+            num(owner.playlists),
+            num(owner.live),
+            num(owner.opensByOthers),
+          ]),
+        ),
+      ),
+    ]),
+  ])
+
+const playlistsTable = (playlists: PlaylistsReport['playlists']) =>
+  h('div', { class: 'scroll' }, [
+    h('table', { 'data-table': 'playlists' }, [
+      h('thead', {}, [
+        h('tr', {}, [
+          h('th', { class: 'text', scope: 'col' }, ['Playlist']),
+          h('th', { class: 'text', scope: 'col' }, ['Owner']),
+          h('th', { class: 'text', scope: 'col' }, ['Created']),
+          ...['Songs', 'Opens by others', 'Total opens'].map(label =>
+            h('th', { class: 'num', scope: 'col' }, [label]),
+          ),
+        ]),
+      ]),
+      h(
+        'tbody',
+        {},
+        playlists.map(playlist =>
+          h(
+            'tr',
+            {
+              'data-playlist': playlist.id,
+              'data-deleted': playlist.deleted,
+            },
+            [
+              h('td', { class: 'text' }, [playlist.name]),
+              h('td', { class: 'text' }, [
+                ownerLabel(playlist.ownerDiscordId, playlist.ownerName),
+              ]),
+              h('td', { class: 'text' }, [playlist.createdAt.slice(0, 10)]),
+              num(playlist.entryCount),
+              num(playlist.opens),
+              num(playlist.totalOpens),
+            ],
+          ),
+        ),
+      ),
+    ]),
+  ])
+
+const playlistSection = ({
+  made,
+  madeDaily,
+  owners,
+  playlists,
+}: PlaylistsReport) => [
+  h('div', { class: 'tiles', 'data-playlists-tiles': true }, [
+    tile(
+      'playlists-made',
+      'Playlists made',
+      formatCount(made.total),
+      'all time',
+    ),
+    tile('playlists-live', 'Live', formatCount(made.live), 'still shared'),
+    tile(
+      'playlists-deleted',
+      'Deleted',
+      formatCount(made.deleted),
+      'removed by their maker',
+    ),
+    tile(
+      'playlists-signed-in',
+      'Signed in',
+      formatCount(made.signedIn),
+      'made with a Discord login',
+    ),
+    tile(
+      'playlists-anonymous',
+      'Anonymous',
+      formatCount(made.anonymous),
+      'made without one',
+    ),
+  ]),
+  h('section', { class: 'panel wide', 'data-panel': 'playlists-daily' }, [
+    h('h2', {}, ['Playlists made per day']),
+    countSeries(
+      madeDaily.map(({ day, created }) => ({ day, count: created })),
+      'Playlists made',
+      'playlists-daily',
+    ),
+  ]),
+  h('section', { class: 'panel wide', 'data-panel': 'playlist-owners' }, [
+    h('h2', {}, ['Playlist owners']),
+    h('p', { class: 'note' }, [
+      'Opens by others count a person once an hour per playlist, and never the owner.',
+    ]),
+    owners.length > 0
+      ? playlistOwnersTable(owners)
+      : h('p', { class: 'note' }, ['No playlists yet.']),
+  ]),
+  h('section', { class: 'panel wide', 'data-panel': 'playlists' }, [
+    h('h2', {}, ['Top playlists']),
+    h('p', { class: 'note' }, ['Most opened by others in this range first.']),
+    playlists.length > 0
+      ? playlistsTable(playlists)
+      : h('p', { class: 'note' }, ['No playlists yet.']),
+  ]),
+]
 
 const minPlaysButtons = () =>
   h(
@@ -689,6 +823,7 @@ const dashboard = (report: Report, name: string | undefined) => {
       transitionTable(report),
     ]),
     ...moodSection(report),
+    ...(report.playlists ? playlistSection(report.playlists) : []),
     h('section', { class: 'panel wide', 'data-panel': 'export' }, [
       h('h2', {}, ['Export for offline modeling']),
       h('p', { class: 'note' }, [
