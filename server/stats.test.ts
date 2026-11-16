@@ -378,7 +378,7 @@ describe('report', () => {
     const store = openStatStore({ path: dbPath, now })
     const playlists = {
       made: { total: 1, live: 1, deleted: 0, signedIn: 0, anonymous: 1 },
-      madeDaily: [],
+      madeDaily: [{ day: '2026-11-14', created: 1 }],
       owners: [],
       playlists: [],
     }
@@ -392,9 +392,15 @@ describe('report', () => {
         return playlists
       },
     })('4')
-    expect((withReport.body as { playlists?: unknown }).playlists).toEqual(
-      playlists,
-    )
+    expect((withReport.body as { playlists?: unknown }).playlists).toEqual({
+      ...playlists,
+      madeDaily: [
+        { day: '2026-11-11', created: 0 },
+        { day: '2026-11-12', created: 0 },
+        { day: '2026-11-13', created: 0 },
+        { day: '2026-11-14', created: 1 },
+      ],
+    })
     expect(asked).toEqual([(withReport.body as { since: string }).since])
     const without = createStatReport({ store, findSongs, now })('4')
     expect(without.body).not.toHaveProperty('playlists')

@@ -531,6 +531,24 @@ export const buildMoodDays = (
   return series
 }
 
+const withEveryDay = (
+  report: PlaylistReport,
+  firstDay: string,
+  lastDay: string,
+): PlaylistReport => {
+  const created = new Map(report.madeDaily.map(row => [row.day, row.created]))
+  const madeDaily: PlaylistReport['madeDaily'][number][] = []
+  for (
+    let time = Date.parse(firstDay);
+    time <= Date.parse(lastDay);
+    time += DAY_MS
+  ) {
+    const day = dayOf(new Date(time))
+    madeDaily.push({ day, created: created.get(day) ?? 0 })
+  }
+  return { ...report, madeDaily }
+}
+
 export type DayReport = Tally & Readonly<{ day: string }>
 
 export const SKIP_BUCKET_SECONDS = 10
@@ -734,7 +752,9 @@ export const createStatReport = ({
           moodNames: MOODS,
           moods: buildMoodReport(moods, known),
           moodDaily: buildMoodDays(moods, since, today),
-          ...(playlists && { playlists: playlists(since) }),
+          ...(playlists && {
+            playlists: withEveryDay(playlists(since), since, today),
+          }),
         },
       }
     } catch (error) {
