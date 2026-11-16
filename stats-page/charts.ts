@@ -1,4 +1,4 @@
-import type { DayRow, MoodDayRow } from './report.ts'
+import type { DayRow } from './report.ts'
 
 const SVG_NS = 'http://www.w3.org/2000/svg'
 
@@ -147,13 +147,19 @@ export const timeSeries = (daily: readonly DayRow[]) => {
   )
 }
 
-export const moodTimeSeries = (daily: readonly MoodDayRow[]) => {
-  const max = niceMax(Math.max(1, ...daily.map(day => day.votes)))
+export type CountDay = Readonly<{ day: string; count: number }>
+
+export const countSeries = (
+  daily: readonly CountDay[],
+  noun: string,
+  chart: string,
+) => {
+  const max = niceMax(Math.max(1, ...daily.map(day => day.count)))
   const slot = innerW / Math.max(daily.length, 1)
   const barW = Math.max(Math.min(slot * 0.7, 36), 1)
   const labelEvery = Math.max(1, Math.ceil(daily.length / 8))
   const bars = daily.map((day, index) => {
-    const height = (day.votes / max) * innerH
+    const height = (day.count / max) * innerH
     const x = PAD.left + slot * index + slot / 2
     return svgEl('g', { class: 'bars', 'data-day': day.day }, [
       svgEl('rect', {
@@ -170,7 +176,7 @@ export const moodTimeSeries = (daily: readonly MoodDayRow[]) => {
         height: innerH,
         class: 'hit',
       }),
-      title(`${day.day}: ${day.votes} mood votes`),
+      title(`${day.day}: ${day.count} ${noun}`),
     ])
   })
   const labels = daily.flatMap((day, index) =>
@@ -193,11 +199,11 @@ export const moodTimeSeries = (daily: readonly MoodDayRow[]) => {
     {
       viewBox: `0 0 ${W} ${H}`,
       role: 'img',
-      'aria-label': 'Mood votes per day',
+      'aria-label': `${noun} per day`,
       class: 'chart',
-      'data-chart': 'mood-daily',
+      'data-chart': chart,
     },
-    [...frame(max, 'Mood votes per day'), ...bars, ...labels],
+    [...frame(max, `${noun} per day`), ...bars, ...labels],
   )
 }
 

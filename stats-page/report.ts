@@ -283,8 +283,7 @@ const parseMoodDay = (item: unknown): MoodDayRow | undefined => {
     : undefined
 }
 
-const nullableText = (value: unknown) =>
-  value === null ? null : text(value)
+const nullableText = (value: unknown) => (value === null ? null : text(value))
 
 const parseMade = (value: unknown): PlaylistsMade | undefined => {
   const fields = record(value)

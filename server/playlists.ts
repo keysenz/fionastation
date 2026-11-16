@@ -434,10 +434,9 @@ export const openPlaylistStore = ({
            GROUP BY day ORDER BY day`,
         )
         .all(sinceDay) as unknown as PlaylistReport['madeDaily'][number][],
-      owners: (
-        db
-          .prepare(
-            `SELECT p.owner_discord_id AS discordId, m.name AS name,
+      owners: db
+        .prepare(
+          `SELECT p.owner_discord_id AS discordId, m.name AS name,
                     COUNT(*) AS playlists,
                     COUNT(*) FILTER (WHERE p.deleted_at IS NULL) AS live,
                     COALESCE(SUM(o.opens), 0) AS opensByOthers
@@ -449,9 +448,8 @@ export const openPlaylistStore = ({
              ) o ON o.playlist_id = p.id
              GROUP BY p.owner_discord_id
              ORDER BY opensByOthers DESC, playlists DESC`,
-          )
-          .all(sinceDay) as unknown as PlaylistReport['owners'][number][]
-      ),
+        )
+        .all(sinceDay) as unknown as PlaylistReport['owners'][number][],
       playlists: (
         db
           .prepare(

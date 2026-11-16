@@ -49,13 +49,49 @@ const raw = {
   skipBucketSeconds: 10,
   skipBucketCount: 31,
   outcomes: [
-    { origin: 'Visitor', plays: 10, finishes: 6, skips: 3, medianSecondsIntoSkip: 25 },
-    { origin: 'Autoplay', plays: 0, finishes: 0, skips: 0, medianSecondsIntoSkip: null },
+    {
+      origin: 'Visitor',
+      plays: 10,
+      finishes: 6,
+      skips: 3,
+      medianSecondsIntoSkip: 25,
+    },
+    {
+      origin: 'Autoplay',
+      plays: 0,
+      finishes: 0,
+      skips: 0,
+      medianSecondsIntoSkip: null,
+    },
   ],
   transitions: [
-    { prevSongId: 'a', songId: 'b', prevTitle: 'A', title: null, plays: 6, finishes: 3, skips: 3 },
-    { prevSongId: 'b', songId: 'c', prevTitle: null, title: 'C', plays: 2, finishes: 2, skips: 0 },
-    { prevSongId: 'c', songId: 'a', prevTitle: 'C', title: 'A', plays: 4, finishes: 1, skips: 0 },
+    {
+      prevSongId: 'a',
+      songId: 'b',
+      prevTitle: 'A',
+      title: null,
+      plays: 6,
+      finishes: 3,
+      skips: 3,
+    },
+    {
+      prevSongId: 'b',
+      songId: 'c',
+      prevTitle: null,
+      title: 'C',
+      plays: 2,
+      finishes: 2,
+      skips: 0,
+    },
+    {
+      prevSongId: 'c',
+      songId: 'a',
+      prevTitle: 'C',
+      title: 'A',
+      plays: 4,
+      finishes: 1,
+      skips: 0,
+    },
   ],
   transitionMinPlays: 2,
   moodNames: ['ceria', 'sendu'],
@@ -124,7 +160,13 @@ describe('playlists block', () => {
     made: { total: 2, live: 1, deleted: 1, signedIn: 1, anonymous: 1 },
     madeDaily: [{ day: '2026-11-14', created: 2 }],
     owners: [
-      { discordId: '1', name: 'Alice', playlists: 1, live: 1, opensByOthers: 3 },
+      {
+        discordId: '1',
+        name: 'Alice',
+        playlists: 1,
+        live: 1,
+        opensByOthers: 3,
+      },
       { discordId: null, name: null, playlists: 1, live: 0, opensByOthers: 0 },
     ],
     playlists: [
@@ -154,14 +196,20 @@ describe('playlists block', () => {
 
   test.each([
     ['a malformed made block', { ...playlists, made: { total: 1 } }],
-    ['an owner id that is a number', {
-      ...playlists,
-      owners: [{ ...playlists.owners[0], discordId: 1 }],
-    }],
-    ['a playlist with a negative open count', {
-      ...playlists,
-      playlists: [{ ...playlists.playlists[0], opens: -1 }],
-    }],
+    [
+      'an owner id that is a number',
+      {
+        ...playlists,
+        owners: [{ ...playlists.owners[0], discordId: 1 }],
+      },
+    ],
+    [
+      'a playlist with a negative open count',
+      {
+        ...playlists,
+        playlists: [{ ...playlists.playlists[0], opens: -1 }],
+      },
+    ],
     ['a missing list', { ...playlists, playlists: undefined }],
   ])('rejects the report for %s', (_, block) => {
     expect(parseReport({ ...raw, playlists: block })).toBeUndefined()
