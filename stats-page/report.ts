@@ -57,6 +57,43 @@ export type SongMoodRow = Readonly<{
 
 export type MoodDayRow = Readonly<{ day: string; votes: number }>
 
+export type PlaylistsMade = Readonly<{
+  total: number
+  live: number
+  deleted: number
+  signedIn: number
+  anonymous: number
+}>
+
+export type PlaylistOwnerRow = Readonly<{
+  discordId: string | null
+  name: string | null
+  playlists: number
+  live: number
+  opensByOthers: number
+}>
+
+export type PlaylistRow = Readonly<{
+  id: string
+  name: string
+  entryCount: number
+  ownerDiscordId: string | null
+  ownerName: string | null
+  createdAt: string
+  deleted: boolean
+  opens: number
+  totalOpens: number
+}>
+
+export type PlaylistMadeDay = Readonly<{ day: string; created: number }>
+
+export type PlaylistsReport = Readonly<{
+  made: PlaylistsMade
+  madeDaily: readonly PlaylistMadeDay[]
+  owners: readonly PlaylistOwnerRow[]
+  playlists: readonly PlaylistRow[]
+}>
+
 export type Report = Readonly<{
   days: number
   since: string
@@ -72,6 +109,7 @@ export type Report = Readonly<{
   moodNames: readonly string[]
   moods: readonly SongMoodRow[]
   moodDaily: readonly MoodDayRow[]
+  playlists?: PlaylistsReport
 }>
 
 const record = (value: unknown) =>
@@ -245,6 +283,97 @@ const parseMoodDay = (item: unknown): MoodDayRow | undefined => {
     : undefined
 }
 
+const nullableText = (value: unknown) =>
+  value === null ? null : text(value)
+
+const parseMade = (value: unknown): PlaylistsMade | undefined => {
+  const fields = record(value)
+  const total = count(fields?.total)
+  const live = count(fields?.live)
+  const deleted = count(fields?.deleted)
+  const signedIn = count(fields?.signedIn)
+  const anonymous = count(fields?.anonymous)
+  return total === undefined ||
+    live === undefined ||
+    deleted === undefined ||
+    signedIn === undefined ||
+    anonymous === undefined
+    ? undefined
+    : { total, live, deleted, signedIn, anonymous }
+}
+
+const parseMadeDay = (item: unknown): PlaylistMadeDay | undefined => {
+  const fields = record(item)
+  const day = text(fields?.day)
+  const created = count(fields?.created)
+  return day !== undefined &&
+    /^\d{4}-\d{2}-\d{2}$/.test(day) &&
+    created !== undefined
+    ? { day, created }
+    : undefined
+}
+
+const parsePlaylistOwner = (item: unknown): PlaylistOwnerRow | undefined => {
+  const fields = record(item)
+  const discordId = nullableText(fields?.discordId)
+  const name = nullableText(fields?.name)
+  const playlists = count(fields?.playlists)
+  const live = count(fields?.live)
+  const opensByOthers = count(fields?.opensByOthers)
+  return discordId === undefined ||
+    name === undefined ||
+    playlists === undefined ||
+    live === undefined ||
+    opensByOthers === undefined
+    ? undefined
+    : { discordId, name, playlists, live, opensByOthers }
+}
+
+const parsePlaylist = (item: unknown): PlaylistRow | undefined => {
+  const fields = record(item)
+  const id = text(fields?.id)
+  const name = text(fields?.name)
+  const entryCount = count(fields?.entryCount)
+  const ownerDiscordId = nullableText(fields?.ownerDiscordId)
+  const ownerName = nullableText(fields?.ownerName)
+  const createdAt = text(fields?.createdAt)
+  const deleted = fields?.deleted
+  const opens = count(fields?.opens)
+  const totalOpens = count(fields?.totalOpens)
+  return id === undefined ||
+    name === undefined ||
+    entryCount === undefined ||
+    ownerDiscordId === undefined ||
+    ownerName === undefined ||
+    createdAt === undefined ||
+    typeof deleted !== 'boolean' ||
+    opens === undefined ||
+    totalOpens === undefined
+    ? undefined
+    : {
+        id,
+        name,
+        entryCount,
+        ownerDiscordId,
+        ownerName,
+        createdAt,
+        deleted,
+        opens,
+        totalOpens,
+      }
+}
+
+const parsePlaylists = (value: unknown): PlaylistsReport | undefined => {
+  const fields = record(value)
+  const made = parseMade(fields?.made)
+  const madeDaily = each(fields?.madeDaily, parseMadeDay)
+  const owners = each(fields?.owners, parsePlaylistOwner)
+  const playlists = each(fields?.playlists, parsePlaylist)
+  return made && madeDaily && owners && playlists
+    ? { made, madeDaily, owners, playlists }
+    : undefined
+}
+
 export const parseReport = (raw: unknown): Report | undefined => {
   const fields = record(raw)
   const days = count(fields?.days)
@@ -259,6 +388,10 @@ export const parseReport = (raw: unknown): Report | undefined => {
   const transitions = each(fields?.transitions, parseTransition)
   const transitionMinPlays = count(fields?.transitionMinPlays)
   const moodDaily = each(fields?.moodDaily, parseMoodDay)
+  const playlists =
+    fields?.playlists === undefined
+      ? undefined
+      : parsePlaylists(fields.playlists)
   const moodNames = each(fields?.moodNames, name => text(name))
   const moods = moodNames
     ? each(fields?.moods, item => parseSongMoods(item, moodNames))
@@ -277,7 +410,8 @@ export const parseReport = (raw: unknown): Report | undefined => {
     transitionMinPlays === undefined ||
     !moodNames ||
     !moods ||
-    !moodDaily
+    !moodDaily ||
+    (fields?.playlists !== undefined && !playlists)
   ) {
     return undefined
   }
@@ -296,6 +430,7 @@ export const parseReport = (raw: unknown): Report | undefined => {
     moodNames,
     moods,
     moodDaily,
+    ...(playlists && { playlists }),
   }
 }
 
