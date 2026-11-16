@@ -1,6 +1,3 @@
-// Fiona's own caption tracks for her cover and original videos, kept in
-// lyrics-translations.json by scripts/caption-translations. They ride along
-// with whatever lyrics the server answers for the song.
 import { existsSync, readFileSync } from 'node:fs'
 
 import type { Lyrics, Translation } from '../src/lyrics.ts'

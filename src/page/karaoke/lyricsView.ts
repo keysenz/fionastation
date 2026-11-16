@@ -104,7 +104,6 @@ const translationActiveIndexOf = (
       }),
   })
 
-/** The translation line under the active sung line, none through a gap. */
 const translationTextOf = (singing: NowSinging): Option.Option<string> =>
   Option.flatMap(translationOfSinging(singing), translation =>
     Option.filter(

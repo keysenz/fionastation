@@ -1,10 +1,7 @@
-"""Parsing of uploader-made caption tracks into timed translation lines."""
-
 PREFERRED_LANGUAGES = ("id", "en")
 
 
 def pick_language(languages: list[str]) -> str | None:
-    """The track to use: `id`, then `en`, then the first. A regional `en-US` counts as `en`."""
     languages = [language for language in languages if language != "live_chat"]
     for wanted in PREFERRED_LANGUAGES:
         for language in languages:
@@ -14,7 +11,6 @@ def pick_language(languages: list[str]) -> str | None:
 
 
 def bottom_window(track: dict) -> int | None:
-    """The window id of the lowest caption position, where a translation sits under a karaoke row of romaji."""
     positions = track.get("wpWinPositions", [])
     used = {event["wpWinPosId"] for event in track.get("events", []) if "segs" in event and "wpWinPosId" in event}
     if len(used) < 2:
@@ -23,9 +19,7 @@ def bottom_window(track: dict) -> int | None:
 
 
 def cues_from_json3(track: dict) -> list[tuple[int, int, str]]:
-    """(start, end, text) in milliseconds for each distinct caption that has text.
-
-    A track with several windows is a karaoke row above the translation, so only
+    """A track with several windows is a karaoke row above the translation, so only
     the lowest window is read. YouTube repeats an event once per pen, which the
     set drops.
     """
@@ -44,11 +38,6 @@ def cues_from_json3(track: dict) -> list[tuple[int, int, str]]:
 
 
 def lines_from_cues(cues: list[tuple[int, int, str]], song_start_ms: int = 0) -> list[dict]:
-    """Translation lines timed from the song's start.
-
-    Where one caption ends before the next starts, an empty line marks the gap,
-    as in the sung lyrics. A caption that overlaps the next one is cut off by it.
-    """
     lines: list[dict] = []
     previous_end: int | None = None
     for start, end, text in sorted(cues):

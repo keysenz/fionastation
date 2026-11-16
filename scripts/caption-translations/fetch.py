@@ -1,8 +1,3 @@
-"""Write server/lyrics-translations.json from the caption tracks Fiona uploads herself.
-
-Only cover and original videos are read, and only uploader-made tracks
-(`subtitles`), never YouTube's automatic captions.
-"""
 import argparse
 import json
 import sys
@@ -27,7 +22,6 @@ def own_videos(videos: list[dict]) -> list[dict]:
 
 
 def caption_track(video_id: str) -> tuple[str, dict] | None:
-    """The chosen uploader-made track as (language, json3), or None when the video has none."""
     from yt_dlp import YoutubeDL
 
     options = {"quiet": True, "no_warnings": True, "skip_download": True}
