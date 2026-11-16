@@ -5,9 +5,9 @@ import { twMerge } from 'tailwind-merge'
 import { songLabel } from '../../domain.ts'
 import {
   LyricCursor,
+  type LyricLine,
   Lyrics,
   type LyricsCredit,
-  type LyricLine,
   type MissingReason,
   NUDGE_STEP_MS,
   type Translation,
