@@ -792,6 +792,7 @@ const journeys = {
         if ((await status('')) !== 200) throw new Error('plain read failed');
         if ((await status('?open=1')) !== 200 || (await status('?open=1')) !== 200) throw new Error('open read failed');
         await page.reload();
+        await page.locator('[data-range="90"]').click();
         await shows('plays', '22');
         const opens = await page.locator(`[data-playlist="${seeded.quiet}"] td`).nth(4).innerText();
         if (opens !== '1') throw new Error(`counted ${opens} opens`);
@@ -2772,6 +2773,40 @@ const journeys = {
     }, page);
     await step('playlist-open', 'the first song loads in the YouTube player', () => videoLoads(page, [songs[0].video_url]), page);
     await page.screenshot({ path: join(out, 'playlist-open.png') });
+  },
+
+  async playlistOpenCount(page) {
+    const songs = distinctByTitle(await livePlayables(), 2);
+    const opensOf = (id) => {
+      const db = new DatabaseSync(PLAYLISTS_DB_PATH, { readOnly: true });
+      try {
+        return db.prepare('SELECT COALESCE(SUM(opens), 0) AS n FROM playlist_opens WHERE playlist_id = ?').get(id).n;
+      } finally {
+        db.close();
+      }
+    };
+    const stranger = await createPlaylist('Verify opens stranger', songs);
+    const maker = await createPlaylist('Verify opens maker', songs);
+    await step('playlist-open-count', 'a visitor with no saved playlists who opens a link is counted once', async () => {
+      await page.goto(`${BASE}/p/${stranger.id}`);
+      await waitForBarSong(page, songs[0]);
+      if (opensOf(stranger.id) !== 1) throw new Error(`counted ${opensOf(stranger.id)}`);
+      await page.reload();
+      await waitForBarSong(page, songs[0]);
+      if (opensOf(stranger.id) !== 1) throw new Error(`a reload counted ${opensOf(stranger.id)}`);
+    }, page);
+    await step('playlist-open-count', 'the browser that made the playlist opens it and reloads it without being counted', async () => {
+      await page.goto(BASE + '/');
+      await page.evaluate(
+        (entry) => localStorage.setItem('karaoke-my-playlists', JSON.stringify([entry])),
+        { id: maker.id, name: 'Verify opens maker', editToken: maker.editToken, origin: 'Created' },
+      );
+      await page.goto(`${BASE}/p/${maker.id}`);
+      await waitForBarSong(page, songs[0]);
+      await page.reload();
+      await waitForBarSong(page, songs[0]);
+      if (opensOf(maker.id) !== 0) throw new Error(`the maker was counted ${opensOf(maker.id)}`);
+    }, page);
   },
 
   async playlistChoice(page) {
