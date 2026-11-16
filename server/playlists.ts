@@ -14,6 +14,7 @@ const UNBIASED_BYTE_LIMIT = 256 - (256 % BASE62.length)
 const HOUR_MS = 60 * 60 * 1000
 const ID_ATTEMPTS = 8
 const MAX_OWNED_LISTED = 200
+const REPORT_PLAYLISTS = 100
 
 export type PlaylistWrite = Readonly<{
   name: string
@@ -59,6 +60,35 @@ export type SummaryResult =
   | Readonly<{ kind: 'Found'; summary: PlaylistSummary }>
   | Readonly<{ kind: 'Unknown' }>
 
+export type PlaylistReport = Readonly<{
+  made: Readonly<{
+    total: number
+    live: number
+    deleted: number
+    signedIn: number
+    anonymous: number
+  }>
+  madeDaily: readonly Readonly<{ day: string; created: number }>[]
+  owners: readonly Readonly<{
+    discordId: string | null
+    name: string | null
+    playlists: number
+    live: number
+    opensByOthers: number
+  }>[]
+  playlists: readonly Readonly<{
+    id: string
+    name: string
+    entryCount: number
+    ownerDiscordId: string | null
+    ownerName: string | null
+    createdAt: string
+    deleted: boolean
+    opens: number
+    totalOpens: number
+  }>[]
+}>
+
 export type SessionStore = Readonly<{
   start: (idHash: string, account: Account, expiresAt: Date) => void
   find: (idHash: string) => Account | undefined
@@ -80,6 +110,8 @@ export type PlaylistStore = Readonly<{
   ) => ReplaceResult
   remove: (id: string) => RemoveResult
   summarize: (id: string) => SummaryResult
+  recordOpen: (id: string) => void
+  report: (sinceDay: string) => PlaylistReport
   sessions: SessionStore
 }>
 
@@ -182,6 +214,23 @@ export const openPlaylistStore = ({
       created_at TEXT NOT NULL,
       expires_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS members (
+      discord_id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      seen_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS playlist_opens (
+      playlist_id TEXT NOT NULL,
+      day TEXT NOT NULL,
+      opens INTEGER NOT NULL,
+      PRIMARY KEY (playlist_id, day)
+    );
+    INSERT OR IGNORE INTO members (discord_id, name, seen_at)
+      SELECT discord_id, discord_name, created_at FROM sessions s
+      WHERE rowid = (
+        SELECT rowid FROM sessions WHERE discord_id = s.discord_id
+        ORDER BY created_at DESC, rowid DESC LIMIT 1
+      );
   `)
   const columns = db
     .prepare('PRAGMA table_info(playlists)')
@@ -235,6 +284,14 @@ export const openPlaylistStore = ({
   )
   const selectSession = db.prepare(
     'SELECT discord_id, discord_name FROM sessions WHERE id_hash = ? AND expires_at > ?',
+  )
+  const upsertMember = db.prepare(
+    `INSERT INTO members (discord_id, name, seen_at) VALUES (?, ?, ?)
+     ON CONFLICT (discord_id) DO UPDATE SET name = excluded.name, seen_at = excluded.seen_at`,
+  )
+  const upsertOpen = db.prepare(
+    `INSERT INTO playlist_opens (playlist_id, day, opens) VALUES (?, ?, 1)
+     ON CONFLICT (playlist_id, day) DO UPDATE SET opens = opens + 1`,
   )
   const deleteSession = db.prepare('DELETE FROM sessions WHERE id_hash = ?')
   const trimSessions = db.prepare(
@@ -353,12 +410,87 @@ export const openPlaylistStore = ({
       return { kind: 'Found', summary: toSummary(row) }
     },
 
+    recordOpen: id => {
+      upsertOpen.run(id, now().toISOString().slice(0, 10))
+    },
+
+    report: sinceDay => ({
+      made: (
+        db
+          .prepare(
+            `SELECT COUNT(*) AS total,
+                    COUNT(*) FILTER (WHERE deleted_at IS NULL) AS live,
+                    COUNT(*) FILTER (WHERE deleted_at IS NOT NULL) AS deleted,
+                    COUNT(*) FILTER (WHERE owner_discord_id IS NOT NULL) AS signedIn,
+                    COUNT(*) FILTER (WHERE owner_discord_id IS NULL) AS anonymous
+             FROM playlists`,
+          )
+          .all() as unknown as PlaylistReport['made'][]
+      )[0]!,
+      madeDaily: db
+        .prepare(
+          `SELECT substr(created_at, 1, 10) AS day, COUNT(*) AS created
+           FROM playlists WHERE substr(created_at, 1, 10) >= ?
+           GROUP BY day ORDER BY day`,
+        )
+        .all(sinceDay) as unknown as PlaylistReport['madeDaily'][number][],
+      owners: (
+        db
+          .prepare(
+            `SELECT p.owner_discord_id AS discordId, m.name AS name,
+                    COUNT(*) AS playlists,
+                    COUNT(*) FILTER (WHERE p.deleted_at IS NULL) AS live,
+                    COALESCE(SUM(o.opens), 0) AS opensByOthers
+             FROM playlists p
+             LEFT JOIN members m ON m.discord_id = p.owner_discord_id
+             LEFT JOIN (
+               SELECT playlist_id, SUM(opens) AS opens FROM playlist_opens
+               WHERE day >= ? GROUP BY playlist_id
+             ) o ON o.playlist_id = p.id
+             GROUP BY p.owner_discord_id
+             ORDER BY opensByOthers DESC, playlists DESC`,
+          )
+          .all(sinceDay) as unknown as PlaylistReport['owners'][number][]
+      ),
+      playlists: (
+        db
+          .prepare(
+            `SELECT p.id, p.name, p.entries, p.owner_discord_id AS ownerDiscordId,
+                    m.name AS ownerName, p.created_at AS createdAt,
+                    p.deleted_at IS NOT NULL AS deleted,
+                    COALESCE(w.opens, 0) AS opens,
+                    COALESCE(t.opens, 0) AS totalOpens
+             FROM playlists p
+             LEFT JOIN members m ON m.discord_id = p.owner_discord_id
+             LEFT JOIN (
+               SELECT playlist_id, SUM(opens) AS opens FROM playlist_opens
+               WHERE day >= ? GROUP BY playlist_id
+             ) w ON w.playlist_id = p.id
+             LEFT JOIN (
+               SELECT playlist_id, SUM(opens) AS opens FROM playlist_opens
+               GROUP BY playlist_id
+             ) t ON t.playlist_id = p.id
+             ORDER BY opens DESC, p.created_at DESC
+             LIMIT ${REPORT_PLAYLISTS}`,
+          )
+          .all(sinceDay) as unknown as (Omit<
+          PlaylistReport['playlists'][number],
+          'entryCount' | 'deleted'
+        > & { entries: string; deleted: number })[]
+      ).map(({ entries, deleted, ...row }) => ({
+        ...row,
+        entryCount: (JSON.parse(entries) as unknown[]).length,
+        deleted: deleted === 1,
+      })),
+    }),
+
     sessions: {
       start: (idHash, { discordId, name }, expiresAt) => {
         const at = now().toISOString()
         deleteExpiredSessions.run(at)
         insertSession.run(idHash, discordId, name, at, expiresAt.toISOString())
         trimSessions.run(discordId, discordId)
+        upsertMember.run(discordId, name, at)
       },
       find: idHash => {
         const row = selectSession.get(
@@ -408,6 +540,7 @@ export type PlaylistRequest = Readonly<{
   ip: string
   authorization: string | undefined
   viewer: Viewer
+  countOpen: boolean
   body: string
 }>
 export type PlaylistReply = Readonly<{ status: number; body: unknown }>
@@ -545,6 +678,26 @@ export const createPlaylistApi = ({
   const allowCreate = windowLimiter(createsPerIpPerHour, HOUR_MS, now)
   const allowEdit = windowLimiter(editsPerHour, HOUR_MS, now)
   const allowClaim = windowLimiter(claimsPerHour, HOUR_MS, now)
+  const allowOpen = windowLimiter(1, HOUR_MS, now)
+
+  const countOpen = (
+    { ip, viewer, countOpen: asked }: PlaylistRequest,
+    id: string,
+  ) => {
+    if (!asked) return
+    if (
+      viewer.kind === 'Member' &&
+      store.authorizeOwner(id, viewer.discordId) === 'Allowed'
+    ) {
+      return
+    }
+    if (!allowOpen(`${ip} ${id}`)) return
+    try {
+      store.recordOpen(id)
+    } catch (error) {
+      console.error('Could not record a playlist open:', error)
+    }
+  }
 
   const create = ({ ip, viewer, body }: PlaylistRequest) => {
     if (viewer.kind === 'CrossSite') return crossSiteReply
@@ -668,6 +821,7 @@ export const createPlaylistApi = ({
         const read = store.read(id)
         switch (read.kind) {
           case 'Found':
+            countOpen(request, id)
             return reply(200, read.playlist)
           case 'Deleted':
             return deletedReply

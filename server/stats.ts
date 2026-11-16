@@ -1,7 +1,7 @@
 import { DatabaseSync } from 'node:sqlite'
 
 import type { SongForStats } from './db.ts'
-import { windowLimiter } from './playlists.ts'
+import { windowLimiter, type PlaylistReport } from './playlists.ts'
 import {
   DEFAULT_TRAIL_DAYS,
   EXPORT_TABLES,
@@ -688,10 +688,12 @@ export const buildStatReport = (
 export const createStatReport = ({
   store,
   findSongs,
+  playlists,
   now = () => new Date(),
 }: Readonly<{
   store: StatStore
   findSongs: (ids: readonly string[]) => readonly SongForStats[]
+  playlists?: ((sinceDay: string) => PlaylistReport) | undefined
   now?: () => Date
 }>) => {
   return (rawDays: string | null): StatReply => {
@@ -732,6 +734,7 @@ export const createStatReport = ({
           moodNames: MOODS,
           moods: buildMoodReport(moods, known),
           moodDaily: buildMoodDays(moods, since, today),
+          ...(playlists && { playlists: playlists(since) }),
         },
       }
     } catch (error) {

@@ -308,6 +308,7 @@ const harness = (
       ip,
       authorization: undefined,
       viewer,
+      countOpen: false,
       body: typeof body === 'string' ? body : JSON.stringify(body),
     })
   const send = (
@@ -324,6 +325,7 @@ const harness = (
       ip,
       authorization: token === undefined ? undefined : `Bearer ${token}`,
       viewer,
+      countOpen: false,
       body: body === undefined ? '' : JSON.stringify(body),
     })
   const as = (viewer: Viewer) => ({
@@ -464,6 +466,7 @@ describe('api', () => {
       ip: '1.1.1.1',
       authorization: undefined,
       viewer: ANONYMOUS,
+      countOpen: false,
       body: JSON.stringify({ name: 'x', songIds: ['s1'] }),
     }
     expect(api(request).status).toBe(503)
@@ -488,6 +491,7 @@ describe('api', () => {
         ip: '1.1.1.1',
         authorization: undefined,
         viewer: ANONYMOUS,
+        countOpen: false,
         body,
       }).status
     expect(post('nope')).toBe(503)
@@ -514,6 +518,7 @@ describe('api', () => {
       ip: '1.1.1.1',
       authorization: undefined,
       viewer: ANONYMOUS,
+      countOpen: false,
       body: '',
     })
     expect(failed.status).toBe(500)
@@ -640,6 +645,7 @@ describe('api', () => {
         ip: '1.1.1.1',
         authorization: undefined,
         viewer: ANONYMOUS,
+        countOpen: false,
         body: '',
       }).status
     expect(call('GET', undefined)).toBe(405)

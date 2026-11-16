@@ -223,7 +223,11 @@ const discordAuth =
 
 const statReport =
   statStore &&
-  createStatReport({ store: statStore, findSongs: findSongsForStats })
+  createStatReport({
+    store: statStore,
+    findSongs: findSongsForStats,
+    playlists: playlistStore && (sinceDay => playlistStore.report(sinceDay)),
+  })
 
 const statExport =
   statStore &&
@@ -631,6 +635,9 @@ const handle = async (req: IncomingMessage, res: ServerResponse) => {
         cookie: req.headers.cookie,
         origin: req.headers.origin,
       }),
+      countOpen:
+        new URL(req.url ?? '/', 'http://localhost').searchParams.get('open') ===
+        '1',
       body,
     })
     return replyJson(status, payload, 'no-store')
