@@ -4841,6 +4841,170 @@
     "songTitle": "Semua Aku Dirayakan",
     "status": "Aligned"
   },
+  "ac67bb53-6b01-405d-8f30-e3bbe5b24789": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lines": [
+      {
+        "atMs": 1780,
+        "text": "Life is a journey"
+      },
+      {
+        "atMs": 4140,
+        "text": "Feelings of hopelessness"
+      },
+      {
+        "atMs": 7440,
+        "text": "Loneliness, she sweeps them all away"
+      },
+      {
+        "atMs": 12520,
+        "text": "Able graceful"
+      },
+      {
+        "atMs": 15420,
+        "text": "And I always keeps her promise"
+      },
+      {
+        "atMs": 20220,
+        "text": "Every end has a new beginning"
+      },
+      {
+        "atMs": 25360,
+        "text": "Unexpected things will happen"
+      },
+      {
+        "atMs": 30720,
+        "text": "There will always be a silver lining"
+      },
+      {
+        "atMs": 35860,
+        "text": ""
+      },
+      {
+        "atMs": 37820,
+        "text": "Times heals all sorrows"
+      },
+      {
+        "atMs": 40520,
+        "text": "Get over, no worries"
+      },
+      {
+        "atMs": 43720,
+        "text": "Because nothing is more precious than love"
+      },
+      {
+        "atMs": 48880,
+        "text": "Noble faithful"
+      },
+      {
+        "atMs": 51480,
+        "text": "She's as pure as the driven snow"
+      },
+      {
+        "atMs": 55400,
+        "text": "Oh dear, heart so sweet"
+      },
+      {
+        "atMs": 59910,
+        "text": ""
+      },
+      {
+        "atMs": 68680,
+        "text": "It's her way of life"
+      },
+      {
+        "atMs": 72300,
+        "text": "No doubt about her sincerity"
+      },
+      {
+        "atMs": 77280,
+        "text": "Uhm-uhm"
+      },
+      {
+        "atMs": 80820,
+        "text": "A fragile beauty, one and the only"
+      },
+      {
+        "atMs": 91100,
+        "text": "She's not only gentle but brave"
+      },
+      {
+        "atMs": 97440,
+        "text": "With honest eyes, it's true"
+      },
+      {
+        "atMs": 102460,
+        "text": "Lost in the labyrinth"
+      },
+      {
+        "atMs": 105180,
+        "text": "Never know what love means"
+      },
+      {
+        "atMs": 108240,
+        "text": "She's truly a treasure, peace of mind"
+      },
+      {
+        "atMs": 113640,
+        "text": "No fears, no more tears"
+      },
+      {
+        "atMs": 116000,
+        "text": "Set the spirit free and stay alive"
+      },
+      {
+        "atMs": 120420,
+        "text": "Oh dear, heart, so please"
+      },
+      {
+        "atMs": 124980,
+        "text": ""
+      },
+      {
+        "atMs": 125600,
+        "text": "Times heals all sorrows"
+      },
+      {
+        "atMs": 128240,
+        "text": "Get over, no worries"
+      },
+      {
+        "atMs": 133420,
+        "text": "Because nothing is more precious than love"
+      },
+      {
+        "atMs": 136620,
+        "text": "Noble faithful"
+      },
+      {
+        "atMs": 139240,
+        "text": "She's as pure as the driven snow"
+      },
+      {
+        "atMs": 143840,
+        "text": "Oh dear, heart so sweet"
+      },
+      {
+        "atMs": 152200,
+        "text": "Never forget her"
+      },
+      {
+        "atMs": 154660,
+        "text": "Don't ever change and stay the same"
+      },
+      {
+        "atMs": 164060,
+        "text": "Oh dear, heart so sweet"
+      },
+      {
+        "atMs": 167520,
+        "text": "Oh dear, heart so sweet"
+      }
+    ],
+    "lrclibId": 11488883,
+    "songTitle": "Violet Snow",
+    "status": "Aligned"
+  },
   "b13ead41-3d5b-4205-880d-f66af27b0625": {
     "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
     "lrclibId": 23453992,
@@ -5005,6 +5169,155 @@
     "reason": "median probability 0.20 is too low",
     "songTitle": "Tanging Dahilan",
     "status": "Rejected"
+  },
+  "b489f4f2-b802-442d-99af-86eac99ed03a": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lines": [
+      {
+        "atMs": 20780,
+        "text": "Life is a journey"
+      },
+      {
+        "atMs": 23120,
+        "text": "Feelings of hopelessness"
+      },
+      {
+        "atMs": 26420,
+        "text": "Loneliness, she sweeps them all away"
+      },
+      {
+        "atMs": 31500,
+        "text": "Able graceful"
+      },
+      {
+        "atMs": 34080,
+        "text": "And I always keeps her promise"
+      },
+      {
+        "atMs": 39220,
+        "text": "Every end has a new beginning"
+      },
+      {
+        "atMs": 45140,
+        "text": "Unexpected things will happen"
+      },
+      {
+        "atMs": 49800,
+        "text": "There will always be a silver lining"
+      },
+      {
+        "atMs": 53940,
+        "text": "Times heals all sorrows"
+      },
+      {
+        "atMs": 59500,
+        "text": "Get over, no worries"
+      },
+      {
+        "atMs": 64660,
+        "text": "Because nothing is more precious than love"
+      },
+      {
+        "atMs": 67820,
+        "text": "Noble faithful"
+      },
+      {
+        "atMs": 70520,
+        "text": "She's as pure as the driven snow"
+      },
+      {
+        "atMs": 74260,
+        "text": "Oh dear, heart so sweet"
+      },
+      {
+        "atMs": 86800,
+        "text": "It's her way of life"
+      },
+      {
+        "atMs": 90400,
+        "text": "No doubt about her sincerity"
+      },
+      {
+        "atMs": 99400,
+        "text": "A fragile beauty, one and the only"
+      },
+      {
+        "atMs": 110580,
+        "text": "She's not only gentle but brave"
+      },
+      {
+        "atMs": 116320,
+        "text": "With honest eyes, it's true"
+      },
+      {
+        "atMs": 120460,
+        "text": "Lost in the labyrinth"
+      },
+      {
+        "atMs": 123960,
+        "text": "Never know what love means"
+      },
+      {
+        "atMs": 127460,
+        "text": "She's truly a treasure, peace of mind"
+      },
+      {
+        "atMs": 132380,
+        "text": "No fears, no more tears"
+      },
+      {
+        "atMs": 135020,
+        "text": "Set the spirit free and stay alive"
+      },
+      {
+        "atMs": 138560,
+        "text": "Oh dear, heart, so please"
+      },
+      {
+        "atMs": 141900,
+        "text": "Times heals all sorrows"
+      },
+      {
+        "atMs": 147280,
+        "text": "Get over, no worries"
+      },
+      {
+        "atMs": 150480,
+        "text": "Because nothing is more precious than love"
+      },
+      {
+        "atMs": 155620,
+        "text": "Noble faithful"
+      },
+      {
+        "atMs": 158280,
+        "text": "She's as pure as the driven snow"
+      },
+      {
+        "atMs": 162380,
+        "text": "Oh dear, heart so sweet"
+      },
+      {
+        "atMs": 167200,
+        "text": "And now and forever"
+      },
+      {
+        "atMs": 174620,
+        "text": "Never forget her"
+      },
+      {
+        "atMs": 178820,
+        "text": "Don't ever change and stay the same"
+      },
+      {
+        "atMs": 183920,
+        "text": "Oh dear, heart so sweet"
+      }
+    ],
+    "lrclibId": 11488883,
+    "note": "Lines at 86.8, 90.4 and 99.4 s set by hand from a word-level Whisper transcript; the aligner had put A fragile beauty at 77.3 s over her talking and dropped the two lines before it. Rerunning the batch on this song undoes this.",
+    "songTitle": "Violet Snow",
+    "status": "Aligned"
   },
   "b593d509-80df-40ed-ae39-116cb55c90b7": {
     "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
@@ -6161,6 +6474,13 @@
     "lrclibId": 23646799,
     "reason": "no line was sung clearly",
     "songTitle": "Miniatur",
+    "status": "Rejected"
+  },
+  "db554e27-3bee-4db3-a404-c83180ee6ed6": {
+    "aligner": "stable-ts 2.19.1 whisper-small, demucs 4.1.0 htdemucs",
+    "lrclibId": 11488883,
+    "reason": "3 weak lines in a row, a section was probably skipped",
+    "songTitle": "Violet Snow",
     "status": "Rejected"
   },
   "dc8560be-6814-4961-bc12-e2202ae30bbd": {
