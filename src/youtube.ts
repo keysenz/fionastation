@@ -134,8 +134,7 @@ const attemptApi = (): Promise<YouTubeApi> =>
 
 const loadApi = Effect.tryPromise(attemptApi)
 
-/** The API once any attempt has loaded it. A player that mounts while the
- *  script is failing waits here, and the play that retries the script wakes it. */
+// NOTE: a player that mounts while the script is failing waits here, and the play that retries the script wakes it.
 const loadedApi: Effect.Effect<YouTubeApi> = loadApi.pipe(
   Effect.ignore,
   Effect.andThen(

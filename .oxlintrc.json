@@ -2,6 +2,7 @@
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "extends": ["./node_modules/@foldkit/oxlint-plugin/recommended.json"],
   "plugins": ["typescript"],
+  "jsPlugins": [{ "name": "comments", "specifier": "./lint/comments.mjs" }],
   "categories": {
     "correctness": "off"
   },
@@ -23,7 +24,8 @@
     "sort-imports": [
       "error",
       { "ignoreDeclarationSort": true, "ignoreCase": false }
-    ]
+    ],
+    "comments/note-or-section": "error"
   },
   "ignorePatterns": [
     "dist/",
