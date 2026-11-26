@@ -28,6 +28,7 @@ import {
   nowSingingOf,
   queueHandleId,
   songOnBar,
+  songProgressOf,
 } from './karaoke'
 import { barLineOf, lyricsColumnView, lyricsWindowView } from './lyricsView.ts'
 import { MOODS, type Mood, MoodPrompt } from './moodPrompt.ts'
@@ -1376,6 +1377,74 @@ const playControlView = (
   })
 }
 
+const formatClock = (seconds: number): string => {
+  const whole = Math.max(0, Math.floor(seconds))
+  const rest = whole % 60
+  return `${Math.floor(whole / 60)}:${rest < 10 ? '0' : ''}${rest}`
+}
+
+const songBarView = (
+  maybeProgress: ReturnType<typeof songProgressOf>,
+  h: HtmlBuilder<Message>,
+): Html =>
+  h.div(
+    [
+      h.Class(
+        'absolute top-0 left-0 right-0 h-1 hover:h-1.5 bg-white/10 group transition-all',
+      ),
+    ],
+    Option.match(maybeProgress, {
+      onNone: () => [],
+      onSome: ({ startSeconds, endSeconds, seconds }) => {
+        const length = Math.max(1, Math.floor(endSeconds - startSeconds))
+        const elapsed = Math.min(length, Math.max(0, seconds - startSeconds))
+        return [
+          h.div([
+            h.Class('h-full bg-sky-500 group-hover:bg-sky-400'),
+            h.Style({ width: `${(elapsed / length) * 100}%` }),
+          ]),
+          h.input([
+            h.Type('range'),
+            h.Min('0'),
+            h.Max(`${length}`),
+            h.Step('1'),
+            h.Value(`${Math.floor(elapsed)}`),
+            h.AriaLabel('Position in song'),
+            h.Attribute(
+              'aria-valuetext',
+              `${formatClock(elapsed)} of ${formatClock(length)}`,
+            ),
+            h.DataAttribute('song-bar', ''),
+            h.OnInput(value =>
+              Message.ChangedSongPosition({ seconds: Number(value) }),
+            ),
+            h.Class(
+              'absolute -top-2 left-0 w-full h-5 m-0 opacity-0 cursor-pointer',
+            ),
+          ]),
+        ]
+      },
+    }),
+  )
+
+const songClockView = (
+  maybeProgress: ReturnType<typeof songProgressOf>,
+  h: HtmlBuilder<Message>,
+): Html =>
+  Option.match(maybeProgress, {
+    onNone: () => h.empty,
+    onSome: ({ startSeconds, endSeconds, seconds }) =>
+      h.span(
+        [
+          h.DataAttribute('song-clock', ''),
+          h.Class('hidden md:block text-xs text-gray-300 tabular-nums'),
+        ],
+        [
+          `${formatClock(Math.min(endSeconds, seconds) - startSeconds)} / ${formatClock(endSeconds - startSeconds)}`,
+        ],
+      ),
+  })
+
 const playerBarView = (
   nowPlaying: NowPlaying,
   model: Model,
@@ -1401,29 +1470,7 @@ const playerBarView = (
       ),
     ],
     [
-      h.div(
-        [
-          h.Class(
-            'absolute top-0 left-0 right-0 h-1 bg-white/10 cursor-pointer group',
-          ),
-        ],
-        [
-          h.div(
-            [
-              h.Class(
-                'h-full bg-sky-500 w-0 group-hover:bg-sky-400 relative transition-all duration-300',
-              ),
-            ],
-            [
-              h.div([
-                h.Class(
-                  'absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full opacity-0 group-hover:opacity-100 shadow-lg scale-0 group-hover:scale-100 transition-all',
-                ),
-              ]),
-            ],
-          ),
-        ],
-      ),
+      songBarView(songProgressOf(model), h),
       h.div(
         [
           h.Class(
@@ -1575,6 +1622,7 @@ const playerBarView = (
           h.div(
             [h.Class('flex items-center sm:contents')],
             [
+              songClockView(songProgressOf(model), h),
               repeatButtonView(model.repeat, '', h),
               muteButtonView(model.volume, h),
               volumeSliderView(model.volume, 'hidden sm:block w-24', h),
