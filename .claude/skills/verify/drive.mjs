@@ -2610,6 +2610,81 @@ const journeys = {
     });
   },
 
+  async songBar(page) {
+    const { body: videos } = await pageVideos();
+    const live = displayOrder(videos).filter((v) => !v.is_gone);
+    const stream = live.find((v) => v.karaoke_song.length >= 3);
+    const cover = live.find((v) => v.kind === 'cover' && v.karaoke_song.length === 1);
+    if (!stream || !cover) throw new Error('the data has no live stream and cover');
+    const bar = page.locator('[data-player-bar]');
+    const slider = bar.locator('[data-song-bar]');
+    const playerSeconds = () =>
+      page.evaluate(() => window.YT.get(document.querySelector('iframe[src*="youtube"]').id).getCurrentTime());
+    const playerDuration = () =>
+      page.evaluate(() => window.YT.get(document.querySelector('iframe[src*="youtube"]').id).getDuration());
+    const sliderState = () =>
+      page.evaluate(() => {
+        const input = document.querySelector('[data-player-bar] [data-song-bar]');
+        return input ? { value: Number(input.value), max: Number(input.max), text: input.getAttribute('aria-valuetext') } : null;
+      });
+    const barIsFilled = (above) =>
+      page.waitForFunction((min) => {
+        const input = document.querySelector('[data-player-bar] [data-song-bar]');
+        return Boolean(input) && Number(input.value) > min;
+      }, above, { timeout: 30000 });
+    const seekedNear = (want) =>
+      page.waitForFunction((target) => {
+        const t = window.YT.get(document.querySelector('iframe[src*="youtube"]').id).getCurrentTime();
+        return t >= target - 2 && t < target + 12;
+      }, want, { timeout: 20000 }).catch(async () => {
+        throw new Error(`wanted about ${want}s, the player is at ${await playerSeconds()}s`);
+      });
+    const play = async (video, song) => {
+      await (await songRowOf(page, videos, { ...song, video_url: video.video_url })).click();
+      await playerReady(page);
+      await playVideo(page);
+      await videoLoads(page, [video.video_url], { startSeconds: secondsOf(song.timestamp), isPlaying: true });
+    };
+    const sorted = songRows([stream]).toSorted((a, b) => secondsOf(a.timestamp) - secondsOf(b.timestamp));
+    const [, second, third] = sorted;
+    await page.goto(BASE + '/');
+    await videoRows(page).first().waitFor();
+    await play(stream, second);
+    await step('songBar', 'a song in a stream fills the bar from its own start to the next song, and the bar moves as it plays', async () => {
+      await barIsFilled(0);
+      const state = await sliderState();
+      const length = secondsOf(third.timestamp) - secondsOf(second.timestamp);
+      if (state.max !== length) throw new Error(`max ${state.max}, expected ${length}`);
+      if (!/ of /.test(state.text)) throw new Error(`value text ${state.text}`);
+      await page.screenshot({ path: join(out, 'song-bar-stream.png') });
+    }, page);
+    await step('songBar', 'moving the bar seeks the same video to that point of the song', async () => {
+      const into = Math.floor((secondsOf(third.timestamp) - secondsOf(second.timestamp)) / 2);
+      await slider.fill(String(into));
+      await seekedNear(secondsOf(second.timestamp) + into);
+      if ((await loadedVideoId(page)) !== stream.video_url) throw new Error('the video changed');
+      if ((await page.locator('iframe[src*="youtube"]').count()) !== 1) throw new Error('more than one player');
+      await page.screenshot({ path: join(out, 'song-bar-stream-seeked.png') });
+    }, page);
+    const coverSong = cover.karaoke_song[0];
+    await play(cover, coverSong);
+    await step('songBar', 'a cover fills the bar from its timestamp to the end of its video', async () => {
+      await barIsFilled(0);
+      const duration = await playerDuration();
+      const state = await sliderState();
+      const length = duration - secondsOf(coverSong.timestamp);
+      if (Math.abs(state.max - length) > 2) throw new Error(`max ${state.max}, expected about ${length}`);
+      await page.screenshot({ path: join(out, 'song-bar-cover.png') });
+    }, page);
+    await step('songBar', 'moving a cover bar seeks that far into the cover', async () => {
+      const state = await sliderState();
+      const into = Math.floor(state.max * 0.6);
+      await slider.fill(String(into));
+      await seekedNear(secondsOf(coverSong.timestamp) + into);
+      await page.screenshot({ path: join(out, 'song-bar-cover-seeked.png') });
+    }, page);
+  },
+
   async volume(page) {
     const { body: videos } = await pageVideos();
     const singles = videos.filter((v) => isSingleSong(videos, v.video_url));

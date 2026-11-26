@@ -21,7 +21,7 @@ Run the check if you change any of these:
 - `update`, `updateModel`, `withLoadTimeout`, `seekBeside`, `playheadOf`, `progressed`, `pickAnotherVideo`, `skipGoneVideo`, `failCurrentLoad`, `retryCurrentLoad`, `songOnBar`, `changeSetlist`, `recordFromPlayer`, `continuationOf`, `nowSingingOf`, or a Message or Command in `src/page/karaoke/karaoke.ts`.
 - `PlayerEvent` or `videoEvents` in `src/youtube.ts`. These define which events the explorer may send. See "Updating".
 - `Phase`, `intentOf`, `planAdvance`, `applyAdvance`, `planSkip`, `applySkip`, `play`, `playNext`, `playPrevious`, `failLoad`, `retryLoad`, `settleGone`, `loadRetryDelaySeconds`, the `report*` functions or `firstSongOfEachOtherLiveVideo` in `src/page/karaoke/setlist.ts`. Run the `karaoke-queue` skill for these too.
-- `segmentAt`, `segmentOf`, `songBeside` or `endSecondsOf` in `src/lyrics.ts`.
+- `segmentAt`, `segmentOf`, `songBeside`, `songSpanOf` or `endSecondsOf` in `src/lyrics.ts`, or `songProgressOf` and `seekIntoSong` in `src/page/karaoke/karaoke.ts`.
 
 ## Run
 
@@ -50,7 +50,7 @@ Exit code 0 means that every property passes, except any known findings listed b
   - `single` (`solo`) and `duet`: one song each, at 0:30.
   - `gone`: the server already reports it gone (`lost`).
 - **Settings.** Autoplay is on or off, and repeat is Off, All or One. Each combination is its own root, and no step changes it.
-- **Visitor.** The visitor can click any song that is not gone, add a song to the queue only while the queue is empty (Previous can still make the queue longer), play or remove queue slot 0, and use Next, Previous, the seek keys (10 seconds either way) and toast dismiss. The middle button follows the phase as `view.ts` draws it: Play/Pause for a live play (`Loading`, `Playing`, `Paused`), Retry for `LoadFailed`, and nothing to click for `MovingOn` and `Gone`. Gone songs are disabled in `view.ts`, so they cannot be clicked.
+- **Visitor.** The visitor can click any song that is not gone, add a song to the queue only while the queue is empty (Previous can still make the queue longer), play or remove queue slot 0, and use Next, Previous, the seek keys (10 seconds either way), the song bar (`ChangedSongPosition` of 0 and 100000 seconds) and toast dismiss. The middle button follows the phase as `view.ts` draws it: Play/Pause for a live play (`Loading`, `Playing`, `Paused`), Retry for `LoadFailed`, and nothing to click for `MovingOn` and `Gone`. Gone songs are disabled in `view.ts`, so they cannot be clicked.
 - **Player.** Events for the current play arrive in the order that `loadedVideoEvents` in `src/youtube.ts` emits them:
   - `Ready` comes first. `VideoGone` and `LoadFailed` can come before it.
   - After `Ready`, the player can send `Playing`, `Paused`, `VideoGone`, `LoadFailed` and `Progressed` at any time.
@@ -58,6 +58,7 @@ Exit code 0 means that every property passes, except any known findings listed b
   - `Progressed` reports one of these seconds. For `stream`: 0, 60, 120, 180, 240, 300 and 360, which are each song's start, a point inside each song, and a point before the first song. For the single-song videos: 30 and 90.
   - `Ended` arrives only after the playhead has passed the start of the video's last song, because YouTube ends a video at its end.
 - **Statistics.** `withoutPlayStats` resets `listens`, `maybeTrail` and `moodPrompt` after every step and drops the `RecordStat`, `RecordDecision` and `RecordMoodVote` Commands. Listens are reset, so the mood prompt's `heard` count would grow with every play and multiply the explored states if it were kept. The mood prompt has its own tests in `moodPrompt.test.ts` and `story.test.ts`.
+- **Video length.** The explorer never sends `DurationKnown`, so `maybeDuration` stays empty and the last song of a video ends at its start plus six minutes. `songSpanOf` has unit tests in `lyrics.test.ts`, and `story.test.ts` covers the stored length.
 - **Replaced players.** A replaced player can deliver any event at any time. `update` only checks whether a playId equals the current one, so one older playId stands for all older playIds.
 - **Command results.**
   - `PickRandomVideo` stays pending with the candidates it was issued with, and the explorer tries each candidate as the result. Several picks can be pending at once.
@@ -84,6 +85,7 @@ Exit code 0 means that every property passes, except any known findings listed b
 | `next-plays-queue-then-stream-then-other-video` | With a known playhead inside a song, Next does one of three things. With songs queued, it plays the queue head. With an empty queue, it sends `SeekPlayer` to the next song of the same video, with the same play, queue and history. With no later song in the video, it asks for one `PickRandomVideo` for the current play, among the first songs of the other live videos in archive order. A play that is not live (its load failed or its stream is gone) never seeks, so Next goes to the queue or another video. |
 | `previous-seeks-in-stream-then-history` | With a known playhead inside a song, Previous seeks to the song before it in the same video. On the video's first song, or when the play is not live, it plays the newest history song and puts the current song at the front of the queue, unless its stream is gone. A song whose load failed is put there like any other. With no history, it does nothing. |
 | `next-and-previous-with-unknown-playhead` | Before the first `Progressed`, Next and Previous move within the stream from the start of the clicked song, where the play began. With the playhead before the first song, Next seeks to the first song. |
+| `song-bar-seeks-inside-the-song` | Moving the song bar seeks a live play to a point between the start and the end of the song at the playhead, through a seek that keeps the setlist. With no known playhead or a play that cannot sound, it does nothing. |
 | `seek-never-reloads` | Every `SeekPlayer` keeps the playId and song, so the `nowPlayingVideo` subscription does not reload the video. The model's playhead is the seek target, and `nowSingingOf` names the song at that point. |
 | `seek-key-moves-ten-seconds` | The seek keys move a live play ten seconds from a known playhead, never before 0, through a seek that keeps the setlist. With no known playhead or a play that cannot sound, they do nothing. |
 | `gone-video-never-auto-starts` | A `PickRandomVideo` never offers the current video or a gone video, which includes one that failed this session. An archive advance never starts a gone video. A song from the queue and a repeat replay are excluded, because they play whatever the visitor chose. |

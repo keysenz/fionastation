@@ -219,6 +219,7 @@ function transitions(state) {
     user(K.Message.ClickedNext(), 'ClickedNext');
     user(K.Message.ClickedPrevious(), 'ClickedPrevious');
     for (const by of [10, -10]) user(K.Message.PressedSeekKey({ by }), `PressedSeekKey(${by})`, { by });
+    for (const seconds of [0, 100000]) user(K.Message.ChangedSongPosition({ seconds }), `ChangedSongPosition(${seconds})`, { seconds });
   }
   if (some(model.maybeSkipToast)) user(K.Message.ClickedDismissToast(), 'ClickedDismissToast');
   if (!env.refetched && pending.some((item) => item.kind === 'pick')) {
@@ -440,6 +441,23 @@ const PROPERTIES = {
       }
       const expected = Math.max(0, seconds + t.by);
       if (seeks.length !== 1 || seeks[0].args.seconds !== expected) return `at ${seconds}s ${t.label} sought ${JSON.stringify(seeks.map((c) => c.args.seconds))}, expected ${expected}`;
+      if (!sameSetlist(pre, post)) return 'the setlist changed, so the video reloaded or the queue moved';
+    },
+  },
+  'song-bar-seeks-inside-the-song': {
+    promise: 'Moving the song bar seeks a live play to a point inside the song at the playhead, from its start to its end, through a seek that never reloads. With no known playhead or a play that cannot sound, it does nothing.',
+    check(pre, t, post) {
+      if (!t.label.startsWith('ChangedSongPosition')) return;
+      const now = nowOf(pre.model);
+      const seconds = playheadOf(pre.model);
+      const sung = seconds === undefined || !now ? undefined : sungAt(now.song.video_url, seconds);
+      const seeks = named(post.commands, 'SeekPlayer');
+      if (!now || !isLive(now) || !sung) {
+        if (post.commands.length || !same(post.model, pre.model)) return `${t.label} did something with ${!now ? 'nothing playing' : !isLive(now) ? `a ${tagOf(now)} play` : 'no sung song'}`;
+        return;
+      }
+      const expected = Math.min(endOf(sung), Math.max(startOf(sung), startOf(sung) + t.seconds));
+      if (seeks.length !== 1 || seeks[0].args.seconds !== expected) return `at ${seconds}s in ${sung.id} ${t.label} sought ${JSON.stringify(seeks.map((c) => c.args.seconds))}, expected ${expected}`;
       if (!sameSetlist(pre, post)) return 'the setlist changed, so the video reloaded or the queue moved';
     },
   },
@@ -802,6 +820,8 @@ const MUTANTS = [
   { property: 'seek-key-moves-ten-seconds', file: 'src/page/karaoke/karaoke.ts', from: 'seconds: Math.max(0, seconds + by),', to: 'seconds: seconds + by,' },
   { property: 'seek-key-moves-ten-seconds', file: 'src/page/karaoke/karaoke.ts', from: 'seconds: Math.max(0, seconds + by),', to: 'seconds: Math.max(0, seconds - by),' },
   { property: 'seek-key-moves-ten-seconds', file: 'src/page/karaoke/karaoke.ts', from: '      Option.filter(model.setlist.maybeNowPlaying, ({ phase }) =>\n        Option.isSome(intentOf(phase)),\n      ),\n      nowPlaying =>\n        Option.map(playheadOf(model, nowPlaying), ({ seconds }) => ({', to: '      Option.filter(model.setlist.maybeNowPlaying, () => true),\n      nowPlaying =>\n        Option.map(playheadOf(model, nowPlaying), ({ seconds }) => ({' },
+  { property: 'song-bar-seeks-inside-the-song', file: 'src/page/karaoke/karaoke.ts', from: '          at: Math.min(\n            endSeconds,\n            Math.max(startSeconds, startSeconds + seconds),\n          ),', to: '          at: startSeconds + seconds,' },
+  { property: 'song-bar-seeks-inside-the-song', file: 'src/page/karaoke/karaoke.ts', from: 'Option.map(songProgressOf(model), ({ startSeconds, endSeconds }) => ({', to: 'Option.map(Option.some({ startSeconds: 0, endSeconds: 360 }), ({ startSeconds, endSeconds }) => ({' },
   { property: 'seek-never-reloads', file: 'src/page/karaoke/karaoke.ts', from: 'const moved = progressed(model, nowPlaying.playId, seconds)', to: 'const moved = { model }' },
   { property: 'gone-video-never-auto-starts', file: 'src/page/karaoke/setlist.ts', from: 'song => !isGone(song) && song.video_url !== current.video_url,', to: 'song => song.video_url !== current.video_url,' },
   { property: 'gone-video-never-auto-starts', file: 'src/page/karaoke/karaoke.ts', from: 'isGone: song => goneIds.has(song.video_url),', to: 'isGone: () => false,' },

@@ -74,6 +74,7 @@ export const PlayerEvent = defineTaggedUnion({
   VideoGone: {},
   LoadFailed: { reason: LoadFailure },
   Progressed: { seconds: Schema.Number },
+  DurationKnown: { seconds: Schema.Number },
 })
 export type PlayerEvent = typeof PlayerEvent.Type
 
@@ -255,11 +256,13 @@ const loadedVideoEvents = (
       const progress: {
         isLoaded: boolean
         lastSeconds: number
+        lastDuration: number
         unstartedTicks: number
         ending: Ending
       } = {
         isLoaded: false,
         lastSeconds: Number.NEGATIVE_INFINITY,
+        lastDuration: 0,
         unstartedTicks: 0,
         ending: 'WaitingForOwnFirstPlay',
       }
@@ -279,6 +282,14 @@ const loadedVideoEvents = (
           progress.ending === 'SwallowingUntilOwnPause'
         ) {
           return
+        }
+        const duration = host.player.getDuration()
+        if (duration > 0 && duration !== progress.lastDuration) {
+          progress.lastDuration = duration
+          Queue.offerUnsafe(
+            queue,
+            PlayerEvent.DurationKnown({ seconds: duration }),
+          )
         }
         if (
           progress.ending === 'Watching' &&

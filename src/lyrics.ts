@@ -55,6 +55,11 @@ export const Playhead = Schema.Struct({
 })
 export type Playhead = typeof Playhead.Type
 
+export const VideoDuration = Schema.Struct({
+  playId: Schema.Number,
+  seconds: Schema.Number,
+})
+
 export const NUDGE_LIMIT = 40
 export const NUDGE_STEP_MS = 500
 
@@ -141,6 +146,26 @@ export const endSecondsOf = (segment: Segment): number =>
     segment.maybeEndSeconds,
     () => segment.startSeconds + LAST_SONG_SECONDS,
   )
+
+/** Where a song sits in its video, for a progress bar. The last song of a video ends with the video once YouTube has reported its length. */
+export const songSpanOf = (
+  segment: Segment,
+  maybeVideoSeconds: Option.Option<number>,
+): Readonly<{ startSeconds: number; endSeconds: number }> => {
+  const endSeconds = Option.getOrElse(segment.maybeEndSeconds, () =>
+    Option.match(
+      Option.filter(
+        maybeVideoSeconds,
+        seconds => seconds > segment.startSeconds,
+      ),
+      {
+        onNone: () => endSecondsOf(segment),
+        onSome: seconds => seconds,
+      },
+    ),
+  )
+  return { startSeconds: segment.startSeconds, endSeconds }
+}
 
 export const segmentOf = (
   archive: ReadonlyArray<PlayableSong>,

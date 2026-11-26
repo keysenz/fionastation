@@ -195,6 +195,11 @@ const playLoaded = async () => {
 const progressedTo = (events: ReadonlyArray<PlayerEvent>, seconds: number) =>
   events.some(event => event._tag === 'Progressed' && event.seconds === seconds)
 
+const durationsOf = (events: ReadonlyArray<PlayerEvent>) =>
+  events.flatMap(event =>
+    event._tag === 'DurationKnown' ? [event.seconds] : [],
+  )
+
 const tagsAfterFirstEnd = (events: ReadonlyArray<PlayerEvent>) =>
   tagsOf(events).slice(tagsOf(events).indexOf('Ended'))
 
@@ -265,4 +270,23 @@ test('a play near its end that another load replaced does not pause the new vide
   report(PLAYING, 0.2)
   await vi.waitFor(() => expect(progressedTo(next, 0.2)).toBe(true))
   expect(youTube.clock.pauses).toBe(0)
+})
+
+test('a video reports its length once it is known, and again when it changes', async () => {
+  const { events, clock, report } = await playLoaded()
+  report(PLAYING, 1)
+  await vi.waitFor(() => expect(durationsOf(events)).toEqual([DURATION]))
+  report(PLAYING, 2)
+  expect(durationsOf(events)).toEqual([DURATION])
+  clock.duration = 120
+  report(PLAYING, 3)
+  await vi.waitFor(() => expect(durationsOf(events)).toEqual([DURATION, 120]))
+})
+
+test('a video whose length is not known yet reports none', async () => {
+  const { events, clock, report } = await playLoaded()
+  clock.duration = 0
+  report(PLAYING, 1)
+  await vi.waitFor(() => expect(progressedTo(events, 1)).toBe(true))
+  expect(durationsOf(events)).toEqual([])
 })

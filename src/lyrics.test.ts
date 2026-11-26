@@ -16,6 +16,7 @@ import {
   parseNudges,
   segmentAt,
   songBeside,
+  songSpanOf,
   toNudgesJson,
   translationCursorAt,
   translationOf,
@@ -278,4 +279,41 @@ test('a translation decodes on both variants', () => {
     )
   expect(languageOf(missing)).toEqual(Option.some('id'))
   expect(languageOf(synced)).toEqual(Option.some('id'))
+})
+
+test('a song with a next song in the stream ends where the next begins', () => {
+  const first = Option.getOrThrow(
+    segmentAt([song('a', '1:00'), song('b', '3:00')], song('a', '1:00'), 70),
+  )
+  expect(songSpanOf(first, Option.some(1000))).toEqual({
+    startSeconds: 60,
+    endSeconds: 180,
+  })
+})
+
+test('the last song of a video ends at the video duration when it is known', () => {
+  const only = Option.getOrThrow(
+    segmentAt([song('a', '0:30', 'v2')], song('a', '0:30', 'v2'), 40),
+  )
+  expect(songSpanOf(only, Option.some(200))).toEqual({
+    startSeconds: 30,
+    endSeconds: 200,
+  })
+})
+
+test('the last song falls back to six minutes before the duration is known', () => {
+  const only = Option.getOrThrow(
+    segmentAt([song('a', '0:30', 'v2')], song('a', '0:30', 'v2'), 40),
+  )
+  expect(songSpanOf(only, Option.none())).toEqual({
+    startSeconds: 30,
+    endSeconds: 390,
+  })
+})
+
+test('a duration that is not past the start does not make an empty span', () => {
+  const only = Option.getOrThrow(
+    segmentAt([song('a', '1:00', 'v2')], song('a', '1:00', 'v2'), 70),
+  )
+  expect(songSpanOf(only, Option.some(30)).endSeconds).toBeGreaterThan(60)
 })
