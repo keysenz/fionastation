@@ -1453,7 +1453,6 @@ const durationOf = (
     ({ seconds }) => seconds,
   )
 
-/** Where the playhead sits in the song being sung, for the bar's progress. */
 export const songProgressOf = (
   model: Model,
 ): Option.Option<
