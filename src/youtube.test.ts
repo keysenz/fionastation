@@ -49,7 +49,6 @@ const makeYouTube = () => {
 const scriptRequests: Array<HTMLScriptElement> = []
 const running: Array<Fiber.Fiber<unknown, unknown>> = []
 
-/** Stands in for the network: the script either arrives with the API or errors. */
 const answerScript = (
   script: HTMLScriptElement | undefined,
   answer: 'Arrives' | 'Fails',

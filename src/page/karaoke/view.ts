@@ -125,7 +125,7 @@ const equalizerView = (isPlaying: boolean, h: HtmlBuilder<Message>): Html =>
     h.AriaHidden(true),
   ])
 
-/** Marks the literal query inside a title; a fuzzy match has no literal span, so it shows plain. */
+// NOTE: a fuzzy match has no literal span, so it shows plain.
 const highlightedView = (
   text: string,
   query: string,
@@ -1295,7 +1295,6 @@ const LOAD_FAILURE_TEXT: Record<LoadFailure, string> = {
   VideoUnplayable: 'This video did not load',
 }
 
-/** What the bar says in place of the song's kind while the song cannot sound. */
 const troubleOf = ({ phase, attempt }: NowPlaying): Option.Option<string> =>
   Phase.matchOrElse(
     phase,
@@ -1314,8 +1313,6 @@ const troubleOf = ({ phase, attempt }: NowPlaying): Option.Option<string> =>
     () => Option.none<string>(),
   )
 
-/** The middle button of the bar and of the phone controls. It plays or pauses a
- *  video that can sound, and otherwise shows why it cannot. */
 const playControlView = (
   { phase }: NowPlaying,
   shapeClass: string,

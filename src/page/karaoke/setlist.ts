@@ -117,8 +117,7 @@ const startPlay = (
     playCount: count => count + 1,
   })
 
-/** The song being left, unless its stream is gone. A gone song is neither
- *  history nor queued again. A song whose load failed is still a real song. */
+// NOTE: a gone song is neither history nor queued again, but a song whose load failed is still a real song.
 const leftSong = (setlist: Setlist): Option.Option<PlayableSong> =>
   Option.flatMap(setlist.maybeNowPlaying, ({ song, phase }) =>
     isStreamGone(phase) ? Option.none() : Option.some(song),
@@ -518,9 +517,7 @@ export const firstSongOfEachOtherLiveVideo = (
     (first, second) => first.video_url === second.video_url,
   )
 
-/** Nothing of the current video is left: YouTube ends a video only at its end,
- *  and a dead one cannot play. With autoplay on, a random other live video plays
- *  from its first song. */
+// NOTE: nothing of the current video is left here, because YouTube ends a video only at its end and a dead one cannot play.
 const planFromArchive = (
   continuation: Continuation,
   current: PlayableSong,

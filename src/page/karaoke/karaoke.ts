@@ -1751,7 +1751,7 @@ const pickAnotherVideo = (
       }),
   })
 
-/** Only a saved "false" turns autoplay off, so missing or corrupt data keeps it on. */
+// NOTE: only a saved "false" turns autoplay off, so missing or corrupt data keeps it on.
 const parseAutoplay = (maybeValue: Option.Option<string>): boolean =>
   !Option.contains(maybeValue, 'false')
 
@@ -1799,17 +1799,14 @@ const isModalOpen = (model: Model): boolean =>
   PlaylistOpen.guards.Asking(model.playlistOpen) ||
   !PlaylistDialog.guards.Closed(model.playlistDialog)
 
-/** Anything but a saved mode name means Off, so corrupt data repeats nothing. */
+// NOTE: anything but a saved mode name means Off, so corrupt data repeats nothing.
 const parseRepeat = (maybeValue: Option.Option<string>): Repeat =>
   Option.getOrElse(
     Option.flatMap(maybeValue, Schema.decodeUnknownOption(Repeat)),
     () => 'Off',
   )
 
-/** What the visitor asks for goes through here, which saves it and tells the
- *  player. A player's own reports must not, because telling a player what it
- *  just reported would echo. A new play needs no player Command, because the
- *  `nowPlayingVideo` subscription loads its video. */
+// NOTE: a player's own reports must not come through here, because telling a player what it just reported would echo. A new play needs no player Command, because the `nowPlayingVideo` subscription loads its video.
 const changeSetlist = (model: Model, setlist: Setlist): UpdateReturn => {
   const playbackCommand = Option.flatMap(
     Option.all({
@@ -1884,8 +1881,6 @@ const withToast = (
   }
 }
 
-/** The load of the current play failed. It is tried again by itself after a
- *  wait, while automatic retries are left. */
 const failCurrentLoad = (
   model: Model,
   { playId, attempt }: NowPlaying,
@@ -1901,8 +1896,7 @@ const failCurrentLoad = (
   ),
 })
 
-/** Loads the song on the bar again, which only a failed load allows. The new
- *  playId makes the older retry timer stale. */
+// NOTE: the new playId makes the older retry timer stale.
 const retryCurrentLoad = (
   model: Model,
   by: 'Visitor' | 'Timer',
@@ -1923,8 +1917,6 @@ const currentPlay = (model: Model, playId: number): Option.Option<NowPlaying> =>
     nowPlaying => nowPlaying.playId === playId,
   )
 
-/** YouTube no longer has the video, so it is remembered as gone and the radio
- *  moves on: to the queue head, to a random other video, or nowhere. */
 const skipGoneVideo = (
   model: Model,
   { playId, song: goneSong }: NowPlaying,
@@ -2740,7 +2732,7 @@ const updateModel = (model: Model, message: Message) =>
         : { model },
 
     // NOTE: the previous play's video can still have events on their way, and acting on a late end would skip a song.
-    // A video that failed keeps reporting too, so a play that cannot sound hears only that its stream is gone.
+    // NOTE: a video that failed keeps reporting too, so a play that cannot sound hears only that its stream is gone.
     ReceivedPlayerEvent: ({ playId, event }) =>
       Option.match(
         Option.filter(
@@ -2816,7 +2808,7 @@ const updateModel = (model: Model, message: Message) =>
       ),
 
     // NOTE: a click while the pick was pending changed the playId, and the visitor's choice wins.
-    // A refetch can report the picked video gone after the pick was asked for, so it is drawn again.
+    // NOTE: a refetch can report the picked video gone after the pick was asked for, so it is drawn again.
     CompletedPickRandomVideo: ({ playId, song }) =>
       Option.match(
         Option.filter(
@@ -3560,8 +3552,7 @@ const withPlayStats = (
   }
 }
 
-/** Every new play starts its own load timeout, whatever started the play, so a
- *  load that never reports anything still ends. */
+// NOTE: every new play starts its own load timeout, whatever started the play, so a load that never reports anything still ends.
 const withLoadTimeout = (before: Model, result: UpdateReturn): UpdateReturn =>
   Option.match(
     Option.filter(result.model.setlist.maybeNowPlaying, ({ playId }) =>
