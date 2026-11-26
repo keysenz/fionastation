@@ -64,6 +64,7 @@ import {
   openedPlaylistNameOf,
   ownedOpenedOf,
   update as pageUpdate,
+  songProgressOf,
 } from './karaoke'
 import { layersToUrl, parseLayers } from './layers.ts'
 import { type Mood, MoodPrompt } from './moodPrompt.ts'
@@ -125,7 +126,10 @@ const saved = Command.resolve(SaveSetlist, Message.CompletedSaveSetlist())
 const pickedFor = (song: PlayableSong, playId: number) =>
   Command.resolveAll(
     [SaveSetlist, Message.CompletedSaveSetlist()],
-    [PickRandomVideo, Message.CompletedPickRandomVideo({ playId, song, poolSize: 1 })],
+    [
+      PickRandomVideo,
+      Message.CompletedPickRandomVideo({ playId, song, poolSize: 1 }),
+    ],
   )
 
 const failVideo = (playId: number) =>
@@ -4089,7 +4093,10 @@ const heard = (
 const moodArchiveLoaded = (): Model =>
   pageUpdate(
     init(),
-    Message.SucceededFetchSongs({ songs: [m1, m2, m3, m4, m5], goneVideoIds: [] }),
+    Message.SucceededFetchSongs({
+      songs: [m1, m2, m3, m4, m5],
+      goneVideoIds: [],
+    }),
   ).model
 
 const afterSongs = (
@@ -4266,6 +4273,95 @@ test('a seek key with nothing playing does nothing', () => {
   const sought = seeked(init(), 10)
   expect(sought.model).toEqual(init())
   expect(sought.commands).toBeUndefined()
+})
+
+const durationKnown = (current: Model, seconds: number, playId = 1) =>
+  update(
+    current,
+    Message.ReceivedPlayerEvent({
+      playId,
+      event: PlayerEvent.DurationKnown({ seconds }),
+    }),
+  )
+
+const positioned = (current: Model, seconds: number) =>
+  update(current, Message.ChangedSongPosition({ seconds }))
+
+const progressOf = (current: Model) =>
+  Option.getOrUndefined(songProgressOf(current))
+
+test('a reported video length is kept for its own play only', () => {
+  const known = durationKnown(playingStream(), 600)
+  expect(known.model.maybeDuration).toEqual(
+    Option.some({ playId: 1, seconds: 600 }),
+  )
+  const stale = durationKnown(playingStream(), 600, 99)
+  expect(stale.model.maybeDuration).toEqual(Option.none())
+})
+
+test('the song progress spans from the song start to the next song', () => {
+  expect(progressOf(tick(playingStream(), 70).model)).toEqual({
+    startSeconds: 60,
+    endSeconds: 300,
+    seconds: 70,
+  })
+})
+
+test('the last song of a stream ends with the video once its length is known', () => {
+  const inLate = tick(playingStream(), 310).model
+  expect(progressOf(inLate)?.endSeconds).toBe(660)
+  const known = durationKnown(inLate, 500).model
+  expect(progressOf(known)?.endSeconds).toBe(500)
+})
+
+test('a length reported for an earlier play is not used by a later one', () => {
+  const known = durationKnown(tick(playingStream(), 310).model, 500).model
+  const replayed = update(known, Message.ClickedSong({ song: late })).model
+  expect(progressOf(tick(replayed, 310, 2).model)?.endSeconds).toBe(660)
+})
+
+test('there is no song progress before the first position report', () => {
+  expect(progressOf(playingStream())).toBeUndefined()
+  expect(progressOf(init())).toBeUndefined()
+})
+
+test('moving the song bar seeks that many seconds into the song, in the same play', () => {
+  const inFirst = tick(playingStream(), 70).model
+  const sought = positioned(inFirst, 100)
+  expect(seeksOf(sought)).toEqual([160])
+  expect(sought.model.maybePlayhead).toEqual(
+    Option.some({ playId: 1, seconds: 160 }),
+  )
+  expect(sought.model.setlist).toEqual(inFirst.setlist)
+})
+
+test('moving the song bar past the end of the song names the next song', () => {
+  const inFirst = tick(playingStream(), 70).model
+  const sought = positioned(inFirst, 240)
+  expect(seeksOf(sought)).toEqual([300])
+  expect(singingId(sought.model)).toEqual(Option.some('late'))
+})
+
+test('moving the song bar below its start stays inside the song', () => {
+  const inFirst = tick(playingStream(), 70).model
+  expect(seeksOf(positioned(inFirst, -5))).toEqual([60])
+})
+
+test('moving the song bar with no position report or a failed load does nothing', () => {
+  const clicked = playingStream()
+  const before = positioned(clicked, 10)
+  expect(before.model).toEqual(clicked)
+  expect(before.commands).toBeUndefined()
+  const failed = update(
+    tick(clicked, 70).model,
+    Message.ReceivedPlayerEvent({
+      playId: 1,
+      event: PlayerEvent.LoadFailed({ reason: 'PlayerUnavailable' }),
+    }),
+  ).model
+  const after = positioned(failed, 10)
+  expect(after.model).toEqual(failed)
+  expect(after.commands).toBeUndefined()
 })
 
 const withVolume = (volume: Model['volume']): Model => ({

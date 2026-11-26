@@ -45,6 +45,7 @@ import {
   Nudges,
   Playhead,
   type Segment,
+  VideoDuration,
   cursorAt,
   endSecondsOf,
   msIntoLyrics,
@@ -54,6 +55,7 @@ import {
   segmentAt,
   segmentOf,
   songBeside,
+  songSpanOf,
   toNudgesJson,
   translationCursorAt,
   translationOf,
@@ -285,6 +287,7 @@ export const Model = Schema.Struct({
   maybeSelectedVideoId: Schema.Option(Schema.String),
   maybeQueueDrag: Schema.Option(QueueDrag),
   maybePlayhead: Schema.Option(Playhead),
+  maybeDuration: Schema.Option(VideoDuration),
   listens: Schema.Array(Listen),
   maybeTrail: Schema.Option(TrailSession),
   moodPrompt: MoodPrompt,
@@ -416,6 +419,7 @@ export const Message = defineMessageUnion({
   DraggedOverQueueSlot: { index: Schema.Number },
   DroppedQueueSong: { index: Schema.Number },
   EndedQueueDrag: {},
+  ChangedSongPosition: { seconds: Schema.Number },
   PressedSeekKey: { by: Schema.Literals([-10, 10]) },
   PressedVolumeKey: { by: Schema.Literals([-10, 10]) },
   PressedSearchKey: {},
@@ -1355,6 +1359,7 @@ export const init = (): Model => ({
   maybeSelectedVideoId: Option.none(),
   maybeQueueDrag: Option.none(),
   maybePlayhead: Option.none(),
+  maybeDuration: Option.none(),
   listens: [],
   maybeTrail: Option.none(),
   moodPrompt: initialMoodPrompt(),
@@ -1435,6 +1440,34 @@ export type NowSinging = Readonly<{
   maybeCursor: Option.Option<LyricCursor>
   maybeTranslationCursor: Option.Option<LyricCursor>
 }>
+
+const durationOf = (
+  model: Model,
+  nowPlaying: NowPlaying,
+): Option.Option<number> =>
+  Option.map(
+    Option.filter(
+      model.maybeDuration,
+      ({ playId }) => playId === nowPlaying.playId,
+    ),
+    ({ seconds }) => seconds,
+  )
+
+/** Where the playhead sits in the song being sung, for the bar's progress. */
+export const songProgressOf = (
+  model: Model,
+): Option.Option<
+  Readonly<{ startSeconds: number; endSeconds: number; seconds: number }>
+> =>
+  Option.gen(function* () {
+    const nowPlaying = yield* model.setlist.maybeNowPlaying
+    const playhead = yield* playheadOf(model, nowPlaying)
+    const { segment } = yield* nowSingingOf(model)
+    return {
+      ...songSpanOf(segment, durationOf(model, nowPlaying)),
+      seconds: playhead.seconds,
+    }
+  })
 
 const playheadOf = (
   model: Model,
@@ -1533,6 +1566,27 @@ const seekToSeconds = (
     commands: [...(moved.commands ?? []), SeekPlayer({ seconds })],
   }
 }
+
+const seekIntoSong = (model: Model, seconds: number): UpdateReturn =>
+  Option.match(
+    Option.flatMap(
+      Option.filter(model.setlist.maybeNowPlaying, ({ phase }) =>
+        Option.isSome(intentOf(phase)),
+      ),
+      nowPlaying =>
+        Option.map(songProgressOf(model), ({ startSeconds, endSeconds }) => ({
+          nowPlaying,
+          at: Math.min(
+            endSeconds,
+            Math.max(startSeconds, startSeconds + seconds),
+          ),
+        })),
+    ),
+    {
+      onNone: () => ({ model }),
+      onSome: ({ nowPlaying, at }) => seekToSeconds(model, nowPlaying, at),
+    },
+  )
 
 const seekBy = (model: Model, by: number): UpdateReturn =>
   Option.match(
@@ -2752,6 +2806,11 @@ const updateModel = (model: Model, message: Message) =>
                     failCurrentLoad(model, nowPlaying, reason),
                   Progressed: ({ seconds }) =>
                     progressed(model, playId, seconds),
+                  DurationKnown: ({ seconds }) => ({
+                    model: modifyFields(model, {
+                      maybeDuration: () => Option.some({ playId, seconds }),
+                    }),
+                  }),
                 }),
             }),
         },
@@ -2857,6 +2916,7 @@ const updateModel = (model: Model, message: Message) =>
       commands: [SaveRepeat({ repeat: nextRepeat(model.repeat) })],
     }),
 
+    ChangedSongPosition: ({ seconds }) => seekIntoSong(model, seconds),
     PressedSeekKey: ({ by }) => seekBy(model, by),
 
     PressedVolumeKey: ({ by }) => stepVolume(model, by),
