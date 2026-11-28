@@ -719,25 +719,141 @@ const failureView = (error: string, h: HtmlBuilder<Message>): Html =>
     ],
   )
 
-const spinnerView = (h: HtmlBuilder<Message>): Html =>
+const SKELETON_VIDEO_TITLE_WIDTHS = [
+  'w-11/12',
+  'w-3/4',
+  'w-full',
+  'w-2/3',
+  'w-5/6',
+  'w-3/4',
+  'w-11/12',
+  'w-4/5',
+] as const
+const SKELETON_SONG_TITLE_WIDTHS = [
+  'w-3/5',
+  'w-1/2',
+  'w-2/3',
+  'w-1/2',
+  'w-2/5',
+  'w-3/5',
+] as const
+
+const bone = (className: string, h: HtmlBuilder<Message>): Html =>
+  h.div([
+    h.Class(
+      twMerge('rounded-full bg-white/15 motion-safe:animate-pulse', className),
+    ),
+  ])
+
+const skeletonVideoRowView = (
+  titleWidth: string,
+  h: HtmlBuilder<Message>,
+): Html =>
+  h.li(
+    [
+      h.Class(
+        'flex items-center gap-3 p-2 rounded-xl border border-transparent bg-black/60',
+      ),
+    ],
+    [
+      h.div([
+        h.Class(
+          'w-28 lg:w-32 aspect-video rounded-lg bg-white/10 flex-shrink-0 motion-safe:animate-pulse',
+        ),
+      ]),
+      h.div(
+        [h.Class('flex-1 min-w-0 space-y-2')],
+        [
+          bone(twMerge('h-3.5', titleWidth), h),
+          bone('h-3.5 w-1/2', h),
+          h.div(
+            [h.Class('flex items-center gap-1.5 pt-0.5')],
+            [bone('h-4 w-12 bg-fuchsia-500/25', h), bone('h-3 w-16', h)],
+          ),
+        ],
+      ),
+    ],
+  )
+
+const skeletonSetlistView = (h: HtmlBuilder<Message>): Html =>
   h.div(
-    [h.Class('flex justify-center items-center h-40')],
+    [
+      h.AriaHidden(true),
+      h.Class('hidden md:block flex-1 min-w-0 overflow-hidden pr-12 pb-24'),
+    ],
     [
       h.div(
         [
           h.Class(
-            'flex items-center gap-3 rounded-full bg-black/60 px-5 py-3 text-sm font-semibold text-white backdrop-blur-md',
+            'rounded-2xl border border-white/15 bg-black/75 [container-type:inline-size]',
           ),
         ],
         [
-          h.div([
-            h.Class(
-              'h-5 w-5 animate-spin rounded-full border-b-2 border-white',
-            ),
-          ]),
-          'Loading songs',
+          h.div(
+            [
+              h.Class(
+                'flex flex-col [@container(min-width:26rem)]:flex-row gap-4 p-3 [@container(min-width:26rem)]:p-5',
+              ),
+            ],
+            [
+              h.div([
+                h.Class(
+                  'w-full [@container(min-width:26rem)]:w-36 [@container(min-width:44rem)]:w-60 aspect-video rounded-xl bg-white/10 flex-shrink-0 motion-safe:animate-pulse',
+                ),
+              ]),
+              h.div(
+                [h.Class('flex-1 min-w-0 flex flex-col justify-end gap-3')],
+                [
+                  bone('h-2.5 w-14', h),
+                  bone('h-6 w-11/12', h),
+                  bone('h-6 w-2/3', h),
+                  bone('h-3.5 w-40', h),
+                  bone('h-10 w-44 bg-white/25', h),
+                ],
+              ),
+            ],
+          ),
         ],
       ),
+      h.ul(
+        [h.Class('mt-3 space-y-1 rounded-2xl bg-black/60 p-1.5')],
+        SKELETON_SONG_TITLE_WIDTHS.map(width =>
+          h.li(
+            [h.Class('flex items-center gap-3 min-h-12 px-3 py-1.5')],
+            [
+              h.div([h.Class('flex-shrink-0 w-16')], [bone('h-3 w-12', h)]),
+              bone(twMerge('h-3.5', width), h),
+            ],
+          ),
+        ),
+      ),
+    ],
+  )
+
+const skeletonView = (h: HtmlBuilder<Message>): Html =>
+  h.div(
+    [
+      h.Class('flex h-full min-h-0 md:gap-4 md:pl-2 overflow-hidden'),
+      h.AriaBusy(true),
+    ],
+    [
+      h.p([h.Class('sr-only')], ['Loading songs']),
+      h.div(
+        [
+          h.AriaHidden(true),
+          h.Class('w-full md:w-80 lg:w-96 shrink-0 px-2 pr-12 md:pr-2'),
+        ],
+        [
+          h.div([h.Class('mb-2 h-[22px] w-24 rounded-full bg-black/60')]),
+          h.ul(
+            [h.Class('space-y-1.5')],
+            SKELETON_VIDEO_TITLE_WIDTHS.map(width =>
+              skeletonVideoRowView(width, h),
+            ),
+          ),
+        ],
+      ),
+      skeletonSetlistView(h),
     ],
   )
 
@@ -755,7 +871,7 @@ const headerView = (model: Model, h: HtmlBuilder<Message>): Html =>
               h.h1(
                 [
                   h.Class(
-                    'text-lg sm:text-xl font-bold tracking-tight text-[#446e92] uppercase drop-shadow-md whitespace-nowrap',
+                    'text-lg sm:text-xl font-bold tracking-tight text-[#446e92] uppercase drop-shadow-md whitespace-nowrap max-[359px]:sr-only',
                   ),
                 ],
                 ['Fio Radio'],
@@ -770,31 +886,27 @@ const headerView = (model: Model, h: HtmlBuilder<Message>): Html =>
               h.a(
                 [
                   h.Href(hireRouter()),
+                  h.AriaLabel('Hire Fio'),
                   h.Class(
                     'flex shrink-0 items-center gap-2 min-h-10 px-3 sm:px-4 whitespace-nowrap rounded-full border border-white/15 bg-black/40 text-sm font-semibold text-gray-100 hover:bg-black/70 hover:border-white/30 drop-shadow-md transition',
                   ),
                 ],
                 [
-                  h.span(
-                    [h.Class('hidden sm:inline')],
-                    [h.i([h.Class('fas fa-microphone'), h.AriaHidden(true)])],
-                  ),
-                  'Hire Fio',
+                  h.i([h.Class('fas fa-microphone'), h.AriaHidden(true)]),
+                  h.span([h.Class('hidden lg:inline')], ['Hire Fio']),
                 ],
               ),
               h.a(
                 [
                   h.Href(songsRouter()),
+                  h.AriaLabel('Song list'),
                   h.Class(
                     'flex shrink-0 items-center gap-2 min-h-10 px-3 sm:px-4 whitespace-nowrap rounded-full border border-white/15 bg-black/40 text-sm font-semibold text-gray-100 hover:bg-black/70 hover:border-white/30 drop-shadow-md transition',
                   ),
                 ],
                 [
-                  h.span(
-                    [h.Class('hidden sm:inline')],
-                    [h.i([h.Class('fas fa-music'), h.AriaHidden(true)])],
-                  ),
-                  'Song list',
+                  h.i([h.Class('fas fa-music'), h.AriaHidden(true)]),
+                  h.span([h.Class('hidden lg:inline')], ['Song list']),
                 ],
               ),
             ],
@@ -2234,7 +2346,7 @@ export const view = Submodel.defineView<Model, Message>((model, h): Html =>
             ],
             [
               AsyncData.matchData(model.songs, {
-                onEmpty: () => spinnerView(h),
+                onEmpty: () => skeletonView(h),
                 onFailure: error => failureView(error, h),
                 onData: () => songListView(model, h),
               }),
