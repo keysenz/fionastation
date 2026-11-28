@@ -7,6 +7,9 @@
     <link rel="stylesheet" href="/styles/globals.css" />
     <link rel="shortcut icon" href="/FioTSKR.webp" />
     <script>
+      if (location.pathname === '/' || /^\/p\/[0-9A-Za-z]{8}$/.test(location.pathname)) {
+        document.documentElement.dataset.boot = 'radio'
+      }
       if (location.pathname === '/') {
         const preload = document.createElement('link')
         Object.assign(preload, { rel: 'preload', as: 'fetch', href: '/api/get-karaoke', crossOrigin: 'anonymous' })
@@ -21,6 +24,79 @@
       .boot-chip { display: flex; align-items: center; gap: 0.75rem; border-radius: 9999px; background: rgb(0 0 0 / 0.6); padding: 0.75rem 1.25rem; font-size: 0.875rem; line-height: 1.25rem; font-weight: 600; color: #fff; backdrop-filter: blur(12px); }
       .boot-spinner { width: 1.25rem; height: 1.25rem; box-sizing: border-box; border: 0 solid #fff; border-bottom-width: 2px; border-radius: 9999px; animation: boot-spin 1s linear infinite; }
       @keyframes boot-spin { to { transform: rotate(360deg); } }
+
+      .boot-radio, [data-boot='radio'] .boot-chip { display: none; }
+      [data-boot='radio'] .boot-radio { display: flex; }
+      .boot-radio { position: absolute; inset: 0; flex-direction: column; overflow: hidden; color: #fff; }
+      .boot-radio * { box-sizing: border-box; }
+      .bone { border-radius: 9999px; background: rgb(255 255 255 / 0.15); }
+      .bone, .boot-thumb, .boot-hero-thumb { animation: boot-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+      @keyframes boot-pulse { 50% { opacity: 0.5; } }
+      @media (prefers-reduced-motion: reduce) { .bone, .boot-thumb, .boot-hero-thumb { animation: none; } }
+      .boot-status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+      .boot-header { padding: 1rem 1rem 0.5rem; }
+      .boot-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem; }
+      .boot-brand { display: flex; min-width: 0; align-items: center; gap: 0.75rem; }
+      .boot-info { display: flex; width: 2.5rem; height: 2.5rem; align-items: center; justify-content: center; }
+      .boot-info .bone { width: 1.25rem; height: 1.25rem; }
+      .boot-title { margin: 0; font-size: 1.125rem; line-height: 1.75rem; font-weight: 700; letter-spacing: -0.025em; text-transform: uppercase; white-space: nowrap; color: #446e92; }
+      .boot-actions { display: flex; gap: 0.375rem; }
+      .boot-pill { flex-shrink: 0; height: 2.25rem; border-radius: 9999px; border: 1px solid rgb(255 255 255 / 0.15); background: rgb(0 0 0 / 0.4); }
+      .boot-pill { width: 2.5rem; }
+      @media (max-width: 359px) { .boot-title { display: none; } }
+      .boot-search { display: flex; align-items: center; height: 2.375rem; margin-bottom: 0.5rem; padding-left: 3rem; border-radius: 9999px; border: 1px solid rgb(255 255 255 / 0.1); background: rgb(0 0 0 / 0.6); font-size: 0.875rem; color: #d1d5db; }
+
+      .boot-main { display: flex; flex: 1; min-height: 0; }
+      .boot-videos { width: 100%; flex-shrink: 0; padding: 0 3rem 0 0.5rem; }
+      .boot-caption { width: 6rem; height: 1.375rem; margin-bottom: 0.5rem; border-radius: 9999px; background: rgb(0 0 0 / 0.6); }
+      .boot-videos ul, .boot-songs { margin: 0; padding: 0; list-style: none; }
+      .boot-video { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.375rem; padding: 0.5rem; border-radius: 0.75rem; border: 1px solid transparent; background: rgb(0 0 0 / 0.6); }
+      .boot-thumb { width: 7rem; flex-shrink: 0; aspect-ratio: 16 / 9; border-radius: 0.5rem; background: rgb(255 255 255 / 0.1); }
+      .boot-lines { flex: 1; min-width: 0; }
+      .boot-lines > .bone { height: 0.875rem; margin-bottom: 0.5rem; }
+      .boot-meta { display: flex; gap: 0.375rem; padding-top: 0.125rem; }
+      .boot-meta .bone { width: 4rem; height: 0.75rem; }
+      .boot-meta .kind { width: 3rem; height: 1rem; background: rgb(217 70 239 / 0.25); }
+
+      .boot-setlist { display: none; flex: 1; min-width: 0; padding: 0 3rem 6rem 0; }
+      .boot-hero { border-radius: 1rem; border: 1px solid rgb(255 255 255 / 0.15); background: rgb(0 0 0 / 0.75); container-type: inline-size; }
+      .boot-hero-inner { display: flex; flex-direction: column; gap: 1rem; padding: 0.75rem; }
+      .boot-hero-thumb { width: 100%; flex-shrink: 0; aspect-ratio: 16 / 9; border-radius: 0.75rem; background: rgb(255 255 255 / 0.1); }
+      .boot-hero-text { display: flex; flex: 1; flex-direction: column; justify-content: flex-end; gap: 0.75rem; }
+      .boot-hero-text .kind { width: 3.5rem; height: 0.625rem; }
+      .boot-hero-text .heading { height: 1.5rem; }
+      .boot-hero-text .date { width: 10rem; height: 0.875rem; }
+      .boot-hero-text .play { width: 11rem; height: 2.5rem; background: rgb(255 255 255 / 0.25); }
+      .boot-songs { margin-top: 0.75rem; padding: 0.375rem; border-radius: 1rem; background: rgb(0 0 0 / 0.6); }
+      .boot-song { display: flex; align-items: center; gap: 0.75rem; min-height: 3rem; padding: 0.375rem 0.75rem; }
+      .boot-song + .boot-song { margin-top: 0.25rem; }
+      .boot-song .bone { height: 0.875rem; }
+      .boot-song .clock { width: 3rem; height: 0.75rem; margin-right: 1rem; }
+
+      @media (min-width: 640px) {
+        .boot-title { font-size: 1.25rem; }
+        .boot-actions { gap: 0.5rem; }
+        .boot-pill { height: 2.5rem; }
+      }
+      @media (min-width: 768px) {
+        .boot-main { gap: 1rem; padding-left: 0.5rem; }
+        .boot-videos { width: 20rem; padding-right: 0.5rem; }
+        .boot-setlist { display: block; }
+      }
+      @media (min-width: 1024px) {
+        .boot-videos { width: 24rem; }
+        .boot-thumb { width: 8rem; }
+        .boot-pill.mine { width: 8.9rem; }
+        .boot-pill.save { width: 10.5rem; }
+        .boot-pill.hire { width: 7.1rem; }
+        .boot-pill.songs { width: 7.75rem; }
+      }
+      @container (min-width: 26rem) {
+        .boot-hero-inner { flex-direction: row; padding: 1.25rem; }
+        .boot-hero-thumb { width: 9rem; }
+      }
+      @container (min-width: 44rem) { .boot-hero-thumb { width: 15rem; } }
     </style>
     <meta property="twitter:title" content="Fio Radio: Fiona Clearesta karaoke, covers and originals" />
     <meta property="twitter:description" content="Fan-made Website to navigate through Fiona's karaoke, covers and originals on Fio Radio, you can play them or just find them" />
@@ -34,6 +110,61 @@
         <div class="boot-chip">
           <div class="boot-spinner"></div>
           Loading Fio Radio
+        </div>
+        <div class="boot-radio" aria-busy="true">
+          <p class="boot-status">Loading Fio Radio</p>
+          <div class="boot-header" aria-hidden="true">
+            <div class="boot-bar">
+              <div class="boot-brand">
+                <div class="boot-info"><div class="bone"></div></div>
+                <p class="boot-title">Fio Radio</p>
+              </div>
+              <div class="boot-actions">
+                <div class="boot-pill mine"></div>
+                <div class="boot-pill save"></div>
+                <div class="boot-pill hire"></div>
+                <div class="boot-pill songs"></div>
+              </div>
+            </div>
+            <div class="boot-search">Search songs...</div>
+          </div>
+          <div class="boot-main" aria-hidden="true">
+            <div class="boot-videos">
+              <div class="boot-caption"></div>
+              <ul>
+                <li class="boot-video"><div class="boot-thumb"></div><div class="boot-lines"><div class="bone" style="width: 92%"></div><div class="bone" style="width: 50%"></div><div class="boot-meta"><div class="bone kind"></div><div class="bone"></div></div></div></li>
+                <li class="boot-video"><div class="boot-thumb"></div><div class="boot-lines"><div class="bone" style="width: 75%"></div><div class="bone" style="width: 50%"></div><div class="boot-meta"><div class="bone kind"></div><div class="bone"></div></div></div></li>
+                <li class="boot-video"><div class="boot-thumb"></div><div class="boot-lines"><div class="bone" style="width: 100%"></div><div class="bone" style="width: 50%"></div><div class="boot-meta"><div class="bone kind"></div><div class="bone"></div></div></div></li>
+                <li class="boot-video"><div class="boot-thumb"></div><div class="boot-lines"><div class="bone" style="width: 66%"></div><div class="bone" style="width: 50%"></div><div class="boot-meta"><div class="bone kind"></div><div class="bone"></div></div></div></li>
+                <li class="boot-video"><div class="boot-thumb"></div><div class="boot-lines"><div class="bone" style="width: 84%"></div><div class="bone" style="width: 50%"></div><div class="boot-meta"><div class="bone kind"></div><div class="bone"></div></div></div></li>
+                <li class="boot-video"><div class="boot-thumb"></div><div class="boot-lines"><div class="bone" style="width: 75%"></div><div class="bone" style="width: 50%"></div><div class="boot-meta"><div class="bone kind"></div><div class="bone"></div></div></div></li>
+                <li class="boot-video"><div class="boot-thumb"></div><div class="boot-lines"><div class="bone" style="width: 92%"></div><div class="bone" style="width: 50%"></div><div class="boot-meta"><div class="bone kind"></div><div class="bone"></div></div></div></li>
+                <li class="boot-video"><div class="boot-thumb"></div><div class="boot-lines"><div class="bone" style="width: 80%"></div><div class="bone" style="width: 50%"></div><div class="boot-meta"><div class="bone kind"></div><div class="bone"></div></div></div></li>
+              </ul>
+            </div>
+            <div class="boot-setlist">
+              <div class="boot-hero">
+                <div class="boot-hero-inner">
+                  <div class="boot-hero-thumb"></div>
+                  <div class="boot-hero-text">
+                    <div class="bone kind"></div>
+                    <div class="bone heading" style="width: 92%"></div>
+                    <div class="bone heading" style="width: 66%"></div>
+                    <div class="bone date"></div>
+                    <div class="bone play"></div>
+                  </div>
+                </div>
+              </div>
+              <ul class="boot-songs">
+                <li class="boot-song"><div class="bone clock"></div><div class="bone" style="width: 60%"></div></li>
+                <li class="boot-song"><div class="bone clock"></div><div class="bone" style="width: 50%"></div></li>
+                <li class="boot-song"><div class="bone clock"></div><div class="bone" style="width: 66%"></div></li>
+                <li class="boot-song"><div class="bone clock"></div><div class="bone" style="width: 50%"></div></li>
+                <li class="boot-song"><div class="bone clock"></div><div class="bone" style="width: 40%"></div></li>
+                <li class="boot-song"><div class="bone clock"></div><div class="bone" style="width: 60%"></div></li>
+              </ul>
+            </div>
+          </div>
         </div>
       </div>
     </div>

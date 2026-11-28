@@ -93,7 +93,7 @@ export const savePlaylistButtonView = (h: HtmlBuilder<Message>): Html =>
     ],
     [
       h.i([h.Class('fas fa-bookmark'), h.AriaHidden(true)]),
-      h.span([h.Class('hidden sm:inline')], ['Save as playlist']),
+      h.span([h.Class('hidden lg:inline')], ['Save as playlist']),
     ],
   )
 
@@ -108,7 +108,7 @@ export const myPlaylistsButtonView = (h: HtmlBuilder<Message>): Html =>
     ],
     [
       h.i([h.Class('fas fa-list'), h.AriaHidden(true)]),
-      h.span([h.Class('hidden sm:inline')], ['My playlists']),
+      h.span([h.Class('hidden lg:inline')], ['My playlists']),
     ],
   )
 
